@@ -1,0 +1,13 @@
+{
+  "source": "itmc-tool-train-1.7.3.jar captured against a localhost-only mock endpoint",
+  "sanitized": true,
+  "endpoint": "http://127.0.0.1:18080/normwebservice.asmx?WSDL",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "text/xml; charset=utf-8",
+    "SOAPAction": "\"http://tempuri.org/IsGroupExisted\""
+  },
+  "soapHeader": "<clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>itmc</Uname><Password>itmc</Password></clientinfo>",
+  "soapBody": "<IsGroupExisted xmlns=\"http://tempuri.org/\"><groupName>class&amp;A</groupName><groupID></groupID></IsGroupExisted>",
+  "xmlFile": "axis-is-group-existed.xml"
+}

@@ -1,0 +1,22 @@
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self' https: http:; frame-src https://*.amap.com; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' blob: https:; worker-src 'self' blob:; manifest-src 'self'
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# 带内容 hash 的 Vite 构建产物可永久缓存：文件名 hash 变化即内容变化，
+# 新部署后 index.html 总会引用新的 hash 文件，旧文件过期前仍可被直读。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 入口 HTML 每次都要重新校验，确保新部署后立即引用新的 hash 资源。
+/index.html
+  Cache-Control: no-store, max-age=0, must-revalidate
+  CDN-Cache-Control: no-store
+  Pragma: no-cache
+
+/
+  Cache-Control: no-store, max-age=0, must-revalidate
+  CDN-Cache-Control: no-store
+  Pragma: no-cache

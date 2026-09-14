@@ -1,0 +1,13 @@
+# Required for local wrangler dev. Use `wrangler secret put` in production.
+JWT_SECRET=replace-with-a-random-32-byte-or-longer-secret
+SSO_CONFIG_ENCRYPTION_KEY=replace-with-a-different-random-32-byte-or-longer-secret
+INITIAL_ADMIN_BOOTSTRAP_SECRET=replace-with-a-one-time-initialization-secret
+
+# Optional global defaults for the JAVA adapter.
+ITMC_PLATFORM_TOKEN_NUMBER=
+ITMC_PLATFORM_TOKEN_PASSWORD=
+
+# Optional global defaults for NET / MARKETING / COMMERCE SOAP adapters.
+SOAP_CLIENT_USERNAME=
+SOAP_CLIENT_PASSWORD=
+SOAP_STUDENT_INITIAL_PASSWORD=

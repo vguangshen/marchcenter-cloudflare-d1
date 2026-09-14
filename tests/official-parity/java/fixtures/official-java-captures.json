@@ -1,0 +1,2030 @@
+{
+	"fixtureVersion":1,
+	"evidenceLevel":"official-captured",
+	"networkPolicy":"127.0.0.1-only SecurityManager guard",
+	"nonLoopbackConnections":0,
+	"scenarios":[
+		{
+			"name":"token-success",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"TOKEN-LOCAL"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-empty-response-three-attempts",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.Exception",
+						"message":"获取实训软件token失败，返回信息为空"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-code-failure-three-attempts",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"bad\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"bad\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"bad\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.Exception",
+						"message":"获取实训软件token失败，原因：bad"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-http-non-200",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":503,
+					"mockRawResponse":"unavailable",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":503,
+					"mockRawResponse":"unavailable",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":503,
+					"mockRawResponse":"unavailable",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.Exception",
+						"message":"获取实训软件token失败，返回信息为空"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-data-null",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.NullPointerException"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-data-empty",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":""
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-data-missing",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.NullPointerException"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-invalid-json",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{invalid",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"com.alibaba.fastjson.JSONException",
+						"message":"expect ':' at 0, actual \u001A"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"token-missing-code",
+			"evidenceLevel":"official-captured",
+			"parameters":{},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"succ\":true,\"data\":\"TOKEN\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.NullPointerException"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-train-full-parameters",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-exam-full-parameters",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"exam",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaperV2",
+					"path":"/open/trainingExamPaperV2",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"exam +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=exam+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-null-flag",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-empty-flag",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-only-start-time",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-zero-times",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"0",
+				"endTime":"0",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=0&flag=train+flag&u=student+local&ed=0",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-long-max-times",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"9223372036854775807",
+				"endTime":"9223372036854775807",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=9223372036854775807&flag=train+flag&u=student+local&ed=9223372036854775807",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-get-user-failure",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"user%20failed\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.reflect.InvocationTargetException"
+					},
+					{
+						"class":"java.lang.Exception",
+						"message":"user failed"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-10010",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"ticket failed\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10010,\"succ\":false,\"message\":\"ticket failed\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-10011-then-success",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-1\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ready-1\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10011,\"succ\":false,\"message\":\"expired\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-2\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":5,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ready-2\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":6,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ticket-2\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=ticket-2\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-10011-three-times",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-1\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ready-1\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10011,\"succ\":false,\"message\":\"expired\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-2\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":5,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ready-2\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":6,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10011,\"succ\":false,\"message\":\"expired\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":7,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-3\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":8,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"ready-3\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":9,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10011,\"succ\":false,\"message\":\"expired\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"null"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-data-null",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.reflect.InvocationTargetException"
+					},
+					{
+						"class":"java.lang.Exception",
+						"message":""
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-data-empty",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"u=\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-data-missing",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.reflect.InvocationTargetException"
+					},
+					{
+						"class":"java.lang.Exception",
+						"message":""
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"student-ticket-invalid-json",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"student local",
+				"className":"班级 & A",
+				"teacherUserName":"teacher+one",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"train flag",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"学生",
+				"startExam":false,
+				"classType":2,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&classMode=2&u=student+local&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher%2Bone",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"account-ready\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/trainingExamPaper",
+					"path":"/open/trainingExamPaper",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"st=1&flag=train+flag&u=student+local&ed=2",
+					"mockStatus":200,
+					"mockRawResponse":"{invalid",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"exception",
+				"exceptionChain":[
+					{
+						"class":"java.lang.reflect.InvocationTargetException"
+					},
+					{
+						"class":"java.lang.Exception",
+						"message":"expect ':' at 0, actual \u001A"
+					}
+				]
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"teacher-multiple-students-classmode-bug",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"teacher local",
+				"className":"班级 & A",
+				"userId":1,
+				"userName":"教师",
+				"startTime":"1",
+				"endTime":"2",
+				"startExam":false,
+				"classType":3,
+				"studentList":[
+					"student a",
+					"学生+b"
+				],
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getLoginTeacherName",
+					"path":"/open/getLoginTeacherName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"u=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"teacher +%&=/中文\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=student+a&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"student-a\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=%E5%AD%A6%E7%94%9F%2Bb&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"student-b\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"teacherUserName=teacher+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87&className=班级 & A&classMode=3\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"teacher-empty-student-list",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"teacher local",
+				"className":"班级 & A",
+				"userId":1,
+				"userName":"教师",
+				"startTime":"1",
+				"endTime":"2",
+				"startExam":false,
+				"classType":3,
+				"studentList":[],
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getLoginTeacherName",
+					"path":"/open/getLoginTeacherName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"u=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"teacher +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"teacherUserName=teacher+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87&className=班级 & A&classMode=3\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"teacher-null-student-list",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"teacher local",
+				"className":"班级 & A",
+				"userId":1,
+				"userName":"教师",
+				"startTime":"1",
+				"endTime":"2",
+				"startExam":false,
+				"classType":3,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getLoginTeacherName",
+					"path":"/open/getLoginTeacherName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"u=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"teacher +%&=/中文\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"teacherUserName=teacher+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87&className=班级 & A&classMode=3\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"teacher-duplicate-students",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"teacher local",
+				"className":"班级 & A",
+				"userId":1,
+				"userName":"教师",
+				"startTime":"1",
+				"endTime":"2",
+				"startExam":false,
+				"classType":3,
+				"studentList":[
+					"a",
+					"a",
+					"b"
+				],
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getLoginTeacherName",
+					"path":"/open/getLoginTeacherName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"u=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"teacher +%&=/中文\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=a&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"a1\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=a&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"a2\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":5,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=b&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"b\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10000,\"succ\":true,\"data\":\"teacherUserName=teacher+%2B%25%26%3D%2F%E4%B8%AD%E6%96%87&className=班级 & A&classMode=3\",\"message\":\"成功\"}"
+			},
+			"fallbackResponseUsed":false
+		},
+		{
+			"name":"teacher-student-middle-failure",
+			"evidenceLevel":"official-captured",
+			"parameters":{
+				"loginName":"teacher local",
+				"className":"班级 & A",
+				"userId":1,
+				"userName":"教师",
+				"startTime":"1",
+				"endTime":"2",
+				"startExam":false,
+				"classType":3,
+				"studentList":[
+					"a",
+					"b",
+					"c"
+				],
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"角色/一",
+				"teamName":"team=1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"url":"http://127.0.0.1:56671/open/tokenInfo",
+					"path":"/open/tokenInfo",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"{\"password\":\"[REDACTED]\",\"tokenNum\":\"[REDACTED]\"}",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"TOKEN-LOCAL\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"url":"http://127.0.0.1:56671/open/getLoginTeacherName",
+					"path":"/open/getLoginTeacherName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"u=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"teacher +%&=/中文\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=a&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10000,\"succ\":true,\"message\":\"成功\",\"data\":\"a\"}",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"url":"http://127.0.0.1:56671/open/getUserName",
+					"path":"/open/getUserName",
+					"method":"POST",
+					"headers":{
+						"Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
+						"platformToken":"[TOKEN]",
+						"User-Agent":"Apache-HttpClient/4.5.10 (Java/1.8.0_492)"
+					},
+					"rawBody":"teamName=team%3D1&u=b&roleName=%E8%A7%92%E8%89%B2%2F%E4%B8%80&className=%E7%8F%AD%E7%BA%A7+%26+A&teacherUserName=teacher+local",
+					"mockStatus":200,
+					"mockRawResponse":"{\"code\":10010,\"succ\":false,\"message\":\"b failed\"}",
+					"fallbackResponse":false
+				}
+			],
+			"outcome":{
+				"kind":"return",
+				"valueKind":"java.lang.String",
+				"value":"{\"code\":10010,\"succ\":false,\"message\":\"b failed\"}"
+			},
+			"fallbackResponseUsed":false
+		}
+	]
+}

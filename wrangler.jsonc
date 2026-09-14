@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "marchcenter",
+  "main": "./worker/index.js",
+  "compatibility_date": "2026-08-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "marchcenter-db",
+      "database_id": "26aa0955-5806-4acf-a647-7a5c3ff2781e",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "WALLPAPERS",
+      "bucket_name": "marchcenter-wallpapers"
+    }
+  ],
+  "triggers": {
+    "crons": ["15 1 * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "CORS_ORIGINS": "https://marchcenter.top,http://localhost:5173,http://127.0.0.1:5173",
+    "ALLOW_HTTP_PLATFORMS": "false",
+    "SSO_OUTBOUND_TIMEOUT_MS": "20000",
+    "SSO_MODULE_INIT_TIMEOUT_MS": "120000",
+    "SSO_MAX_RESPONSE_BYTES": "2097152",
+    "SOAP_TICKET_TYPE": "itmc",
+    "PBKDF2_ITERATIONS": "100000"
+  }
+}

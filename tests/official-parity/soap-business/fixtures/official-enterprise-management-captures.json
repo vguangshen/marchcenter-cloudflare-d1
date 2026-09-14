@@ -1,0 +1,933 @@
+{
+	"schemaVersion":1,
+	"source":"official itmc-tool-train-1.7.3.jar enterpriseManagement Axis Stub against loopback-only mock SOAP",
+	"evidenceLevel":"official-captured",
+	"localhostOnly":true,
+	"productionTraffic":false,
+	"artifact":"itmc-tool-train-1.7.3.jar",
+	"artifactSha256":"4f71c19237e9735276fc5c97de426fb03ee09962f7af3bc4984a01df5d4ce88e",
+	"redactions":[
+		"clientinfo.Uname",
+		"clientinfo.Password"
+	],
+	"contract":{
+		"operationName":"AddStudent",
+		"javaSignature":"String addStudent(StudentBaseClass[], String, long, long, int, boolean)",
+		"parameterNames":[
+			"studentList",
+			"groupID",
+			"st",
+			"ed",
+			"maxRunYear",
+			"autoDeal"
+		],
+		"parameterTypes":[
+			"ArrayOfStudentBaseClass",
+			"string",
+			"long",
+			"long",
+			"int",
+			"boolean"
+		],
+		"soapAction":"http://tempuri.org/AddStudent",
+		"returnNodeName":"AddStudentResult"
+	},
+	"scenarioCount":22,
+	"scenarios":[
+		{
+			"name":"is-group-existed",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupName":"class-local",
+				"groupID":""
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"IsGroupExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsGroupExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsGroupExisted xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName><groupID></groupID></IsGroupExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsGroupExistedResponse xmlns=\"http://tempuri.org/\"><IsGroupExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}</IsGroupExistedResult></IsGroupExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"IsGroupExisted"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-train-group",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupName":"class-local"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddTrainGroup",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddTrainGroup\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddTrainGroup xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName></AddTrainGroup></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddTrainGroupResponse xmlns=\"http://tempuri.org/\"><AddTrainGroupResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}</AddTrainGroupResult></AddTrainGroupResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddTrainGroup"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-appraisal-group",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupName":"class-local"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddAppraisalGroup",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddAppraisalGroup\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddAppraisalGroup xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName></AddAppraisalGroup></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddAppraisalGroupResponse xmlns=\"http://tempuri.org/\"><AddAppraisalGroupResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}</AddAppraisalGroupResult></AddAppraisalGroupResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddAppraisalGroup"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-megagame-group",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupName":"class-local"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddMegagameGroup",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddMegagameGroup\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddMegagameGroup xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName></AddMegagameGroup></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddMegagameGroupResponse xmlns=\"http://tempuri.org/\"><AddMegagameGroupResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}</AddMegagameGroupResult></AddMegagameGroupResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddMegagameGroup"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"group-1\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"is-stu-existed",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"accountList":["student"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"IsStuExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsStuExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsStuExisted xmlns=\"http://tempuri.org/\"><accountList><string>student</string></accountList></IsStuExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsStuExistedResponse xmlns=\"http://tempuri.org/\"><IsStuExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}</IsStuExistedResult></IsStuExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"IsStuExisted"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"is-teacher-existed",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"accountList":["teacher"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"IsTeacherExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsTeacherExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsTeacherExisted xmlns=\"http://tempuri.org/\"><accountList><string>teacher</string></accountList></IsTeacherExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsTeacherExistedResponse xmlns=\"http://tempuri.org/\"><IsTeacherExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}</IsTeacherExistedResult></IsTeacherExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"IsTeacherExisted"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-teacher",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupID":"group-1",
+				"teacherNameList":["teacher"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddTeacher",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddTeacher\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddTeacher xmlns=\"http://tempuri.org/\"><groupID>group-1</groupID><teacherNameList><string>teacher</string></teacherNameList></AddTeacher></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"teacher\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddTeacherResponse xmlns=\"http://tempuri.org/\"><AddTeacherResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"teacher\\\"]\"}</AddTeacherResult></AddTeacherResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddTeacher"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"teacher\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-max-zero-auto-false",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"student-1",
+						"password":"pw",
+						"nickName":"Student One"
+					}
+				],
+				"groupID":"group-1",
+				"st":"1",
+				"ed":"2",
+				"maxRunYear":0,
+				"autoDeal":false
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student-1</StudentID><Password>pw</Password><NickName>Student One</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-max-ten-auto-true",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"student-1",
+						"password":"pw",
+						"nickName":"Student One"
+					}
+				],
+				"groupID":"group-1",
+				"st":"11",
+				"ed":"22",
+				"maxRunYear":10,
+				"autoDeal":true
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student-1</StudentID><Password>pw</Password><NickName>Student One</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>11</st><ed>22</ed><maxRunYear>10</maxRunYear><autoDeal>true</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-long-maximum",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"student-1",
+						"password":"pw",
+						"nickName":"Student One"
+					}
+				],
+				"groupID":"group-1",
+				"st":"9223372036854775807",
+				"ed":"9223372036854775807",
+				"maxRunYear":10,
+				"autoDeal":true
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student-1</StudentID><Password>pw</Password><NickName>Student One</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>9223372036854775807</st><ed>9223372036854775807</ed><maxRunYear>10</maxRunYear><autoDeal>true</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-multiple",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"student-a",
+						"password":"p-a",
+						"nickName":"Student A"
+					},
+					{
+						"studentID":"student-b",
+						"password":"p-b",
+						"nickName":"Student B"
+					}
+				],
+				"groupID":"group-1",
+				"st":"1",
+				"ed":"2",
+				"maxRunYear":0,
+				"autoDeal":false
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student-a</StudentID><Password>p-a</Password><NickName>Student A</NickName></StudentBaseClass><StudentBaseClass><StudentID>student-b</StudentID><Password>p-b</Password><NickName>Student B</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-a\\\",\\\"student-b\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-a\\\",\\\"student-b\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-a\\\",\\\"student-b\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-null-optional",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"student-null"
+					}
+				],
+				"groupID":"group-1",
+				"st":"1",
+				"ed":"2",
+				"maxRunYear":0,
+				"autoDeal":false
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student-null</StudentID></StudentBaseClass></studentList><groupID>group-1</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-null\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-null\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-null\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"add-student-xml-special",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentList":[
+					{
+						"studentID":"学生&<一>\"'",
+						"password":"密码&<>\"'",
+						"nickName":"姓名中文&<>\"'"
+					}
+				],
+				"groupID":"班级&<>\"'",
+				"st":"1",
+				"ed":"2",
+				"maxRunYear":0,
+				"autoDeal":false
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>&#x5B66;&#x751F;&amp;&lt;&#x4E00;&gt;&quot;'</StudentID><Password>&#x5BC6;&#x7801;&amp;&lt;&gt;&quot;'</Password><NickName>&#x59D3;&#x540D;&#x4E2D;&#x6587;&amp;&lt;&gt;&quot;'</NickName></StudentBaseClass></studentList><groupID>&#x73ED;&#x7EA7;&amp;&lt;&gt;&quot;'</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student-1\\\"]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"get-stu-train-score",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"type":1,
+				"groupID":"group-1",
+				"studentIDList":["student"],
+				"isMaxRunYear":true
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"GetStuTrainScore",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/GetStuTrainScore\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><GetStuTrainScore xmlns=\"http://tempuri.org/\"><type>1</type><groupID>group-1</groupID><studentIDList><string>student</string></studentIDList><isMaxRunYear>true</isMaxRunYear></GetStuTrainScore></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"nScore\\\":88}]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><GetStuTrainScoreResponse xmlns=\"http://tempuri.org/\"><GetStuTrainScoreResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"nScore\\\":88}]\"}</GetStuTrainScoreResult></GetStuTrainScoreResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"GetStuTrainScore"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"nScore\\\":88}]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"get-stu-theory-score",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentIDList":["student"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"GetStuTheoryScore",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/GetStuTheoryScore\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><GetStuTheoryScore xmlns=\"http://tempuri.org/\"><studentIDList><string>student</string></studentIDList></GetStuTheoryScore></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"Score\\\":90}]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><GetStuTheoryScoreResponse xmlns=\"http://tempuri.org/\"><GetStuTheoryScoreResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"Score\\\":90}]\"}</GetStuTheoryScoreResult></GetStuTheoryScoreResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"GetStuTheoryScore"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[{\\\"Score\\\":90}]\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"reset-stu-end-time",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentID":"student",
+				"endTime":"9223372036854775807"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"ResetStuEndTime",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/ResetStuEndTime\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><ResetStuEndTime xmlns=\"http://tempuri.org/\"><studentID>student</studentID><endTime>9223372036854775807</endTime></ResetStuEndTime></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><ResetStuEndTimeResponse xmlns=\"http://tempuri.org/\"><ResetStuEndTimeResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}</ResetStuEndTimeResult></ResetStuEndTimeResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"ResetStuEndTime"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"mark-stu-deleted",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentIDList":["student"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"MarkStuDeleted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/MarkStuDeleted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><MarkStuDeleted xmlns=\"http://tempuri.org/\"><studentIDList><string>student</string></studentIDList></MarkStuDeleted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><MarkStuDeletedResponse xmlns=\"http://tempuri.org/\"><MarkStuDeletedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}</MarkStuDeletedResult></MarkStuDeletedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"MarkStuDeleted"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"del-student",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"studentIDList":["student"]
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"DelStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/DelStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><DelStudent xmlns=\"http://tempuri.org/\"><studentIDList><string>student</string></studentIDList></DelStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><DelStudentResponse xmlns=\"http://tempuri.org/\"><DelStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}</DelStudentResult></DelStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"DelStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"ok\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"get-system-info",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"GetSystemInfo",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/GetSystemInfo\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><GetSystemInfo xmlns=\"http://tempuri.org/\"/></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"{\\\"OnlineUserCount\\\":\\\"3\\\"}\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><GetSystemInfoResponse xmlns=\"http://tempuri.org/\"><GetSystemInfoResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"{\\\"OnlineUserCount\\\":\\\"3\\\"}\"}</GetSystemInfoResult></GetSystemInfoResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"GetSystemInfo"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"{\\\"OnlineUserCount\\\":\\\"3\\\"}\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"get-run-state",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"official-axis-stub-direct",
+			"input":{
+				"groupID":"group-1"
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"GetRunState",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/GetRunState\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><GetRunState xmlns=\"http://tempuri.org/\"><groupID>group-1</groupID></GetRunState></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"running\\\"\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><GetRunStateResponse xmlns=\"http://tempuri.org/\"><GetRunStateResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"running\\\"\"}</GetRunStateResult></GetRunStateResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"GetRunState"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"\\\"running\\\"\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"training-entrance-student-classType1",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"training-entrance",
+			"input":{
+				"loginName":"student",
+				"className":"class-local",
+				"teacherUserName":"teacher",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"1",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"Student Local",
+				"startExam":false,
+				"classType":1,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"student",
+				"teamName":""
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"IsGroupExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsGroupExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsGroupExisted xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName><groupID></groupID></IsGroupExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":null}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsGroupExistedResponse xmlns=\"http://tempuri.org/\"><IsGroupExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":null}</IsGroupExistedResult></IsGroupExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"operationName":"AddTrainGroup",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddTrainGroup\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddTrainGroup xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName></AddTrainGroup></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"group-1\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddTrainGroupResponse xmlns=\"http://tempuri.org/\"><AddTrainGroupResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"group-1\"}</AddTrainGroupResult></AddTrainGroupResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"operationName":"IsStuExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsStuExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsStuExisted xmlns=\"http://tempuri.org/\"><accountList><string>student</string></accountList></IsStuExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsStuExistedResponse xmlns=\"http://tempuri.org/\"><IsStuExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}</IsStuExistedResult></IsStuExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student</StudentID><Password>train_1231</Password><NickName>Student Local</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"IsGroupExisted",
+				"AddTrainGroup",
+				"IsStuExisted",
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"data\":\"636559C5FDDFC3B2158CE2B4503AC9715E72F2B449E0FB3980BE60BE101A3CB87CA274C188B0F2BC2E49DF33CC4336BB17D51666066304CE\",\"message\":\"成功\"}"
+			},
+			"unusedMockResponses":{}
+		},
+		{
+			"name":"training-entrance-student-classType3",
+			"evidenceLevel":"official-captured",
+			"invocationKind":"training-entrance",
+			"input":{
+				"loginName":"student",
+				"className":"class-local",
+				"teacherUserName":"teacher",
+				"startTime":"1",
+				"endTime":"2",
+				"flag":"1",
+				"trainOrExam":"train",
+				"userId":1,
+				"userName":"Student Local",
+				"startExam":false,
+				"classType":3,
+				"maxRunYear":0,
+				"autoDeal":false,
+				"roleName":"student",
+				"teamName":""
+			},
+			"calls":[
+				{
+					"sequence":1,
+					"operationName":"IsGroupExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsGroupExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsGroupExisted xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName><groupID></groupID></IsGroupExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":null}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsGroupExistedResponse xmlns=\"http://tempuri.org/\"><IsGroupExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":null}</IsGroupExistedResult></IsGroupExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":2,
+					"operationName":"AddMegagameGroup",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddMegagameGroup\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddMegagameGroup xmlns=\"http://tempuri.org/\"><groupName>class-local</groupName></AddMegagameGroup></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"group-1\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddMegagameGroupResponse xmlns=\"http://tempuri.org/\"><AddMegagameGroupResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"group-1\"}</AddMegagameGroupResult></AddMegagameGroupResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":3,
+					"operationName":"IsStuExisted",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/IsStuExisted\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><IsStuExisted xmlns=\"http://tempuri.org/\"><accountList><string>student</string></accountList></IsStuExisted></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><IsStuExistedResponse xmlns=\"http://tempuri.org/\"><IsStuExistedResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[]\"}</IsStuExistedResult></IsStuExistedResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				},
+				{
+					"sequence":4,
+					"operationName":"AddStudent",
+					"endpoint":"http://127.0.0.1:55493/normwebservice.asmx?WSDL",
+					"headers":{
+						"Content-Type":"text/xml; charset=utf-8",
+						"SOAPAction":"\"http://tempuri.org/AddStudent\"",
+						"User-Agent":"Axis/1.4"
+					},
+					"requestXml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><soapenv:Header><clientinfo soapenv:mustUnderstand=\"0\" xmlns=\"http://tempuri.org/\"><Uname>[REDACTED]</Uname><Password>[REDACTED]</Password></clientinfo></soapenv:Header><soapenv:Body><AddStudent xmlns=\"http://tempuri.org/\"><studentList><StudentBaseClass><StudentID>student</StudentID><Password>train_1231</Password><NickName>Student Local</NickName></StudentBaseClass></studentList><groupID>group-1</groupID><st>1</st><ed>2</ed><maxRunYear>0</maxRunYear><autoDeal>false</autoDeal></AddStudent></soapenv:Body></soapenv:Envelope>",
+					"mockResult":"{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student\\\"]\"}",
+					"mockResponseXml":"<?xml version=\"1.0\" encoding=\"utf-8\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><AddStudentResponse xmlns=\"http://tempuri.org/\"><AddStudentResult>{\"code\":10000,\"succ\":true,\"message\":\"ok\",\"data\":\"[\\\"student\\\"]\"}</AddStudentResult></AddStudentResponse></soapenv:Body></soapenv:Envelope>",
+					"fallbackResponse":false
+				}
+			],
+			"operationSequence":[
+				"IsGroupExisted",
+				"AddMegagameGroup",
+				"IsStuExisted",
+				"AddStudent"
+			],
+			"outcome":{
+				"type":"return",
+				"raw":"{\"code\":10000,\"succ\":true,\"data\":\"636559C5FDDFC3B2158CE2B4503AC9715E72F2B449E0FB3980BE60BE101A3CB87CA274C188B0F2BC2E49DF33CC4336BB17D51666066304CE\",\"message\":\"成功\"}"
+			},
+			"unusedMockResponses":{}
+		}
+	]
+}
