@@ -59,7 +59,19 @@ function parseResult(operationName, value) {
             raw: sanitizeOperationRaw(value)
         });
     }
-    if (result.code !== OFFICIAL_SUCCESS) return { status: 'failure', result };
+    if (result.code !== OFFICIAL_SUCCESS) {
+        // Keep the originating SOAP operation available to the trusted
+        // executor logger.  It is deliberately non-enumerable so a Result
+        // object cannot expose diagnostic internals through normal JSON
+        // serialization or adapter return values.
+        Object.defineProperty(result, 'operationName', {
+            value: operationName,
+            enumerable: false,
+            configurable: false,
+            writable: false
+        });
+        return { status: 'failure', result };
+    }
     return { status: 'success', result };
 }
 

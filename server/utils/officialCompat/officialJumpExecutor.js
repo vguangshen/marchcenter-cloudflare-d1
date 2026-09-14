@@ -22,10 +22,60 @@ const SOAP_METHODS = new Set([
     'net', 'marketing', 'commerce', 'managementAccounting',
     'crossBorderCommerce', 'enterpriseManagement'
 ]);
+const SAFE_OPERATION_NAME = /^[A-Za-z][A-Za-z0-9]{0,79}$/;
+const MAX_RESULT_MESSAGE_LENGTH = 240;
 
 function targetHost(value) {
     try { return new URL(value).hostname; }
     catch { return '[invalid-host]'; }
+}
+
+function safeOperationName(value) {
+    const text = typeof value === 'string' ? value.trim() : '';
+    return SAFE_OPERATION_NAME.test(text) ? text : null;
+}
+
+function safeResultCode(value) {
+    const code = Number(value);
+    return Number.isInteger(code) ? code : null;
+}
+
+function safeResultSuccess(value) {
+    if (value === true || value === false) return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return null;
+}
+
+function safeResultMessage(value) {
+    if (typeof value !== 'string') return null;
+    const normalized = value
+        .replace(/[\r\n\t]+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    if (!normalized) return null;
+    return normalized
+        .replace(
+            /((?:password|pwd|token|authorization|credential|密码|令牌|授权)\s*(?:["']?\s*[:=：]\s*["']?))[^,;，；\s<>"']+/gi,
+            '$1[REDACTED]'
+        )
+        .slice(0, MAX_RESULT_MESSAGE_LENGTH);
+}
+
+function safeFailureDetails(error) {
+    const details = error?.details && typeof error.details === 'object' ? error.details : {};
+    const resultCode = safeResultCode(details.resultCode);
+    const resultSucc = safeResultSuccess(details.resultSucc);
+    const resultMessage = safeResultMessage(details.resultMessage);
+    const operationName = safeOperationName(error?.operationName || details.operationName);
+    const httpStatus = Number(error?.status);
+    return {
+        ...(operationName ? { operationName } : {}),
+        ...(resultCode !== null ? { resultCode } : {}),
+        ...(resultSucc !== null ? { resultSucc } : {}),
+        ...(resultMessage ? { resultMessage } : {}),
+        ...(Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {})
+    };
 }
 
 function safeMetadata({ method, serviceName, baseUrl, commonMethod, error }) {
@@ -36,7 +86,8 @@ function safeMetadata({ method, serviceName, baseUrl, commonMethod, error }) {
         operationStage: error?.stage || 'jump-execution',
         targetHost: targetHost(baseUrl),
         commonMethod,
-        code: error?.code || 'OFFICIAL_JUMP_EXECUTION_ERROR'
+        code: error?.code || 'OFFICIAL_JUMP_EXECUTION_ERROR',
+        ...safeFailureDetails(error)
     };
 }
 
@@ -46,7 +97,10 @@ function assertSuccessfulResult(result, metadata) {
             code: 'OFFICIAL_JUMP_RESULT_FAILURE',
             details: {
                 ...metadata,
-                resultCode: result && typeof result === 'object' ? result.code : null
+                resultCode: result && typeof result === 'object' ? result.code : null,
+                resultSucc: result && typeof result === 'object' ? result.succ : null,
+                resultMessage: result && typeof result === 'object' ? result.message : null,
+                operationName: result && typeof result === 'object' ? result.operationName : null
             }
         });
     }

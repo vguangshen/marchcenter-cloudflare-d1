@@ -209,3 +209,34 @@ test('logged official errors contain only safe routing metadata', async () => {
     }]);
     assert.doesNotMatch(JSON.stringify(subject.logs), /password|token|ticket|secret failure/i);
 });
+
+test('failed SOAP Result logs its operation and safe diagnostic fields', async () => {
+    const subject = harness();
+    const failure = {
+        code: 10010,
+        succ: false,
+        message: '对不起，您无权调用此接口！ password=super-secret token: hidden-token',
+        data: 'SENSITIVE-TICKET'
+    };
+    Object.defineProperty(failure, 'operationName', { value: 'IsGroupExisted', enumerable: false });
+    subject.dependencies.trainingEntrance.executeNew = async () => failure;
+
+    await assert.rejects(executeOfficialJump({ method: 'net', officialBaseUrl: BASE }, {}, subject.dependencies), {
+        code: 'OFFICIAL_JUMP_RESULT_FAILURE'
+    });
+
+    assert.deepEqual(subject.logs, [{
+        adapter: 'official-compat',
+        method: 'net',
+        serviceName: 'NetGeneralStandardInterfaceUtilService',
+        operationStage: 'jump-execution',
+        targetHost: 'vendor.invalid',
+        commonMethod: 'commonReturnStudentBaseInfo',
+        code: 'OFFICIAL_JUMP_RESULT_FAILURE',
+        operationName: 'IsGroupExisted',
+        resultCode: 10010,
+        resultSucc: false,
+        resultMessage: '对不起，您无权调用此接口！ password=[REDACTED] token: [REDACTED]'
+    }]);
+    assert.doesNotMatch(JSON.stringify(subject.logs), /super-secret|hidden-token|SENSITIVE-TICKET/i);
+});

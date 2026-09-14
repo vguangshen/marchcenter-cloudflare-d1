@@ -34,6 +34,8 @@ test('non-success Result remains a failure instead of absence', () => {
     );
     assert.equal(parsed.status, 'failure');
     assert.equal(parsed.result.code, 10010);
+    assert.equal(parsed.result.operationName, 'IsStuExisted');
+    assert.equal(Object.prototype.propertyIsEnumerable.call(parsed.result, 'operationName'), false);
 });
 
 test('missing data is distinct from explicit null', () => {
