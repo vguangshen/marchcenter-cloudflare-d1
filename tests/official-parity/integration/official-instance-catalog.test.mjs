@@ -19,7 +19,8 @@ test('every public method resolves to exactly one internal official profile', ()
         managementAccounting: ['management-accounting-new-soap', 41],
         crossBorderCommerce: ['cross-border-new-soap', 28],
         enterpriseManagement: ['enterprise-management-new-soap', 41],
-        direct: ['direct-url', undefined]
+        direct: ['direct-url', undefined],
+        paasV2: ['paas-v2-agent', undefined]
     };
     assert.deepEqual(Object.keys(OFFICIAL_INSTANCE_CATALOG).sort(), Object.keys(expected).sort());
     for (const [method, [profileId, operationCount]] of Object.entries(expected)) {

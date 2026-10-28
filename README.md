@@ -1,5 +1,7 @@
 # MarchCenter — Cloudflare Workers + D1
 
+本地恢复版本与验证范围见 [Cloudflare 版本恢复说明](docs/RECOVERY.md)。
+
 本版本已经从传统 Node.js/Express + MySQL 服务器迁移为：
 
 - Cloudflare Workers：后端 API
@@ -7,7 +9,7 @@
 - Cloudflare D1：业务数据库
 - Wrangler migrations：数据库结构管理
 
-旧版“执行自定义 JavaScript 脚本”的 SSO 功能已彻底移除。系统现在内置 **8 种受支持的接入方式**（全部为官方 `itmc-tool-train-1.7.3.jar` 适配器的一一对应实现）：
+旧版“执行自定义 JavaScript 脚本”的 SSO 功能已彻底移除。系统现在内置 **9 种受支持的接入方式**，包括下列官方兼容适配器及 PaaS 智能体任务接入：
 
 | 接入方式 | 传输协议 | 官方服务类 | 证据等级 |
 |---|---|---|---|
@@ -19,6 +21,7 @@
 | `crossBorderCommerce` | SOAP 1.1 / Axis | `KuajingdianshangshapanInterfaceUtilService` | official-captured |
 | `enterpriseManagement` | SOAP 1.1 / Axis | `QiyeguanlishapanInterfaceUtilService` | official-captured |
 | `direct` | 浏览器跳转 | （URL 原样返回） | official-static-derived |
+| `paasV2` | HTTP JSON → POST form | `PaasV2AgentAdapter` | official-captured |
 
 ## 官方兼容层（official-compat）
 

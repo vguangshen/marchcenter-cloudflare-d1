@@ -14,6 +14,7 @@ import {
 import { extractGeoFromRequest } from '../utils/geolocation.js';
 import { getEnv } from '../config/runtime.js';
 import { withD1Lock } from '../utils/d1Lock.js';
+import { readUserProfile } from '../utils/userProfile.js';
 
 const router = express.Router();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -95,7 +96,7 @@ async function completeLogin(req, res, user) {
         // 历史记录是尽力而为，写入失败不影响登录。
         console.warn('记录登录位置失败:', error.message);
     }
-    res.json({ token, user: payload });
+    res.json({ token, user: await readUserProfile(user.id) });
 }
 
 async function attemptKey(value) {
@@ -759,20 +760,42 @@ router.get('/setup-status', async (req, res) => {
 
 router.post('/change-password', authMiddleware, async (req, res) => {
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    if (!req.user.passwordChangeRecommended) {
-        return res.status(409).json({ error: '当前账号没有待处理的改密提醒' });
-    }
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
     if (password.length < 6 || password.length > 128) {
         return res.status(400).json({ error: '新密码长度需为 6–128 位' });
     }
     try {
+        const [[storedUser]] = await pool.query(
+            'SELECT password_hash, password_change_recommended FROM users WHERE id = ? LIMIT 1',
+            [req.user.id]
+        );
+        if (!storedUser) return res.status(404).json({ error: '用户不存在' });
+        const changeAttemptKey = await attemptKey(`change-password:${req.user.id}`);
+        if (!storedUser.password_change_recommended) {
+            if (!currentPassword || currentPassword.length > 128) {
+                return res.status(400).json({ error: '请输入当前密码' });
+            }
+            if (await currentLoginAttempts(changeAttemptKey, Date.now()) >= LOGIN_MAX_ATTEMPTS) {
+                return res.status(429).json({ error: '当前密码验证过于频繁，请稍后再试' });
+            }
+            if (!await verifyPassword(currentPassword, storedUser.password_hash)) {
+                await recordFailedLogin(changeAttemptKey, Date.now());
+                return res.status(400).json({ error: '当前密码不正确' });
+            }
+        }
+        if (await verifyPassword(password, storedUser.password_hash)) {
+            return res.status(400).json({ error: '新密码不能与当前密码相同' });
+        }
         const passwordHash = await hashPassword(password);
-        await pool.query(
+        const [result] = await pool.query(
             `UPDATE users
              SET password_hash = ?, password_change_recommended = 0
-             WHERE id = ? AND password_change_recommended = 1`,
-            [passwordHash, req.user.id]
+             WHERE id = ? AND password_hash = ?`,
+            [passwordHash, req.user.id, storedUser.password_hash]
         );
+        if (!result.affectedRows) return res.status(409).json({ error: '密码状态已更新，请刷新后重试' });
+        await pool.query('DELETE FROM login_attempts WHERE attempt_key = ?', [changeAttemptKey]);
+        res.setHeader('Cache-Control', 'no-store');
         return res.json({ success: true, message: '新密码已生效' });
     } catch (error) {
         console.error('Recommended password change failed:', error);
@@ -780,6 +803,14 @@ router.post('/change-password', authMiddleware, async (req, res) => {
     }
 });
 
-router.get('/me', authMiddleware, (req, res) => res.json({ user: req.user }));
+router.get('/me', authMiddleware, async (req, res) => {
+    try {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.json({ user: await readUserProfile(req.user.id) });
+    } catch (error) {
+        console.error('Profile read failed:', error.message);
+        return res.status(503).json({ error: '个人资料暂时不可用，请稍后重试' });
+    }
+});
 
 export default router;

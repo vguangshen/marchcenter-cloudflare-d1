@@ -18,7 +18,7 @@
     "db:query:local": "wrangler d1 execute DB --local --command",
     "db:query:remote": "wrangler d1 execute DB --remote --command",
     "check": "npm run lint && npm run check:dead-code && node scripts/check-cloudflare-port.mjs",
-    "test": "node --test tests/official-parity/*.test.mjs tests/official-parity/soap-business/*.test.mjs tests/official-parity/java/*.test.mjs tests/official-parity/integration/*.test.mjs tests/official-parity/canary/*.test.mjs && node --test --test-concurrency=1 tests/e2e/*.test.mjs && node scripts/test-account-management-crypto.mjs && node scripts/test-wallpaper-engine.mjs && node scripts/test-wallpaper-progressive.mjs && node scripts/test-email-service.mjs && node scripts/test-registration.mjs && node scripts/test-platform-hardening.mjs",
+    "test": "node --test tests/frontend/*.test.mjs tests/user-profile-validation.test.mjs && node --test tests/official-parity/*.test.mjs tests/official-parity/soap-business/*.test.mjs tests/official-parity/java/*.test.mjs tests/official-parity/integration/*.test.mjs tests/official-parity/canary/*.test.mjs && node --test --test-concurrency=1 tests/e2e/*.test.mjs && node scripts/test-account-management-crypto.mjs && node scripts/test-wallpaper-engine.mjs && node scripts/test-wallpaper-progressive.mjs && node scripts/test-email-service.mjs && node scripts/test-registration.mjs && node scripts/test-platform-hardening.mjs",
     "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.mjs",
     "db:export:remote": "wrangler d1 export DB --remote --output marchcenter-d1-backup.sql"
   },

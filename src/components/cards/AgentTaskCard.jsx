@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, Edit2, Trash2, Loader2, Sparkles, ExternalLink, RotateCcw } from 'lucide-react';
+import { agentPlatformThemeStyle } from '../../utils/paasV2Platforms';
 
 const PLATFORM_LABELS = {
     KJDZSWRJXT: 'PT0401 跨境电子商务',
@@ -14,6 +15,7 @@ function platformLabel(link) {
 
 const AgentTaskCard = ({
     link,
+    theme = 'violet',
     isAdmin = false,
     onEdit,
     onDelete,
@@ -42,8 +44,8 @@ const AgentTaskCard = ({
     };
 
     return (
-        <article className="group relative flex h-full min-h-[190px] overflow-hidden rounded-[22px] border border-violet-100 bg-white/85 shadow-[0_10px_28px_rgba(80,70,229,0.10)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(80,70,229,0.18)] dark:border-violet-900/60 dark:bg-slate-900/85">
-            <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-indigo-500 via-violet-500 to-fuchsia-500" />
+        <article style={agentPlatformThemeStyle(theme)} className="agent-task-card group relative flex h-full min-h-[190px] overflow-hidden rounded-[22px] border bg-white/85 transition-all duration-300 hover:-translate-y-0.5 dark:bg-slate-900/85">
+            <div className="agent-task-accent-bar absolute inset-y-0 left-0 w-1.5" />
             {isAdmin && isCardEditMode && (
                 <div className="absolute right-2 top-2 z-20 flex gap-1">
                     <button type="button" onClick={event => { event.preventDefault(); onEdit(link); }} className="rounded-lg border border-white bg-white/90 p-1.5 text-indigo-600 shadow-sm hover:bg-indigo-50"><Edit2 className="h-3 w-3" /></button>
@@ -53,10 +55,10 @@ const AgentTaskCard = ({
 
             <div className="flex min-w-0 flex-1 flex-col p-3 pl-4 pb-4">
                 <div className="flex min-w-0 items-start gap-2">
-                    {cover ? <img src={cover} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm"><Sparkles className="h-6 w-6" /></span>}
+                    {cover ? <img src={cover} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="agent-task-cover-placeholder grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-sm"><Sparkles className="h-6 w-6" /></span>}
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[8px] font-black text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"><Bot className="h-2.5 w-2.5" />智能体</span>
+                            <span className="agent-task-badge inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-black"><Bot className="h-2.5 w-2.5" />智能体</span>
                             <span className="truncate text-[9px] font-bold text-slate-400">{platformLabel(link)}</span>
                         </div>
                         <h3 className="mt-1.5 truncate text-sm font-black text-slate-900 dark:text-white" title={link.title}>{link.title}</h3>
@@ -66,8 +68,8 @@ const AgentTaskCard = ({
                 {link.description ? <p className="mt-2 line-clamp-4 text-[10px] leading-4 text-slate-500 dark:text-slate-400" title={link.description}>{link.description}</p> : null}
 
                 <div className="mt-auto flex items-center gap-1.5">
-                    {onReset && <button type="button" onClick={resetTask} disabled={resetting} className="flex h-8 w-[82px] items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white text-[10px] font-bold text-slate-500 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"><RotateCcw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} />重置任务</button>}
-                    <button type="button" onClick={openTask} disabled={isOpening} className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-xl text-[11px] font-black text-white shadow-sm transition disabled:cursor-wait disabled:opacity-70 ${hasEntered ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400' : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500'}`}>
+                    {onReset && <button type="button" onClick={resetTask} disabled={resetting} className="mc-button mc-button--secondary mc-button--compact !min-h-10 !w-[82px] !px-2 text-[10px] disabled:cursor-wait"><RotateCcw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} />重置任务</button>}
+                    <button type="button" onClick={openTask} disabled={isOpening} className="mc-button mc-button--accent agent-task-enter-button !min-h-10 flex-1 !rounded-xl !text-[11px] !font-black text-white shadow-sm disabled:cursor-wait disabled:opacity-70">
                         {isOpening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
                         {isOpening ? '进入中' : hasEntered ? '继续智能体任务' : '进入智能体任务'}
                     </button>

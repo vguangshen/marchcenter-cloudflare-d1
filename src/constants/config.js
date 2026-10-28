@@ -13,9 +13,9 @@ export const wallpaperContentUrl = (id, version) => {
     return `${API_BASE}/wallpapers/${id}/content${versionSuffix}`;
 };
 
-export const GLASS_CARD = "bg-white/70 backdrop-blur-xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300";
-export const GLASS_INPUT = "theme-form-control bg-white/60 backdrop-blur-md border border-slate-200/60 focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all outline-none text-slate-700 placeholder:text-slate-400 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50";
-export const PRIMARY_BTN = "bg-slate-900 hover:bg-black text-white shadow-lg shadow-slate-900/20 active:scale-95 transition-all duration-200 ease-out";
+export const GLASS_CARD = "mc-surface bg-white/70 backdrop-blur-xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300";
+export const GLASS_INPUT = "mc-input theme-form-control bg-white/60 backdrop-blur-md border border-slate-200/60 focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 transition-all outline-none text-slate-700 placeholder:text-slate-400 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-900 dark:focus:border-indigo-500 dark:focus:ring-indigo-950/50";
+export const PRIMARY_BTN = "mc-button mc-button--primary bg-slate-900 hover:bg-black text-white shadow-lg shadow-slate-900/20 active:scale-95 transition-all duration-200 ease-out";
 export const INK_TEXT_SHADOW = "dark:text-shadow-[0_0_8px_rgba(255,255,255,0.3)]";
 
 // --- 默认 AI 配置 ---

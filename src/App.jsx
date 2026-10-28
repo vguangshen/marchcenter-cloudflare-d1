@@ -17,6 +17,7 @@ import FeedbackCenter from './components/feedback/FeedbackCenter';
 import { api } from './utils/api';
 import { confirmAction, notify } from './utils/uiFeedback';
 import LoadErrorNotice from './components/feedback/LoadErrorNotice';
+import ModalLoadingNotice from './components/feedback/ModalLoadingNotice';
 import SystemBackgroundLayers from './components/layouts/SystemBackgroundLayers';
 import DeleteUserModal from './components/modals/DeleteUserModal';
 
@@ -34,41 +35,11 @@ import { useCompetitionActions } from './hooks/useCompetitionActions';
 import { useCompetitionCatalog } from './hooks/useCompetitionCatalog';
 import { useWallpaperPresentation } from './hooks/useWallpaperPresentation';
 import { CACHED_SITE_CONFIG_KEY, readStoredJson } from './utils/uiThemeSettings';
-
-// 智能体平台标识
-const AGENT_PLATFORM_LABELS = {
-    KJDZSWRJXT: 'PT0401 · 跨境电子商务人机协同产教融合平台',
-    scyxcjrh: 'PT0402 · 市场营销人机协同通用能力平台',
-    kjrjxt09: 'PT0403 · 财经人机协同产教融合平台',
-    dzswcjrh: 'PT0404 · 电子商务人机协同产教融合平台'
-};
-
-const BUILTIN_PLATFORM_OVERRIDES_KEY = 'marchcenter:paas-v2:builtin-overrides';
-
-function readBuiltinPlatformOverrides() {
-    try {
-        const raw = localStorage.getItem(BUILTIN_PLATFORM_OVERRIDES_KEY);
-        if (!raw) return {};
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch { return {}; }
-}
-
-const CUSTOM_PLATFORMS_KEY = 'marchcenter:paas-v2:custom-platforms';
-
-function readCustomPlatformsMeta() {
-    try {
-        const raw = localStorage.getItem(CUSTOM_PLATFORMS_KEY);
-        if (!raw) return {};
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return {};
-        const map = {};
-        for (const item of parsed) {
-            if (item && item.softwareUnique) map[item.softwareUnique] = { code: String(item.code || ''), name: String(item.name || '') };
-        }
-        return map;
-    } catch { return {}; }
-}
+import {
+    DEFAULT_AGENT_PLATFORMS, normalizeAgentPlatforms, normalizePlatformKey,
+    normalizeAgentPlatformTheme, agentPlatformThemeStyle, platformLabel,
+    readLegacyAgentPlatforms, clearLegacyAgentPlatforms
+} from './utils/paasV2Platforms';
 
 // 后台、节日特效和大型弹窗仅在真正使用时下载，避免占用登录页首包。
 const ApiEngine = lazy(() => import('./components/views/settings/ApiEngine'));
@@ -89,6 +60,7 @@ const PermissionModal = lazy(() => import('./components/modals/PermissionModal')
 const AiGuideModal = lazy(() => import('./components/modals/AiGuideModal'));
 const GiftModal = lazy(() => import('./components/modals/GiftModal'));
 const EditGiftModal = lazy(() => import('./components/modals/EditGiftModal'));
+const ProfileModal = lazy(() => import('./components/modals/ProfileModal'));
 export default function App() {
     // Application state
     const {
@@ -210,12 +182,50 @@ export default function App() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isTaskAppModalOpen, setIsTaskAppModalOpen] = useState(false);
     const [taskAppSoftwareUnique, setTaskAppSoftwareUnique] = useState('');
-    const [platformOverrideTick, setPlatformOverrideTick] = useState(0);
+    const [platformToEdit, setPlatformToEdit] = useState('');
+    const [agentPlatforms, setAgentPlatforms] = useState(DEFAULT_AGENT_PLATFORMS);
+    const [agentPlatformsLoadError, setAgentPlatformsLoadError] = useState('');
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+    const platformRequestRef = useRef(0);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
     const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
     const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
     const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+
+    const loadAgentPlatforms = useCallback(async ({ signal } = {}) => {
+        if (!token) return [];
+        const requestId = ++platformRequestRef.current;
+        let data = await api.get('/paas-v2/platforms', { signal, fallback: '软件平台读取失败' });
+        const legacy = isAdmin ? readLegacyAgentPlatforms() : [];
+        if (legacy.length) {
+            data = await api.post('/paas-v2/platforms/import', { platforms: legacy }, {
+                signal, fallback: '浏览器软件平台同步失败', retry: 0
+            });
+            clearLegacyAgentPlatforms();
+            notify('已将浏览器中的智能体软件数据同步到云端', 'success');
+        }
+        const platforms = normalizeAgentPlatforms(Array.isArray(data) ? data : data.platforms);
+        if (requestId === platformRequestRef.current && !signal?.aborted) {
+            setAgentPlatforms(platforms);
+            setAgentPlatformsLoadError('');
+        }
+        return platforms;
+    }, [token, isAdmin]);
+
+    useEffect(() => {
+        if (!token) {
+            platformRequestRef.current += 1;
+            setAgentPlatforms(DEFAULT_AGENT_PLATFORMS);
+            setIsProfileModalOpen(false);
+            return undefined;
+        }
+        const controller = new AbortController();
+        loadAgentPlatforms({ signal: controller.signal }).catch(error => {
+            if (error.name !== 'AbortError') setAgentPlatformsLoadError(error.message || '软件平台读取失败');
+        });
+        return () => controller.abort();
+    }, [token, loadAgentPlatforms]);
 
     // 🎁 礼物状态管理
     const [isGiftMinimized, setIsGiftMinimized] = useState(false);
@@ -610,33 +620,33 @@ export default function App() {
     }, [categoryArrangeEnabled, competitionLinks, groupedLinks]);
 
     const agentPlatformGroups = useMemo(() => {
-        void platformOverrideTick;
-        const builtinMeta = readBuiltinPlatformOverrides();
-        const customMeta = readCustomPlatformsMeta();
+        const metadata = new Map(agentPlatforms.map(platform => [normalizePlatformKey(platform.softwareUnique), platform]));
+        const allItems = new Map();
+        for (const link of links.filter(item => item.ssoMethod === 'paasV2')) {
+            const key = normalizePlatformKey(link.paasV2SoftwareUnique || link.softwareUnique || 'PT04');
+            if (!allItems.has(key)) allItems.set(key, []);
+            allItems.get(key).push(link);
+        }
         const groups = {};
         agentLinks.forEach(link => {
             const key = link.paasV2SoftwareUnique || link.softwareUnique || 'PT04';
-            if (!groups[key]) {
-                const meta = builtinMeta[key] || customMeta[key];
-                let code;
-                let name;
-                if (meta && (meta.code || meta.name)) {
-                    code = meta.code || key;
-                    name = meta.name || (AGENT_PLATFORM_LABELS[key] ? AGENT_PLATFORM_LABELS[key].split(' · ')[1] : (link.category || key));
-                } else if (AGENT_PLATFORM_LABELS[key]) {
-                    const [labelCode, labelName] = AGENT_PLATFORM_LABELS[key].split(' · ');
-                    code = labelCode;
-                    name = labelName;
-                } else {
-                    code = key;
-                    name = link.category || key;
-                }
-                groups[key] = { key, label: `${code} · ${name}`, items: [] };
+            const normalizedKey = normalizePlatformKey(key);
+            if (!groups[normalizedKey]) {
+                const platform = metadata.get(normalizedKey);
+                groups[normalizedKey] = {
+                    key, platform,
+                    label: platformLabel(platform, link.category || key),
+                    theme: normalizeAgentPlatformTheme(platform?.theme),
+                    sortOrder: platform?.sortOrder ?? 1000,
+                    items: [], allItems: allItems.get(normalizedKey) || []
+                };
             }
-            groups[key].items.push(link);
+            groups[normalizedKey].items.push(link);
         });
-        return Object.entries(groups);
-    }, [agentLinks, platformOverrideTick]);
+        return Object.entries(groups).map(([key, group]) => [key, {
+            ...group, items: [...group.items].sort((left, right) => String(left.title || '').localeCompare(String(right.title || ''), 'zh-CN'))
+        }]).sort(([, left], [, right]) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, 'zh-CN'));
+    }, [agentLinks, agentPlatforms, links]);
     const competitionFieldHistory = useMemo(() => ({
         categories: [...new Set(links.map(link => String(link.category || '').trim()).filter(Boolean))]
             .sort((left, right) => left.localeCompare(right, 'zh-CN')),
@@ -657,8 +667,8 @@ export default function App() {
         if (!token) return notify('请先登录', 'warning');
         if (!await confirmAction({
             title: '重置智能体任务',
-            message: '确定要重置该任务在大渔平台的数据吗？',
-            confirmText: '重置'
+            message: '该操作会清空当前账号在大渔平台的此任务进度，并重置 MarchCenter 中的完成状态。操作后需要重新开始，确定继续吗？',
+            confirmText: '确认重置'
         })) return;
         try {
             await api.post('/paas-v2/reset', { competitionId: link.id }, { fallback: '重置任务失败' });
@@ -683,7 +693,7 @@ export default function App() {
 
     const handleDeleteAgentPlatform = async (group) => {
         if (!token) return notify('请先登录', 'warning');
-        const ids = (group?.items || []).map(link => link.id).filter(Boolean);
+        const ids = [...new Set((group?.allItems || group?.items || []).map(link => link.id).filter(Boolean))];
         if (!ids.length) return;
         if (!await confirmAction({
             title: '删除智能体模块',
@@ -702,17 +712,6 @@ export default function App() {
     const handleAdminAddUser = async (newUsers) => {
         try {
             const result = await api.post('/users/batch', { users: newUsers }, { fallback: '批量创建用户失败', timeoutMs: 60_000, retry: 0 });
-            const createdUsers = result.users || [];
-            for (let index = 0; index < newUsers.length; index += 1) {
-                const input = newUsers[index];
-                const created = createdUsers[index];
-                if (created && created.id && Array.isArray(input.permissions)) {
-                    await api.patch(`/users/${created.id}/permissions`, {
-                        permissions: input.permissions,
-                        timeRules: input.timeRules || {}
-                    }, { fallback: '权限保存失败', timeoutMs: 60_000, retry: 0 });
-                }
-            }
             notify(`已成功创建 ${result.count ?? newUsers.length} 个账号`, 'success');
             await fetchUsers();
             setIsAddUserModalOpen(false);
@@ -966,10 +965,11 @@ export default function App() {
             <div className="relative z-10 min-h-screen flex flex-col">
                 <Navbar
                     isAdmin={isAdmin} canManageUsers={canManageUsers} user={currentUser} onLogout={handleLogout}
+                    onOpenProfile={() => setIsProfileModalOpen(true)}
                     activePage={activePage} setActivePage={setActivePage}
                     siteConfig={siteConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm}
                     onAdd={() => { setEditingLink(null); setIsModalOpen(true); }}
-                    onAddTaskApp={() => { setEditingLink(null); setTaskAppSoftwareUnique(''); setIsTaskAppModalOpen(true); }}
+                    onAddTaskApp={() => { setEditingLink(null); setTaskAppSoftwareUnique(''); setPlatformToEdit(''); setIsTaskAppModalOpen(true); }}
                     immersiveMode={activeImmersive}
                     isCardEditMode={isCardEditMode}
                     setIsCardEditMode={setIsCardEditMode}
@@ -1177,31 +1177,34 @@ export default function App() {
 
                                 {agentPlatformGroups.length > 0 && (
                                     <div className="agent-task-modules mt-8 space-y-6">
+                                        <LoadErrorNotice message={agentPlatformsLoadError} onRetry={() => loadAgentPlatforms().catch(error => setAgentPlatformsLoadError(error.message))} compact />
                                         <div className="flex items-center justify-between">
                                             <h2 className="text-lg font-black text-slate-800 dark:text-white">智能体任务</h2>
                                             <span className="rounded-full bg-violet-100 px-3 py-1 text-[10px] font-black text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">{agentLinks.length} 个任务</span>
                                         </div>
                                         {agentPlatformGroups.map(([key, group]) => (
-                                            <section key={key} className={`agent-task-module overflow-hidden rounded-[28px] border border-white/70 bg-white/55 pt-5 px-5 ${group.items.length > 8 ? 'pb-0' : 'pb-5'} shadow-[0_18px_50px_rgba(80,70,229,0.10)] backdrop-blur-xl dark:border-violet-900/50 dark:bg-slate-900/55`}>
+                                            <section key={key} style={agentPlatformThemeStyle(group.theme)} className={`agent-task-module overflow-hidden rounded-[28px] border border-white/70 bg-white/55 pt-5 px-5 ${group.items.length > 8 ? 'pb-0' : 'pb-5'} shadow-[0_18px_50px_rgba(80,70,229,0.10)] backdrop-blur-xl dark:border-violet-900/50 dark:bg-slate-900/55`}>
                                                 <div className="mb-4 flex items-center justify-between gap-3">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm"><Sparkles className="h-4 w-4" /></span>
-                                                        <div><h3 className="text-sm font-black text-slate-900 dark:text-white">{group.label}</h3><p className="text-[10px] font-bold text-slate-400">{group.items.length} 个智能体任务</p></div>
+                                                        <span className="agent-task-module-icon grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-white shadow-sm"><Sparkles className="h-4 w-4" /></span>
+                                                        <div><h3 className="agent-task-module-title text-sm font-black">{group.label}</h3><p className="text-[10px] font-bold text-slate-400">共 {group.items.length} 个任务{group.items.length > 8 ? ' · 默认显示 8 个，可向下滚动' : ''}</p></div>
                                                     </div>
                                                     {isAdmin && isCardEditMode && (
                                                         <div className="flex shrink-0 items-center gap-1.5">
-                                                            <button type="button" onClick={() => { setEditingLink(null); setTaskAppSoftwareUnique(group.key); setIsTaskAppModalOpen(true); }} className="flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2.5 text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50"><Edit2 className="h-3 w-3" />编辑模块</button>
+                                                            <button type="button" onClick={() => { setEditingLink(null); setTaskAppSoftwareUnique(group.key); setPlatformToEdit(group.key); setIsTaskAppModalOpen(true); }} className="mc-button mc-button--secondary mc-button--compact !px-2.5 !text-[10px]"><Edit2 className="h-3 w-3" />编辑模块</button>
                                                             <button type="button" onClick={() => handleDeleteAgentPlatform(group)} className="flex h-8 items-center gap-1 rounded-xl border border-red-200 bg-white/90 px-2.5 text-[10px] font-bold text-red-500 shadow-sm hover:bg-red-50"><Trash2 className="h-3 w-3" />删除模块</button>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 ${group.items.length > 8 ? 'agent-task-scroll' : ''}`}>
+                                                <div className="agent-task-scroll" aria-label={group.items.length > 8 ? `${group.label}任务滚动区域，可向下滚动查看全部任务` : undefined}>
+                                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-live="polite">
                                                     {group.items.map(link => (
                                                         <AgentTaskCard
                                                             key={link.id}
                                                             link={link}
+                                                            theme={group.theme}
                                                             isAdmin={isAdmin}
-                                                            onEdit={(l)=>{setEditingLink(l); setIsTaskAppModalOpen(true);}}
+                                                            onEdit={(l)=>{setEditingLink(l); setPlatformToEdit(''); setIsTaskAppModalOpen(true);}}
                                                             onDelete={handleDelete}
                                                             onOpen={handleOpenCompetition}
                                                             onReset={handleResetAgentTask}
@@ -1209,6 +1212,7 @@ export default function App() {
                                                             isCardEditMode={isCardEditMode}
                                                         />
                                                     ))}
+                                                </div>
                                                 </div>
                                             </section>
                                         ))}
@@ -1229,11 +1233,12 @@ export default function App() {
 
             </div>
 
-            <Suspense fallback={null}>
+            <Suspense fallback={<ModalLoadingNotice />}>
                 {isModalOpen && <EditModal isOpen onClose={() => setIsModalOpen(false)} onSave={handleSave} initialData={editingLink} existingCategories={competitionFieldHistory.categories} existingTitles={competitionFieldHistory.titles} ssoConfigs={ssoConfigs} authToken={token} />}
-                {isTaskAppModalOpen && <TaskAppModal isOpen onClose={() => setIsTaskAppModalOpen(false)} onSave={async () => { setEditingLink(null); await fetchLinks(); }} onPlatformsChange={() => setPlatformOverrideTick(value => value + 1)} initialData={editingLink} initialSoftwareUnique={taskAppSoftwareUnique} ssoConfigs={ssoConfigs} existingLinks={links} />}
+                {isTaskAppModalOpen && <TaskAppModal isOpen onClose={() => { setIsTaskAppModalOpen(false); setPlatformToEdit(''); }} onSave={async () => { setEditingLink(null); await fetchLinks(); }} onPlatformsChange={async () => { const platforms = await loadAgentPlatforms(); await fetchLinks({ animate: false }); return platforms; }} platforms={agentPlatforms} initialData={editingLink} initialSoftwareUnique={taskAppSoftwareUnique} initialPlatformSoftwareUnique={platformToEdit} ssoConfigs={ssoConfigs} existingLinks={links} />}
                 {isAiModalOpen && <AiGuideModal isOpen onClose={() => setIsAiModalOpen(false)} link={currentAiLink} aiConfig={aiConfig} />}
-                {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} currentPermissions={targetUserForPermission ? (permissions[targetUserForPermission.id] || []) : []} currentUserTimeRules={targetUserForPermission ? (userTimeRules[targetUserForPermission.id] || {}) : {}} onSave={handleSavePermissions} />}
+                {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} agentPlatforms={agentPlatforms} currentPermissions={targetUserForPermission ? (permissions[targetUserForPermission.id] || []) : []} currentUserTimeRules={targetUserForPermission ? (userTimeRules[targetUserForPermission.id] || {}) : {}} onSave={handleSavePermissions} />}
+                {isProfileModalOpen && <ProfileModal isOpen user={currentUser} onClose={() => setIsProfileModalOpen(false)} onSaved={refreshCurrentUser} />}
                 {activeGift && !isGiftMinimized && <GiftModal isOpen gift={activeGift} onClose={() => setIsGiftMinimized(true)} onOpenLink={markGiftAsRead} />}
             </Suspense>
 
@@ -1252,7 +1257,7 @@ export default function App() {
                 </button>
             )}
 
-            <Suspense fallback={null}>
+            <Suspense fallback={<ModalLoadingNotice />}>
                 {isEditGiftModalOpen && <EditGiftModal isOpen onClose={() => setIsEditGiftModalOpen(false)} gift={editingGift} onSave={handleUpdateGift} />}
                 {isAddUserModalOpen && (
                     <AddUserModal
@@ -1262,6 +1267,7 @@ export default function App() {
                         currentUser={currentUser}
                         classes={availableClasses}
                         allLinks={links}
+                        agentPlatforms={agentPlatforms}
                     />
                 )}
                 {isDeleteUserModalOpen && <DeleteUserModal isOpen onClose={() => setIsDeleteUserModalOpen(false)} onDelete={handleAdminDeleteUser} users={users} currentUser={currentUser} />}

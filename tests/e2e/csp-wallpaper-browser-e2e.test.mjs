@@ -52,7 +52,10 @@ async function extractPagesCsp() {
     const source = await fs.readFile(path.join(projectRoot, 'public', '_headers'), 'utf8');
     const line = source.match(/Content-Security-Policy:\s*([^\n]+)/);
     assert.ok(line, 'public/_headers 必须包含 Content-Security-Policy');
-    return line[1];
+    // _headers is a text file and Git may check it out with CRLF on Windows.
+    // Line terminators are not part of a header value: passing the trailing
+    // CR to Node's HTTP server throws before a response can reach Chromium.
+    return line[1].trim();
 }
 
 const scriptSrcOf = (csp) => {
@@ -187,6 +190,10 @@ after(async () => {
 });
 
 test('CSP 两个来源保持一致', () => {
+    assert.doesNotThrow(() => http.validateHeaderValue('Content-Security-Policy', workerCsp),
+        'Worker CSP 必须是合法的 HTTP 响应头值');
+    assert.doesNotThrow(() => http.validateHeaderValue('Content-Security-Policy', pagesCsp),
+        '_headers CSP 不能把文本文件行结束符带入 HTTP 响应头值');
     const workerScriptSrc = scriptSrcOf(workerCsp);
     const pagesScriptSrc = scriptSrcOf(pagesCsp);
     assert.equal(workerScriptSrc, pagesScriptSrc, '两个 CSP 来源的 script-src 必须完全一致');

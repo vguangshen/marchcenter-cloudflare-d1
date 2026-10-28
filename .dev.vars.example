@@ -11,3 +11,8 @@ ITMC_PLATFORM_TOKEN_PASSWORD=
 SOAP_CLIENT_USERNAME=
 SOAP_CLIENT_PASSWORD=
 SOAP_STUDENT_INITIAL_PASSWORD=
+
+# Public AMap Web JS API key and the deployed security proxy host used by the
+# recovered domestic login map. Keep the private security code in that proxy.
+AMAP_WEB_KEY=
+AMAP_SERVICE_HOST=

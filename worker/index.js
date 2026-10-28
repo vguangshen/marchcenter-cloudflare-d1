@@ -16,6 +16,7 @@ import logoLibraryRoutes from '../server/routes/logoLibrary.js';
 import wallpaperRoutes from '../server/routes/wallpapers.js';
 import emailSettingsRoutes from '../server/routes/emailSettings.js';
 import paasV2Routes from '../server/routes/paasV2.js';
+import mapRoutes from '../server/routes/map.js';
 import { syncLatestBingWallpaper } from '../server/services/wallpaperService.js';
 
 const app = express();
@@ -37,6 +38,7 @@ app.use('/api/logo-library', logoLibraryRoutes);
 app.use('/api/wallpapers', wallpaperRoutes);
 app.use('/api/email-settings', emailSettingsRoutes);
 app.use('/api/paas-v2', paasV2Routes);
+app.use('/api/map', mapRoutes);
 app.get('/api/health', (_req, res) => res.json({ ok: true, runtime: 'cloudflare-workers', database: 'd1' }));
 
 function allowedOrigins(env) {
@@ -54,8 +56,8 @@ function withSecurityHeaders(response, request, env) {
             "object-src 'none'",
             "frame-ancestors 'self'",
             "form-action 'self' https: http:",
-            "frame-src https://*.amap.com",
-            "script-src 'self' https://static.cloudflareinsights.com",
+            "frame-src https://*.amap.com https://www.openstreetmap.org",
+            "script-src 'self' https://static.cloudflareinsights.com https://webapi.amap.com https://*.amap.com",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https:",
             "font-src 'self' data:",

@@ -16,7 +16,7 @@ const YUANXIAO_ORNAMENTS = [{ icon: '🍡', left: '10%', speed: '3s', length: 15
 const QINGMING_ORNAMENTS = [{ icon: '🪁', left: '10%', speed: '3s', length: 25, size: 'text-2xl' }, { icon: '🌿', left: '25%', speed: '4s', length: 18, size: 'text-xl' }, { icon: '🐦', left: '40%', speed: '2.5s', length: 12, size: 'text-xl' }, { icon: '🌧️', left: '55%', speed: '5s', length: 20, size: 'text-2xl' }, { icon: '⛰️', left: '70%', speed: '0s', length: 15, size: 'text-xl' }, { icon: '🍃', left: '85%', speed: '3.5s', length: 10, size: 'text-lg' }];
 
 const Navbar = ({
-    isAdmin, canManageUsers, user, onLogout, activePage, setActivePage,
+    isAdmin, canManageUsers, user, onLogout, onOpenProfile, activePage, setActivePage,
     siteConfig, searchTerm, setSearchTerm, onAdd, onAddTaskApp, immersiveMode,
     isCardEditMode, setIsCardEditMode,
     showCategoryArrange, categoryArrangeEnabled, onToggleCategoryArrange,
@@ -279,7 +279,7 @@ const Navbar = ({
                             退出 <LogOut className="w-3.5 h-3.5 ml-1"/>
                         </button>
 
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black border-2 border-white shadow-sm relative overflow-hidden
+                        <button type="button" onClick={onOpenProfile} title="个人资料" aria-label="打开个人资料" className={`w-9 h-9 rounded-full flex items-center justify-center font-black border-2 border-white shadow-sm relative overflow-hidden transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500
                             ${isLunar ? 'bg-red-100 text-red-600' : ''}
                             ${isHalloween ? 'bg-orange-100 text-purple-700' : ''}
                             ${isMidAutumn ? 'bg-blue-900 text-yellow-200 border-blue-400' : ''}
@@ -288,8 +288,8 @@ const Navbar = ({
                             ${isQingming ? 'bg-slate-200 text-slate-600 border-slate-300' : ''}
                             ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'bg-indigo-100 text-indigo-600' : ''}
                         `}>
-                            {user?.username?.[0]?.toUpperCase()}
-                        </div>
+                            {user?.avatarDataUrl ? <img src={user.avatarDataUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" /> : Array.from(user?.username || 'M')[0]?.toUpperCase()}
+                        </button>
                     </div>
                 </div>
                 {activePage === 'dashboard' && (

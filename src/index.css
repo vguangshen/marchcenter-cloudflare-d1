@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/cloudflare-components.css";
 
 /* Tailwind 4 默认按系统媒体查询处理 dark；MarchCenter 的主题由应用状态
    控制，因此继续以根节点 .dark 类作为唯一夜间模式开关。 */
@@ -2262,6 +2263,15 @@ body {
 
 .login-auth-submit {
   min-height: 44px;
+  background-origin: border-box;
+  background-repeat: no-repeat;
+}
+
+.contest-card-role-trigger {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .content-preview-password-header {

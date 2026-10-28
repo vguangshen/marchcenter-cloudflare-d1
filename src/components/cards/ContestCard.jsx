@@ -10,6 +10,7 @@ import { SYSTEM_ICONS } from '../../constants/icons';
 import { confirmAction } from '../../utils/uiFeedback';
 import { ConnectorLine, StepItem, STEP_HEIGHT, TOTAL_ITEM_HEIGHT } from './CompetitionLaunchProgress';
 import ClassActionOverlay from './ClassActionOverlay';
+import { createRoleMenuPress } from '../../utils/roleMenuPress';
 
 const MANUAL_PANEL_TOP_OFFSET = 36;
 const MANUAL_PANEL_FALLBACK_HEIGHT = 112;
@@ -162,6 +163,7 @@ const ContestCard = ({
     const [now, setNow] = useState(new Date());
     const [studentMenuOpen, setStudentMenuOpen] = useState(false);
     const [teacherMenuOpen, setTeacherMenuOpen] = useState(false);
+    const [touchRoleMenu, setTouchRoleMenu] = useState(null);
     const [roleActionsHover, setRoleActionsHover] = useState(false);
     const [manualPanelOpen, setManualPanelOpen] = useState(false);
     const [manualCredential, setManualCredential] = useState(null);
@@ -174,6 +176,12 @@ const ContestCard = ({
     const manualPanelRef = useRef(null);
     const cardRootRef = useRef(null);
     const longPressTimerRef = useRef(null);
+    const roleMenuPressRef = useRef(createRoleMenuPress(loginRole => {
+        setTouchRoleMenu(loginRole);
+        setRoleActionsHover(true);
+        if (loginRole === 'teacher') setTeacherMenuOpen(true);
+        if (loginRole === 'student') setStudentMenuOpen(true);
+    }));
     const copyFeedbackTimerRef = useRef(null);
     const deleteStageRef = useRef('idle'); // 'idle' | 'initiating' | 'in_progress'
     const cardBodyRef = useRef(null);
@@ -187,6 +195,35 @@ const ContestCard = ({
     ));
     const isAdminEntryOpening = openingCompetitionKeys.has(`${link.id}:admin-entry:`);
     const credentialPanelOpen = manualPanelOpen;
+
+    const closeRoleMenus = useCallback(() => {
+        setTouchRoleMenu(null);
+        setTeacherMenuOpen(false);
+        setStudentMenuOpen(false);
+        setRoleActionsHover(false);
+        roleMenuPressRef.current.reset();
+    }, []);
+
+    useEffect(() => {
+        const press = roleMenuPressRef.current;
+        return () => press.reset();
+    }, []);
+
+    useEffect(() => {
+        if (!touchRoleMenu && !teacherMenuOpen && !studentMenuOpen) return undefined;
+        const handleOutsidePointer = event => {
+            if (cardRootRef.current && !cardRootRef.current.contains(event.target)) closeRoleMenus();
+        };
+        const handleEscape = event => {
+            if (event.key === 'Escape') closeRoleMenus();
+        };
+        document.addEventListener('pointerdown', handleOutsidePointer, true);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('pointerdown', handleOutsidePointer, true);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [touchRoleMenu, teacherMenuOpen, studentMenuOpen, closeRoleMenus]);
 
     const setManualPanelVisibility = useCallback((visible) => {
         setManualPanelOpen(visible);
@@ -346,6 +383,7 @@ const ContestCard = ({
     const handleRoleOpen = (e, loginRole, studentIndex = null) => {
         e.preventDefault();
         e.stopPropagation();
+        closeRoleMenus();
         if (isClassRemoved) {
             if (onRestoreClass) onRestoreClass(link);
             return;
@@ -353,6 +391,28 @@ const ContestCard = ({
         if (isAdmin && isCardEditMode) return;
         if (isLocked && !isAdmin) return;
         if (onOpen) onOpen(link, loginRole, studentIndex);
+    };
+
+    const handleRoleTriggerClick = (event, loginRole) => {
+        if (roleMenuPressRef.current.consumeClick(loginRole)) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        if (touchRoleMenu === loginRole) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeRoleMenus();
+            return;
+        }
+        handleRoleOpen(event, loginRole);
+    };
+
+    const startRoleMenuPress = (loginRole, event) => {
+        roleMenuPressRef.current.start(loginRole, event.pointerType);
+    };
+    const cancelRoleMenuPress = event => {
+        roleMenuPressRef.current.cancel(event.pointerType);
     };
 
     const handleCreateStudent = (e) => {
@@ -634,7 +694,7 @@ const ContestCard = ({
         <>
         <div
             ref={cardRootRef}
-            className={`contest-card-shell group/card relative mx-auto h-[230px] w-[280px] shrink-0 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isPanelVisible || studentMenuOpen ? 'z-40' : 'z-0'} ${roleActionsHover ? 'contest-card-shell--role-actions-hover' : ''}`}
+            className={`contest-card-shell group/card relative mx-auto h-[230px] w-[280px] shrink-0 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isPanelVisible || teacherMenuOpen || studentMenuOpen ? 'z-40' : 'z-0'} ${roleActionsHover ? 'contest-card-shell--role-actions-hover' : ''}`}
         >
 
             {/* ① 卡片主体 */}
@@ -1029,16 +1089,16 @@ const ContestCard = ({
                             <div
                                 className="contest-card-role-actions relative z-50 ml-auto flex items-center justify-end gap-1.5"
                                 onMouseEnter={() => setRoleActionsHover(true)}
-                                onMouseLeave={() => setRoleActionsHover(false)}
+                                onMouseLeave={() => { if (!touchRoleMenu) setRoleActionsHover(false); }}
                                 onFocus={() => setRoleActionsHover(true)}
-                                onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setRoleActionsHover(false); }}
+                                onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !touchRoleMenu) setRoleActionsHover(false); }}
                             >
                                     {!isStudentUser && <div
                                         className="relative"
                                         onMouseEnter={() => setTeacherMenuOpen(true)}
-                                        onMouseLeave={() => setTeacherMenuOpen(false)}
+                                        onMouseLeave={() => { if (touchRoleMenu !== 'teacher') setTeacherMenuOpen(false); }}
                                         onFocus={() => setTeacherMenuOpen(true)}
-                                        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTeacherMenuOpen(false); }}
+                                        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && touchRoleMenu !== 'teacher') setTeacherMenuOpen(false); }}
                                     >
                                         {adminEntryAvailable && (
                                             <div className={`absolute right-full top-0 box-border flex h-7 items-center overflow-hidden pr-1.5 transition-[width,opacity,transform] duration-300 ease-out ${teacherMenuOpen ? 'w-[78px] translate-x-0 opacity-100' : 'pointer-events-none w-0 translate-x-2 opacity-0'}`}>
@@ -1091,10 +1151,18 @@ const ContestCard = ({
                                         )}
                                         <button
                                             type="button"
-                                            onClick={(e) => handleRoleOpen(e, 'teacher')}
+                                            onClick={(e) => handleRoleTriggerClick(e, 'teacher')}
+                                            onPointerDown={(e) => startRoleMenuPress('teacher', e)}
+                                            onPointerUp={cancelRoleMenuPress}
+                                            onPointerCancel={cancelRoleMenuPress}
+                                            onPointerLeave={cancelRoleMenuPress}
                                             disabled={isTeacherOpening}
                                             aria-busy={isTeacherOpening}
-                                            className="contest-card-action contest-card-action--teacher w-[72px] h-7 flex items-center justify-center gap-1 text-[10px] font-bold rounded-xl border border-blue-200 bg-blue-50/95 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm shadow-blue-100/60 disabled:cursor-wait disabled:opacity-70"
+                                            aria-haspopup="menu"
+                                            aria-expanded={teacherMenuOpen}
+                                            aria-label="教师端；短按进入，长按展开更多入口"
+                                            onContextMenu={(e) => e.preventDefault()}
+                                            className="contest-card-action contest-card-action--teacher contest-card-role-trigger w-[72px] h-7 flex items-center justify-center gap-1 text-[10px] font-bold rounded-xl border border-blue-200 bg-blue-50/95 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm shadow-blue-100/60 disabled:cursor-wait disabled:opacity-70"
                                         >
                                             {isTeacherOpening ? <Loader2 className="w-3 h-3 animate-spin" /> : <GraduationCap className="w-3 h-3" />}
                                             {isTeacherOpening ? '进入中' : '教师端'}
@@ -1103,19 +1171,27 @@ const ContestCard = ({
                                     <div
                                         className="relative"
                                         onMouseEnter={() => setStudentMenuOpen(true)}
-                                        onMouseLeave={() => setStudentMenuOpen(false)}
+                                        onMouseLeave={() => { if (touchRoleMenu !== 'student') setStudentMenuOpen(false); }}
                                         onFocus={() => setStudentMenuOpen(true)}
-                                        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setStudentMenuOpen(false); }}
+                                        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && touchRoleMenu !== 'student') setStudentMenuOpen(false); }}
                                     >
                                         <div className="h-7 w-[72px] overflow-hidden rounded-xl">
                                             <button
                                                 type="button"
-                                                onClick={(e) => handleRoleOpen(e, 'student')}
+                                                onClick={(e) => handleRoleTriggerClick(e, 'student')}
+                                                onPointerDown={(e) => startRoleMenuPress('student', e)}
+                                                onPointerUp={cancelRoleMenuPress}
+                                                onPointerCancel={cancelRoleMenuPress}
+                                                onPointerLeave={cancelRoleMenuPress}
                                                 disabled={isStudentOpening}
                                                 aria-busy={isStudentOpening}
+                                                aria-haspopup="menu"
+                                                aria-expanded={studentMenuOpen}
+                                                aria-label="学生端；短按进入，长按展开更多入口"
+                                                onContextMenu={(e) => e.preventDefault()}
                                                 aria-hidden={expertEntryAvailable && teacherMenuOpen}
                                                 tabIndex={expertEntryAvailable && teacherMenuOpen ? -1 : undefined}
-                                                className={`contest-card-action contest-card-action--student contest-card-student-action flex h-7 w-[72px] items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/90 text-[10px] font-bold text-emerald-700 shadow-sm disabled:cursor-wait disabled:opacity-70 ${expertEntryAvailable && teacherMenuOpen ? 'contest-card-student-action--exiting pointer-events-none' : ''}`}
+                                                className={`contest-card-action contest-card-action--student contest-card-student-action contest-card-role-trigger flex h-7 w-[72px] items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/90 text-[10px] font-bold text-emerald-700 shadow-sm disabled:cursor-wait disabled:opacity-70 ${expertEntryAvailable && teacherMenuOpen ? 'contest-card-student-action--exiting pointer-events-none' : ''}`}
                                             >
                                                 {isStudentOpening ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserRound className="h-3 w-3" />}
                                                 {isStudentOpening ? '进入中' : '学生端'}

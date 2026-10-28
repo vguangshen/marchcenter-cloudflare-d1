@@ -42,8 +42,13 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     assert.match(contestCard, /aria-label="提取教师账号信息"/);
     assert.match(contestCard, /manual-login-trigger-host pointer-events-none absolute inset-x-0 bottom-0/);
     assert.match(contestCard, /manual-login-panel-enter glass-motion-surface absolute left-0 top-\[calc\(100%\+2\.25rem\)\] z-40 w-full/);
-    assert.match(contestCard, /isPanelVisible \|\| studentMenuOpen \? 'z-40' : 'z-0'/);
-    assert.doesNotMatch(contestCard, /isPanelVisible \|\| studentMenuOpen \|\| manualPanelOpen \? 'z-40'/);
+    const shellClasses = contestCard.match(/className=\{`(contest-card-shell[\s\S]*?)`\}/)?.[1];
+    const elevationCondition = shellClasses?.match(/\$\{([^{}?]+)\?\s*'z-40'\s*:\s*'z-0'\}/)?.[1];
+    assert.ok(elevationCondition, 'the card shell must explicitly elevate its open entry menus');
+    assert.deepEqual(elevationCondition.trim().split(/\s*\|\|\s*/).sort(), [
+        'isPanelVisible', 'studentMenuOpen', 'teacherMenuOpen'
+    ], 'both role menus stay above adjacent cards without changing the manual drawer hover entrance');
+    assert.doesNotMatch(elevationCondition, /\bmanualPanelOpen\b/);
     assert.match(contestCard, /new window\.ResizeObserver/);
     assert.doesNotMatch(contestCard, /manual-login-trigger__label/);
     assert.doesNotMatch(contestCard, /manual-login-trigger__key/);

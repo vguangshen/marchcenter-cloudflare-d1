@@ -293,6 +293,55 @@ router.post("/:id/complete", authMiddleware, async (req, res) => {
 // ==========================================
 // 🔐 新增竞赛 (Admin)
 // ==========================================
+router.post('/batch-paas-v2', authMiddleware, adminOnly, async (req, res) => {
+    try {
+        const input = req.body?.tasks;
+        if (!Array.isArray(input) || !input.length || input.length > 500) {
+            return res.status(400).json({ error: '请提供 1–500 个智能体任务' });
+        }
+        const seen = new Set();
+        const tasks = input.map(item => {
+            if (!item || typeof item !== 'object') throw Object.assign(new Error('任务数据格式无效'), { status: 400 });
+            const task = {};
+            for (const field of ['title', 'subtitle', 'url', 'category', 'statusText', 'description', 'color', 'paasV2PlugFlag', 'paasV2AnswerType', 'paasV2SoftwareUnique', 'paasV2Cover']) {
+                task[field] = String(item[field] ?? '').trim();
+            }
+            task.ssoMethod = 'paasV2';
+            task.paasV2AnswerType ||= '1,2,3,4';
+            if (!task.title || task.title.length > 500 || !task.url || task.url.length > 2048
+                || !task.paasV2PlugFlag || task.paasV2PlugFlag.length > 160
+                || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(task.paasV2SoftwareUnique)
+                || !/^[1-4](?:,[1-4])*$/.test(task.paasV2AnswerType)
+                || task.description.length > 30000 || task.paasV2Cover.length > 4096) {
+                throw Object.assign(new Error('任务名称、地址、任务编码、软件标识或答题类型无效'), { status: 400 });
+            }
+            validateOfficialCardAddress('paasV2', task.url);
+            return task;
+        }).filter(task => {
+            const key = `${task.paasV2SoftwareUnique.toLowerCase()}\u0000${task.paasV2PlugFlag.toLowerCase()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        const configId = await persistOfficialCardAddress(tasks[0]);
+        const statements = tasks.map(task => [
+            `INSERT INTO competitions (title, subtitle, url, category, status_text, description, color,
+             sso_config_id, sso_method, paas_v2_plug_flag, paas_v2_answer_type, paas_v2_software_unique, paas_v2_cover, created_at)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'paasV2', ?, ?, ?, ?, CURRENT_TIMESTAMP
+             WHERE NOT EXISTS (SELECT 1 FROM competitions WHERE sso_method = 'paasV2'
+                AND paas_v2_software_unique = ? COLLATE NOCASE AND paas_v2_plug_flag = ? COLLATE NOCASE)`,
+            [task.title, task.subtitle, task.url, task.category, task.statusText, task.description, task.color || 'violet',
+                configId, task.paasV2PlugFlag, task.paasV2AnswerType, task.paasV2SoftwareUnique, task.paasV2Cover || null,
+                task.paasV2SoftwareUnique, task.paasV2PlugFlag]
+        ]);
+        const results = await pool.batch(statements);
+        const created = results.reduce((total, result) => total + result.affectedRows, 0);
+        return res.json({ success: true, created, skipped: input.length - created });
+    } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message || '智能体任务导入失败' });
+    }
+});
+
 router.post("/", authMiddleware, adminOnly, async (req, res) => {
     const d = req.body;
     try {

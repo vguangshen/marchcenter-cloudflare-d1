@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, X, Loader2, Globe, Clock, Building2, LocateFixed, ExternalLink } from 'lucide-react';
 import { api } from '../../../utils/api';
+import { loadAMap, loadAMapPlugins } from '../../../utils/amap';
 
 // 高德地图 URI：无需 API key，跳转到地图按坐标打点（国内可访问）。
 // Cloudflare 提供的是 WGS-84 坐标，coordinate=wgs84 让高德服务端转换为
@@ -13,6 +14,67 @@ const amapUrl = (lat, lng, label) => {
     });
     return `https://uri.amap.com/marker?${params.toString()}`;
 };
+
+function isOverseas(location) {
+    const code = String(location?.country_code || '').trim().toUpperCase();
+    if (code) return code !== 'CN';
+    const latitude = Number(location?.latitude);
+    const longitude = Number(location?.longitude);
+    return Number.isFinite(latitude) && Number.isFinite(longitude)
+        && (latitude < 18 || latitude > 54 || longitude < 73 || longitude > 135);
+}
+
+function overseasMapUrl(latitude, longitude) {
+    const lat = Math.max(-85, Math.min(85, Number(latitude)));
+    const lng = Math.max(-180, Math.min(180, Number(longitude)));
+    const bbox = [lng - 0.08, lat - 0.05, lng + 0.08, lat + 0.05].map(value => value.toFixed(6)).join(',');
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat.toFixed(6)},${lng.toFixed(6)}`;
+}
+
+const googleMapUrl = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${Number(lat)},${Number(lng)}`)}`;
+
+function DynamicAMap({ active, label }) {
+    const containerRef = useRef(null);
+    const [state, setState] = useState({ status: 'loading', error: '' });
+    useEffect(() => {
+        let cancelled = false;
+        let map;
+        let resize;
+        const latitude = Number(active?.latitude);
+        const longitude = Number(active?.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
+        setState({ status: 'loading', error: '' });
+        (async () => {
+            try {
+                const config = await api.get('/map/config', { fallback: '高德地图配置读取失败', retry: 0 });
+                const AMap = await loadAMap(config);
+                await loadAMapPlugins(AMap, ['AMap.Scale', 'AMap.ToolBar']);
+                if (cancelled || !containerRef.current) return;
+                map = new AMap.Map(containerRef.current, { zoom: 12, center: [longitude, latitude], viewMode: '2D', resizeEnable: true, zooms: [3, 20] });
+                try { if (typeof AMap.Scale === 'function') map.addControl(new AMap.Scale()); } catch { /* optional map control */ }
+                try { if (typeof AMap.ToolBar === 'function') map.addControl(new AMap.ToolBar()); } catch { /* optional map control */ }
+                map.add(new AMap.Marker({ position: [longitude, latitude], title: label }));
+                resize = () => map.resize();
+                window.addEventListener('resize', resize);
+                setState({ status: 'ready', error: '' });
+            } catch (error) {
+                if (!cancelled) setState({ status: 'error', error: error.message || '高德地图加载失败' });
+            }
+        })();
+        return () => {
+            cancelled = true;
+            if (resize) window.removeEventListener('resize', resize);
+            map?.destroy?.();
+        };
+    }, [active?.latitude, active?.longitude, label]);
+    return (
+        <div className="relative h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+            <div ref={containerRef} className="h-full w-full" />
+            {state.status === 'loading' && <div className="absolute inset-0 grid place-items-center bg-slate-100/85 text-xs font-bold text-slate-500 backdrop-blur-sm dark:bg-slate-900/85 dark:text-slate-300"><span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />正在加载高德地图…</span></div>}
+            {state.status === 'error' && <div className="absolute inset-0 grid place-items-center bg-slate-100/90 px-4 text-center text-xs font-bold text-slate-500 backdrop-blur-sm dark:bg-slate-900/90 dark:text-slate-300"><span>高德地图暂时无法加载{state.error ? `：${state.error}` : ''}，请使用右上角新窗口打开。</span></div>}
+        </div>
+    );
+}
 
 const formatTime = (value) => {
     if (!value) return '';
@@ -87,51 +149,46 @@ const LoginLocationModal = ({ user, onClose }) => {
 
     return (
         <div
-            className="fixed inset-0 z-[120] flex items-center justify-center px-4"
+            className="mc-modal-backdrop mc-modal-backdrop--overlay"
             onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
         >
             <section
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="location-modal-title"
-                className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+                className="mc-modal mc-modal--medium max-h-[90vh]"
             >
-                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+                <div className="mc-modal__header">
                     <h2 id="location-modal-title" className="flex items-center gap-2 text-base font-black text-slate-800 dark:text-white">
                         <MapPin className="h-4 w-4 text-indigo-500" /> {user.username} 的登录位置
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                        className="mc-icon-button mc-modal__close !h-9 !w-9 !min-w-0"
                         aria-label="关闭"
                     >
                         <X className="h-4 w-4" />
                     </button>
                 </div>
 
-                <div className="p-5">
+                <div className="mc-modal__body custom-scrollbar">
                     {loading ? (
                         <div className="flex h-48 items-center justify-center text-slate-400">
                             <Loader2 className="h-6 w-6 animate-spin" />
                         </div>
                     ) : hasCoordinates ? (
                         <>
-                            <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                                <iframe
-                                    title={`${user.username} 登录位置地图`}
-                                    src={amapUrl(Number(active.latitude), Number(active.longitude), locationLabel(active))}
-                                    className="h-64 w-full"
-                                    loading="lazy"
-                                />
+                            <div className="relative">
+                                {isOverseas(active) ? <div className="relative h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-900"><iframe title="海外地图（OpenStreetMap）" src={overseasMapUrl(active.latitude, active.longitude)} className="h-full w-full border-0" loading="eager" referrerPolicy="no-referrer-when-downgrade" /></div> : <DynamicAMap active={active} label={locationLabel(active)} />}
                                 <a
-                                    href={amapUrl(Number(active.latitude), Number(active.longitude), locationLabel(active))}
+                                    href={isOverseas(active) ? googleMapUrl(active.latitude, active.longitude) : amapUrl(Number(active.latitude), Number(active.longitude), locationLabel(active))}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-600 shadow-sm backdrop-blur transition-colors hover:bg-white dark:bg-slate-800/90 dark:text-slate-300"
-                                    title="在新窗口打开高德地图"
+                                    title={isOverseas(active) ? '在新窗口打开 Google 地图' : '在新窗口打开高德地图'}
                                 >
-                                    <ExternalLink className="h-3 w-3" /> 新窗口
+                                    <ExternalLink className="h-3 w-3" /> {isOverseas(active) ? 'Google 地图' : '新窗口'}
                                 </a>
                             </div>
                             <div className="mt-1.5 flex items-center justify-between px-0.5 text-[11px]">

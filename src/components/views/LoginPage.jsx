@@ -895,7 +895,7 @@ const LoginPage = ({
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className={`login-auth-submit flex w-full items-center justify-center gap-2 rounded-xl py-3 text-xs font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-50 ${styles.button}`}
+                                className={`mc-button login-auth-submit !min-h-11 w-full !rounded-xl !py-3 !text-xs !font-black ${styles.button}`}
                             >
                                 {loading ? (
                                     <><Loader2 className="h-4 w-4 animate-spin" />{text('loginLoadingText', '正在安全校验...')}</>

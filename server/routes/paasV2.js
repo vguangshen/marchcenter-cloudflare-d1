@@ -7,6 +7,7 @@ import { assertCompetitionAccess } from '../utils/accessControl.js';
 import { decodeStoredConfig } from '../utils/configSecrets.js';
 import { createOfficialSafeFetch } from '../utils/officialCompat/safeTransport.js';
 import { createPaasV2Adapter } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
+import { deletePlatformAndTasks, findPlatform, listPlatforms, normalizePlatformInput, parseSavedCatalog } from '../utils/paasV2Platforms.js';
 
 const router = express.Router();
 
@@ -25,6 +26,40 @@ const DAYU_COVER_ADMIN_PASSWORD = 'ITMC@123abc..';
 const COVER_R2_PREFIX = 'paas-v2-covers/';
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const CACHE_COVER_TIMEOUT_MS = 20000;
+const CACHED_COVER_PATH = /^\/api\/paas-v2\/covers\/[a-f0-9]{32}\.(?:png|jpe?g|webp|gif|avif)$/i;
+
+function isPrivateCoverHost(value) {
+    const host = String(value || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+    if (!host || host === 'localhost' || host.endsWith('.localhost')
+        || host.endsWith('.local') || host.endsWith('.internal')) return true;
+    const privateIpv4 = parts => {
+        const [a, b] = parts;
+        return a === 0 || a === 10 || a === 127 || a >= 224
+            || (a === 100 && b >= 64 && b <= 127)
+            || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+            || (a === 192 && b === 168) || (a === 198 && [18, 19].includes(b));
+    };
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return privateIpv4(host.split('.').map(Number));
+    const mapped = /^::ffff:([a-f0-9]{1,4}):([a-f0-9]{1,4})$/.exec(host);
+    if (mapped) {
+        const high = parseInt(mapped[1], 16);
+        const low = parseInt(mapped[2], 16);
+        return privateIpv4([high >> 8, high & 255, low >> 8, low & 255]);
+    }
+    return host.includes(':') && (host === '::' || host === '::1' || /^(?:f[cd]|fe[89ab]|ff)/.test(host));
+}
+
+function validateCoverCacheUrl(value) {
+    if (CACHED_COVER_PATH.test(value)) return;
+    let url;
+    try { url = new URL(value); } catch { /* Report the same client contract for malformed URLs. */ }
+    if (value.length > 4096 || !url || !['https:', 'http:'].includes(url.protocol)
+        || url.username || url.password || isPrivateCoverHost(url.hostname)) {
+        throw Object.assign(new Error('封面地址不允许缓存，请使用公共 HTTP 或 HTTPS 图片地址'), {
+            status: 400, code: 'cover_url_not_allowed'
+        });
+    }
+}
 
 function asSoftwareUnique(value) {
     return String(value || '').trim();
@@ -62,6 +97,7 @@ function sniffImageContentType(buffer) {
 
 async function cacheCover(coverUrl, timeoutMs = CACHE_COVER_TIMEOUT_MS) {
     if (!coverUrl) return '';
+    if (CACHED_COVER_PATH.test(coverUrl)) return coverUrl;
     const attempts = 2;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         const cached = await cacheCoverOnce(coverUrl, timeoutMs);
@@ -255,64 +291,128 @@ function toTaskRows(data) {
     }).sort((left, right) => String(left.title).localeCompare(String(right.title), 'zh-CN'));
 }
 
-router.get('/options', authMiddleware, adminOnly, async (_req, res) => {
-    res.json(SOFTWARE_UNIQUE_OPTIONS);
+router.get('/platforms', authMiddleware, async (_req, res) => {
+    try { return res.json(await listPlatforms()); }
+    catch (error) { return res.status(500).json({ error: error.message || '智能体软件列表读取失败' }); }
 });
+
+router.post('/platforms', authMiddleware, adminOnly, async (req, res) => {
+    try {
+        const platform = normalizePlatformInput(req.body);
+        if (await findPlatform(platform.softwareUnique)) return res.status(409).json({ error: '该 softwareUnique 已存在' });
+        const [result] = await pool.query('INSERT INTO paas_v2_platforms (software_unique, code, name, theme, sort_order) VALUES (?, ?, ?, ?, ?)',
+            [platform.softwareUnique, platform.code, platform.name, platform.theme, 1000]);
+        return res.status(201).json({ ...platform, id: result.insertId, builtin: false });
+    } catch (error) { return res.status(error.status || (error.code === 'ER_DUP_ENTRY' ? 409 : 500)).json({ error: error.message || '软件平台创建失败' }); }
+});
+
+router.put('/platforms/:softwareUnique', authMiddleware, adminOnly, async (req, res) => {
+    try {
+        const stored = await findPlatform(req.params.softwareUnique);
+        if (!stored) return res.status(404).json({ error: '软件平台不存在' });
+        const platform = normalizePlatformInput(req.body);
+        if (stored.builtin && platform.softwareUnique !== stored.software_unique) return res.status(400).json({ error: '内置平台的 softwareUnique 不可修改' });
+        const conflict = await findPlatform(platform.softwareUnique);
+        if (conflict && conflict.id !== stored.id) return res.status(409).json({ error: '该 softwareUnique 已存在' });
+        await pool.batch([
+            ['UPDATE paas_v2_platforms SET software_unique = ?, code = ?, name = ?, theme = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                [platform.softwareUnique, platform.code, platform.name, platform.theme, stored.id]],
+            ["UPDATE competitions SET paas_v2_software_unique = ?, category = ? WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE",
+                [platform.softwareUnique, platform.name, stored.software_unique]]
+        ]);
+        return res.json({ ...platform, id: stored.id, builtin: Boolean(stored.builtin) });
+    } catch (error) { return res.status(error.status || (error.code === 'ER_DUP_ENTRY' ? 409 : 500)).json({ error: error.message || '软件平台更新失败' }); }
+});
+
+router.delete('/platforms/:softwareUnique', authMiddleware, adminOnly, async (req, res) => {
+    try {
+        const platform = await findPlatform(req.params.softwareUnique);
+        if (!platform) return res.status(404).json({ error: '软件平台不存在' });
+        await deletePlatformAndTasks(platform);
+        return res.json({ success: true });
+    } catch (error) { return res.status(500).json({ error: error.message || '软件平台删除失败' }); }
+});
+
+router.post('/platforms/import', authMiddleware, adminOnly, async (req, res) => {
+    try {
+        const input = req.body?.platforms;
+        if (!Array.isArray(input) || input.length > 200) return res.status(400).json({ error: '平台数据格式无效，单次最多导入 200 个平台' });
+        const normalized = input.map(normalizePlatformInput);
+        const statements = [];
+        const seen = new Set();
+        for (const platform of normalized) {
+            const key = platform.softwareUnique.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const existing = await findPlatform(platform.softwareUnique);
+            if (!existing) {
+                statements.push(['INSERT OR IGNORE INTO paas_v2_platforms (software_unique, code, name, theme) VALUES (?, ?, ?, ?)', [platform.softwareUnique, platform.code, platform.name, platform.theme]]);
+            } else {
+                // Migrate untouched built-in defaults without overwriting a cloud edit.
+                const defaults = SOFTWARE_UNIQUE_OPTIONS.find(item => item.softwareUnique.toLowerCase() === key);
+                if (existing.builtin && defaults && existing.code === defaults.id && existing.name === defaults.name && existing.theme === 'violet') {
+                    statements.push(['UPDATE paas_v2_platforms SET code = ?, name = ?, theme = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [platform.code, platform.name, platform.theme, existing.id]]);
+                }
+            }
+        }
+        await pool.batch(statements);
+        return res.json({ success: true, platforms: await listPlatforms() });
+    } catch (error) { return res.status(error.status || 500).json({ error: error.message || '旧版本地软件数据迁移失败' }); }
+});
+
+router.get('/options', authMiddleware, adminOnly, async (_req, res) => {
+    try { return res.json(await listPlatforms()); }
+    catch (error) { return res.status(500).json({ error: error.message || '软件平台读取失败' }); }
+});
+
+async function fetchPlatformCatalog(softwareUnique) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    let payload;
+    try {
+        const response = await fetch(SYNC_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `token=${encodeURIComponent(softwareUnique)}`, redirect: 'manual', signal: controller.signal });
+        if (!response.ok) throw new Error(`任务目录请求失败：HTTP ${response.status}`);
+        try { payload = JSON.parse(await response.text()); } catch { throw new Error('任务目录返回格式无效'); }
+    } finally { clearTimeout(timer); }
+    if (String(payload.code) !== '0') throw new Error(payload.msg || '任务目录返回异常');
+    if (!payload.data) throw Object.assign(new Error('未找到该 softwareUnique 对应的软件任务目录'), { notFound: true });
+    const coverIndex = await fetchDayuCoverMap();
+    return runWithConcurrency(toTaskRows(payload.data), 4, async task => {
+        const hit = coverIndex.byId.get(String(task.plugFlag));
+        let cover = hit?.cover || matchCover(task.title, task.plugName, coverIndex.byName);
+        let introduce = hit?.introduce || matchIntroduce(task.title, task.plugName, coverIndex.byName);
+        if (!cover || !introduce) {
+            const searched = await searchDayuCover(task.title, coverIndex.token);
+            cover ||= searched.cover; introduce ||= searched.introduce;
+        }
+        return { ...task, cover, introduce };
+    });
+}
 
 router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
     const softwareUnique = asSoftwareUnique(req.query.softwareUnique);
-    if (!isValidSoftwareUnique(softwareUnique)) {
-        return res.status(400).json({ error: 'softwareUnique 格式无效，仅支持字母、数字、点、下划线和中划线' });
-    }
-    const platformCode = asSoftwareUnique(req.query.platformCode);
-    const platformName = String(req.query.platformName || '').trim();
-    const option = SOFTWARE_UNIQUE_OPTIONS.find(item => item.softwareUnique === softwareUnique);
-    const resolvedPlatformName = platformName || option?.name || softwareUnique;
-    const resolvedPlatformCode = platformCode || option?.id || '';
+    if (!isValidSoftwareUnique(softwareUnique)) return res.status(400).json({ error: 'softwareUnique 格式无效，仅支持字母、数字、点、下划线和中划线' });
     try {
-        const response = await fetch(SYNC_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `token=${encodeURIComponent(softwareUnique)}`,
-            redirect: 'manual'
-        });
-        if (!response.ok) {
-            return res.status(502).json({ error: `任务目录请求失败：HTTP ${response.status}` });
+        const platform = await findPlatform(softwareUnique);
+        if (!platform) return res.status(404).json({ error: '请先保存这个软件平台' });
+        const [[saved]] = await pool.query('SELECT tasks_json, updated_at FROM paas_v2_catalogs WHERE platform_id = ? LIMIT 1', [platform.id]);
+        const data = { softwareUnique: platform.software_unique, platformCode: platform.code, platformName: platform.name };
+        if (saved && req.query.force !== '1') return res.json({ ...data, tasks: parseSavedCatalog(saved.tasks_json), source: 'database', syncedAt: saved.updated_at });
+        try {
+            const tasks = await fetchPlatformCatalog(platform.software_unique);
+            await pool.batch([
+                ['INSERT INTO paas_v2_catalogs (platform_id, tasks_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(platform_id) DO UPDATE SET tasks_json = excluded.tasks_json, updated_at = CURRENT_TIMESTAMP', [platform.id, JSON.stringify(tasks)]],
+                ["UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP WHERE id = ?", [platform.id]]
+            ]);
+            return res.json({ ...data, tasks, source: 'remote' });
+        } catch (error) {
+            await pool.query('UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ?', [error.notFound ? 'not_found' : 'error', platform.id]);
+            if (saved) return res.json({ ...data, tasks: parseSavedCatalog(saved.tasks_json), source: 'database-fallback', syncedAt: saved.updated_at, refreshError: error.message || '任务目录获取失败' });
+            return res.status(502).json({ error: error.message || '任务目录获取失败' });
         }
-        const raw = await response.text();
-        let payload;
-        try { payload = JSON.parse(raw); } catch {
-            return res.status(502).json({ error: '任务目录返回格式无效' });
-        }
-        if (String(payload.code) !== '0') {
-            return res.status(502).json({ error: payload.msg || '任务目录返回异常' });
-        }
-        if (!payload.data) {
-            return res.status(502).json({ error: '未找到该 softwareUnique 对应的软件任务目录' });
-        }
-        const coverIndex = await fetchDayuCoverMap();
-        const rows = toTaskRows(payload.data);
-        const tasks = [];
-        for (const task of rows) {
-            const idHit = coverIndex.byId.get(String(task.plugFlag));
-            let cover = idHit?.cover || matchCover(task.title, task.plugName, coverIndex.byName);
-            let introduce = idHit?.introduce || matchIntroduce(task.title, task.plugName, coverIndex.byName);
-            if (!cover || !introduce) {
-                const searched = await searchDayuCover(task.title, coverIndex.token);
-                if (!cover) cover = searched.cover;
-                if (!introduce) introduce = searched.introduce;
-            }
-            tasks.push({ ...task, cover, introduce });
-        }
-        return res.json({
-            softwareUnique,
-            platformCode: resolvedPlatformCode,
-            platformName: resolvedPlatformName,
-            tasks
-        });
     } catch (error) {
         console.error('[paas-v2-catalog]', error.message);
-        return res.status(502).json({ error: error.message || '任务目录获取失败' });
+        return res.status(500).json({ error: error.message || '任务目录获取失败' });
     }
 });
 
@@ -386,6 +486,7 @@ router.post('/covers/cache', authMiddleware, adminOnly, async (req, res) => {
     const urls = Array.isArray(req.body?.urls) ? req.body.urls.map(value => String(value || '').trim()).filter(Boolean) : [];
     if (!urls.length) return res.status(400).json({ error: '请提供需要缓存的封面地址' });
     try {
+        urls.forEach(validateCoverCacheUrl);
         const entries = await runWithConcurrency(urls, 4, async url => [url, await cacheCover(url)]);
         const result = Object.fromEntries(entries);
         const failed = urls.filter(url => result[url] === url);
@@ -399,7 +500,10 @@ router.post('/covers/cache', authMiddleware, adminOnly, async (req, res) => {
         return res.json({ covers: result });
     } catch (error) {
         console.error('[paas-v2-cover-cache]', error.message);
-        return res.status(502).json({ error: error.message || '封面缓存失败' });
+        return res.status(error.status || 502).json({
+            error: error.message || '封面缓存失败',
+            ...(error.code === 'cover_url_not_allowed' ? { code: error.code } : {})
+        });
     }
 });
 

@@ -9,9 +9,27 @@ import { canSeeUserInClass, getActorWithClass } from "../utils/classAccess.js";
 import { hashPassword } from "../utils/password.js";
 import { CONTENT_TYPES, bumpContentRevision } from '../utils/contentRevision.js';
 import { extractGeoFromRequest } from '../utils/geolocation.js';
+import { normalizeAvatarDataUrl, readUserProfile } from '../utils/userProfile.js';
 
 const router = express.Router();
 const RESET_PASSWORD = '123456';
+
+router.patch('/me/profile', authMiddleware, async (req, res) => {
+    if (!Object.hasOwn(req.body || {}, 'avatarDataUrl')) {
+        return res.status(400).json({ error: '请选择需要保存的个人头像' });
+    }
+    let avatarDataUrl;
+    try { avatarDataUrl = normalizeAvatarDataUrl(req.body.avatarDataUrl); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
+    try {
+        await pool.query('UPDATE users SET avatar_data_url = ? WHERE id = ?', [avatarDataUrl, req.user.id]);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.json({ user: await readUserProfile(req.user.id) });
+    } catch (error) {
+        console.error('Profile update failed:', error.message);
+        return res.status(500).json({ error: '个人资料保存失败，请稍后重试' });
+    }
+});
 
 // ==========================================
 // 🟢 获取所有用户 (排序优化版)
@@ -104,12 +122,32 @@ async function createUsersBatch(actorUser, inputUsers) {
         }
         if (!allowedRoles.has(role)) throw httpError(`不能创建第 ${index + 1} 个账号的角色`, 403);
         if (names.has(normalizedUsername)) throw httpError(`批量数据中存在重复用户名：${normalizedUsername}`, 409);
+        const hasPermissions = Object.hasOwn(item, 'permissions');
+        const hasTimeRules = Object.hasOwn(item, 'timeRules');
+        if ((hasPermissions || hasTimeRules) && ![ROLES.TEACHER, ROLES.STUDENT].includes(role)) {
+            throw httpError('管理员账号默认拥有全部竞赛访问权限');
+        }
+        let permissions = null;
+        if (hasPermissions) {
+            if (!Array.isArray(item.permissions)) throw httpError(`第 ${index + 1} 个账号的权限列表格式无效`);
+            permissions = item.permissions.map(Number);
+            if (permissions.some(id => !Number.isInteger(id) || id < 1)) {
+                throw httpError(`第 ${index + 1} 个账号的权限列表格式无效`);
+            }
+            permissions = [...new Set(permissions)];
+        }
+        if (hasTimeRules && (!item.timeRules || typeof item.timeRules !== 'object' || Array.isArray(item.timeRules))) {
+            throw httpError(`第 ${index + 1} 个账号的时间规则格式无效`);
+        }
         names.add(normalizedUsername);
         return {
             username: normalizedUsername,
             email: item.email ? String(item.email).trim().slice(0, 255) : null,
             password: item.password,
             role,
+            permissions,
+            timeRules: hasTimeRules ? item.timeRules : null,
+            hasAccessInput: hasPermissions || hasTimeRules,
             classId: role === ROLES.STUDENT
                 ? actor.role === ROLES.TEACHER ? Number(actor.class_id) : Number(item.classId)
                 : null
@@ -130,13 +168,53 @@ async function createUsersBatch(actorUser, inputUsers) {
     const missingClassId = normalizedUsers.find(item => item.role === ROLES.STUDENT && !validClassIds.has(item.classId));
     if (missingClassId) throw httpError('所选班级不存在');
 
-    const inheritedAccess = await getUserAccess(actor.id);
-    let permissionIds = inheritedAccess.configured ? inheritedAccess.permissions : [];
-    let inheritedTimeRules = inheritedAccess.timeRules || {};
-    if ([ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(actor.role)) {
-        const [competitionRows] = await pool.query('SELECT id FROM competitions');
-        permissionIds = competitionRows.map(item => Number(item.id));
-        inheritedTimeRules = {};
+    const [inheritedAccess, [competitionRows]] = await Promise.all([
+        getUserAccess(actor.id), pool.query('SELECT id FROM competitions')
+    ]);
+    const availableIds = new Set(competitionRows.map(item => Number(item.id)));
+    const privilegedActor = [ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(actor.role);
+    const defaultPermissions = privilegedActor ? [...availableIds]
+        : inheritedAccess.configured ? inheritedAccess.permissions : [];
+    const defaultTimeRules = privilegedActor ? {} : inheritedAccess.timeRules || {};
+    for (const item of normalizedUsers) {
+        if (![ROLES.TEACHER, ROLES.STUDENT].includes(item.role)) continue;
+        // Omission retains the legacy inheritance contract. An explicit empty
+        // list is a configured empty whitelist, never an instruction to inherit.
+        item.permissions = item.permissions ?? defaultPermissions;
+        if (item.permissions.some(id => !availableIds.has(id))) throw httpError('权限列表包含不存在的竞赛');
+        if (actor.role === ROLES.TEACHER && item.hasAccessInput && !inheritedAccess.configured) {
+            throw httpError('教师账号尚未配置竞赛权限，不能向学生授权', 403);
+        }
+        if (actor.role === ROLES.TEACHER && item.permissions.some(id => !inheritedAccess.permissions.includes(id))) {
+            throw httpError('不能向学生授予教师本人没有的竞赛权限', 403);
+        }
+        const inputRules = item.timeRules ?? defaultTimeRules;
+        const normalizedRules = {};
+        for (const competitionId of item.permissions) {
+            const rule = inputRules[String(competitionId)] || {};
+            if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
+                throw httpError(`竞赛 ${competitionId} 的时间规则格式无效`);
+            }
+            const unlockTime = rule.unlockTime ? new Date(rule.unlockTime) : null;
+            const lockTime = rule.lockTime ? new Date(rule.lockTime) : null;
+            if ((unlockTime && Number.isNaN(unlockTime.getTime())) || (lockTime && Number.isNaN(lockTime.getTime()))) {
+                throw httpError(`竞赛 ${competitionId} 的时间格式无效`);
+            }
+            if (unlockTime && lockTime && unlockTime >= lockTime) {
+                throw httpError(`竞赛 ${competitionId} 的结束时间必须晚于开始时间`);
+            }
+            if (actor.role === ROLES.TEACHER) {
+                const parent = inheritedAccess.timeRules[String(competitionId)] || {};
+                const parentStart = parent.unlockTime ? new Date(parent.unlockTime).getTime() : null;
+                const parentEnd = parent.lockTime ? new Date(parent.lockTime).getTime() : null;
+                if ((parentStart && (!unlockTime || unlockTime.getTime() < parentStart))
+                    || (parentEnd && (!lockTime || lockTime.getTime() > parentEnd))) {
+                    throw httpError('学生的开放时间不能超出教师本人可用时间', 403);
+                }
+            }
+            if (unlockTime || lockTime) normalizedRules[String(competitionId)] = { unlockTime, lockTime };
+        }
+        item.timeRules = normalizedRules;
     }
     const passwordHashes = await Promise.all(normalizedUsers.map(item => hashPassword(item.password)));
     const statements = [];
@@ -165,13 +243,13 @@ async function createUsersBatch(actorUser, inputUsers) {
                  ON CONFLICT(user_id) DO UPDATE SET configured = 1, updated_at = CURRENT_TIMESTAMP`,
                 [item.username]
             ]);
-            for (const competitionId of permissionIds) {
+            for (const competitionId of item.permissions) {
                 statements.push([
                     `INSERT OR IGNORE INTO user_permissions (user_id, competition_id)
                      VALUES ((SELECT id FROM users WHERE username = ?), ?)`,
                     [item.username, competitionId]
                 ]);
-                const rule = inheritedTimeRules[String(competitionId)] || {};
+                const rule = item.timeRules[String(competitionId)] || {};
                 if (rule.unlockTime || rule.lockTime) {
                     statements.push([
                         `INSERT INTO user_competition_time_rules
@@ -183,7 +261,9 @@ async function createUsersBatch(actorUser, inputUsers) {
             }
         }
     });
-    await runBatchStatements(statements);
+    // D1 batch is transactional. Keep account, class and selected access rules
+    // in one transaction so a later failure cannot leave over-permitted users.
+    await pool.batch(statements);
     const [createdRows] = await pool.query(
         `SELECT u.id, u.username, u.email, u.role, u.class_id AS classId, c.name AS className
          FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE u.username IN (?)`,
