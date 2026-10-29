@@ -2,6 +2,8 @@
 
 恢复日期：2026-10-28。代码位于 `D:\开发项目\marchcenter`。
 
+后续 2026-10-29 的改进和 554 项最终测试结果见 [IMPROVEMENTS.md](IMPROVEMENTS.md)。下文的 497 项记录是恢复完成时的基线验证。
+
 ## 来源与可核实范围
 
 基础源码是 GitHub `vguangshen/marchcenter-cloudflare-d1` 的 `main` 提交

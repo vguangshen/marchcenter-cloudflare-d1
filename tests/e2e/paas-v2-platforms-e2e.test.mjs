@@ -81,3 +81,15 @@ test('a student can read platform metadata but cannot mutate cloud platforms or 
     assert.equal((await harness.api('/api/paas-v2/platforms', { headers, body: { code: 'NO', name: '无权限', softwareUnique: 'denied' } })).status, 403);
     assert.equal((await harness.api('/api/competitions/batch-paas-v2', { headers, body: { tasks: [] } })).status, 403);
 });
+
+test('platform metadata counts catalogs in SQL and indexed task counts keep case-insensitive semantics', async () => {
+    const [platform] = await harness.rows("SELECT id FROM paas_v2_platforms WHERE software_unique = 'scyxcjrh'");
+    for (const [json, count] of [['[{},{}]', 2], ['{}', 0], ['invalid-json', 0]]) {
+        await harness.run('INSERT INTO paas_v2_catalogs (platform_id, tasks_json) VALUES (?, ?) ON CONFLICT(platform_id) DO UPDATE SET tasks_json = excluded.tasks_json', platform.id, json);
+        const result = await harness.api('/api/paas-v2/platforms');
+        assert.equal(result.status, 200, result.text);
+        assert.equal(result.data.find(row => row.id === platform.id).catalogTaskCount, count);
+    }
+    const plan = await harness.rows("EXPLAIN QUERY PLAN SELECT id FROM competitions WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE AND paas_v2_plug_flag = ?", 'SCYXCJRH', 'task-1');
+    assert.ok(plan.some(row => row.detail.includes('idx_competitions_paas_v2_platform_task')));
+});

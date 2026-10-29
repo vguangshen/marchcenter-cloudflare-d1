@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { after, before, beforeEach } from 'node:test';
-import { Miniflare } from 'miniflare';
+import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import {
     CANARY_CONFIRMATION_WORD,
     createCanaryAuditRecorder,
@@ -40,13 +40,13 @@ function specification(overrides = {}) {
 }
 
 before(async () => {
-    miniflare = new Miniflare({
+    miniflare = new Miniflare(convertV4MiniflareOptions({
         modules: true,
         script: 'export default { fetch() { return new Response("ok"); } }',
         compatibilityDate: '2026-07-29',
         compatibilityFlags: ['nodejs_compat'],
         d1Databases: { DB: `canary-lock-${crypto.randomUUID()}` }
-    });
+    }));
     database = await miniflare.getD1Database('DB');
     await database.exec(`
         CREATE TABLE d1_locks (name TEXT PRIMARY KEY, owner TEXT NOT NULL, expires_at INTEGER NOT NULL);

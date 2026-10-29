@@ -1,9 +1,6 @@
-const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
-const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-
-export const API_BASE = isLocal
-    ? "http://localhost:8787/api"
-    : "/api";
+// Production and preview use the same origin. Vite proxies /api in development;
+// a separate API origin is an explicit build-time option when needed.
+export const API_BASE = String(import.meta.env?.VITE_API_BASE || '/api').replace(/\/+$/, '');
 
 // 壁纸内容 URL 带稳定版本参数（?v=内容哈希）。版本变化 ⇒ URL 变化 ⇒
 // 边缘缓存键变化，新内容永远不会命中旧版本的缓存；一年 immutable 的

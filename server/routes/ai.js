@@ -1,5 +1,4 @@
 import express from '../compat/express.js';
-import axios from 'axios';
 import crypto from 'crypto';
 import pool from '../config/db.js';
 import { authMiddleware, adminOnly, getJwtSecret } from '../middleware/auth.js';
@@ -12,6 +11,7 @@ import {
     normalizeCandidateTables, rankDatabaseTables, validateDatabaseMappingSuggestion
 } from '../utils/aiDatabaseMapping.js';
 import { discoverAiModels } from '../utils/aiModelDiscovery.js';
+import { requestAi, resolveAiEndpoint } from '../utils/aiHttpClient.js';
 
 const router = express.Router();
 const MAX_AI_OUTPUT_TOKENS = 131072;
@@ -60,16 +60,6 @@ function normalizeAiConfig(value = {}) {
     };
 }
 
-function resolveAiEndpoint(config) {
-    const apiUrl = String(config.apiUrl || '').trim().replace(/\/+$/, '');
-    if (!apiUrl) return '';
-    if (/\/(chat\/completions|messages)$/i.test(apiUrl)) return apiUrl;
-    if (config.provider === 'anthropic') {
-        return /\/v1$/i.test(apiUrl) ? `${apiUrl}/messages` : `${apiUrl}/v1/messages`;
-    }
-    return `${apiUrl}/chat/completions`;
-}
-
 function parseResponseData(value) {
     if (typeof value !== 'string') return value || {};
     try {
@@ -103,31 +93,6 @@ function extractAiText(rawData) {
         .filter(Boolean)
         .join('\n')
         .trim();
-}
-
-async function requestAi(config, apiKey, messages, maxTokens, timeoutMs = 60000) {
-    const isAnthropic = config.provider === 'anthropic';
-    const apiUrl = resolveAiEndpoint(config);
-    const requestBody = isAnthropic ? {
-        model: config.modelName,
-        ...(config.systemPrompt ? { system: config.systemPrompt } : {}),
-        messages: messages.filter(message => message.role !== 'system'),
-        max_tokens: maxTokens
-    } : {
-        model: config.modelName,
-        messages,
-        max_tokens: maxTokens
-    };
-    const headers = isAnthropic
-        ? { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-        : { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
-
-    return axios.post(apiUrl, requestBody, {
-        adapter: 'fetch',
-        headers,
-        timeout: timeoutMs,
-        maxContentLength: 2 * 1024 * 1024
-    });
 }
 
 router.get('/config', authMiddleware, async (req, res) => {

@@ -2,6 +2,7 @@
   "name": "marchcenter",
   "version": "2.0.0",
   "private": true,
+  "engines": { "node": ">=22" },
   "type": "module",
   "description": "MarchCenter on Cloudflare Workers, Static Assets and D1",
   "scripts": {
@@ -11,20 +12,20 @@
     "check:dead-code": "knip --reporter compact",
     "preview": "vite preview",
     "cf:dev": "npm run db:migrate:local && npm run build && wrangler dev",
-    "cf:deploy": "npm run build && wrangler deploy",
+    "cf:deploy": "node scripts/deploy.mjs",
+    "cf:deploy:dry-run": "node scripts/deploy.mjs --dry-run",
     "db:create": "wrangler d1 create marchcenter-db",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:query:local": "wrangler d1 execute DB --local --command",
     "db:query:remote": "wrangler d1 execute DB --remote --command",
     "check": "npm run lint && npm run check:dead-code && node scripts/check-cloudflare-port.mjs",
-    "test": "node --test tests/frontend/*.test.mjs tests/user-profile-validation.test.mjs && node --test tests/official-parity/*.test.mjs tests/official-parity/soap-business/*.test.mjs tests/official-parity/java/*.test.mjs tests/official-parity/integration/*.test.mjs tests/official-parity/canary/*.test.mjs && node --test --test-concurrency=1 tests/e2e/*.test.mjs && node scripts/test-account-management-crypto.mjs && node scripts/test-wallpaper-engine.mjs && node scripts/test-wallpaper-progressive.mjs && node scripts/test-email-service.mjs && node scripts/test-registration.mjs && node scripts/test-platform-hardening.mjs",
-    "test:e2e": "node --test --test-concurrency=1 tests/e2e/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:e2e": "node scripts/run-tests.mjs --e2e",
     "db:export:remote": "wrangler d1 export DB --remote --output marchcenter-d1-backup.sql"
   },
   "dependencies": {
     "@jsquash/jpeg": "^1.6.0",
-    "axios": "^1.19.0",
     "crypto-js": "^4.2.0",
     "jpeg-js": "^0.4.4",
     "lucide-react": "^1.31.0",
@@ -32,10 +33,10 @@
     "react-dom": "^19.2.8"
   },
   "knip": {
+    "entry": ["src/main.jsx", "worker/index.js", "scripts/*.mjs", "tests/**/*.test.mjs", "tests/frontend/fixtures/*"],
     "ignore": [
       "scripts/check-jpeg-progressive.mjs",
       "scripts/optimize-wallpapers.mjs",
-      "server/routes/officialCanary.js",
       "tests/e2e/start-local-acceptance.mjs"
     ],
     "ignoreDependencies": [
@@ -51,15 +52,16 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react-swc": "^4.3.3",
+    "esbuild": "^0.28.2",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.9.0",
     "knip": "^6.32.1",
-    "miniflare": "^5.20260801.1-alpha",
+    "miniflare": "^5.20261023.1-beta",
     "playwright-core": "^1.62.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.2.1",
-    "wrangler": "^4.120.0"
+    "vite": "^8.3.5",
+    "wrangler": "^4.154.0"
   }
 }

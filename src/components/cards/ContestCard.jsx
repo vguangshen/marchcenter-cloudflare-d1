@@ -567,7 +567,7 @@ const ContestCard = ({
             const SystemIcon = SYSTEM_ICONS[link.customIcon.split(":")[1]]?.icon || Sparkles;
             return <SystemIcon className={iconClass} style={iconStyle} />;
         }
-        if (link.customIcon?.startsWith("http") || link.customIcon?.startsWith("data:")) return <img src={link.customIcon} alt="icon" className="block h-full w-full object-contain p-1" />;
+        if (link.customIcon?.startsWith("http") || link.customIcon?.startsWith("data:")) return <img loading="lazy" decoding="async" src={link.customIcon} alt="icon" className="block h-full w-full object-contain p-1" />;
         switch (link.category) {
             case 'A类竞赛': return <Trophy className={iconClass} style={iconStyle} />;
             case 'B类竞赛': return <Target className={iconClass} style={iconStyle} />;

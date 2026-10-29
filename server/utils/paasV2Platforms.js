@@ -27,13 +27,17 @@ export async function findPlatform(softwareUnique) {
 }
 
 export async function listPlatforms() {
-    const [rows] = await pool.query(`SELECT p.*, c.tasks_json AS tasksJson,
-        (SELECT COUNT(*) FROM competitions t WHERE t.sso_method = 'paasV2' AND t.paas_v2_software_unique = p.software_unique COLLATE NOCASE) AS taskCount
+    const [rows] = await pool.query(`SELECT p.*,
+        CASE WHEN json_valid(c.tasks_json) THEN CASE WHEN json_type(c.tasks_json) = 'array' THEN json_array_length(c.tasks_json) ELSE 0 END ELSE 0 END AS catalogTaskCount,
+        COALESCE(t.taskCount, 0) AS taskCount
         FROM paas_v2_platforms p LEFT JOIN paas_v2_catalogs c ON c.platform_id = p.id
+        LEFT JOIN (SELECT paas_v2_software_unique COLLATE NOCASE AS platformKey, COUNT(*) AS taskCount
+            FROM competitions WHERE sso_method = 'paasV2' GROUP BY paas_v2_software_unique COLLATE NOCASE) t
+            ON t.platformKey = p.software_unique COLLATE NOCASE
         ORDER BY p.builtin DESC, p.sort_order, p.code`);
     return rows.map(row => ({ id: row.id, code: row.code, name: row.name, softwareUnique: row.software_unique,
         theme: row.theme, builtin: Boolean(row.builtin), sortOrder: row.sort_order, taskCount: Number(row.taskCount) || 0,
-        catalogTaskCount: parseSavedCatalog(row.tasksJson).length, catalogSyncStatus: row.catalog_sync_status,
+        catalogTaskCount: Number(row.catalogTaskCount) || 0, catalogSyncStatus: row.catalog_sync_status,
         catalogSyncedAt: row.catalog_synced_at || null }));
 }
 

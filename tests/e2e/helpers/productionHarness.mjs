@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { Log, LogLevel, Miniflare } from 'miniflare';
+import { convertV4MiniflareOptions, Log, LogLevel, Miniflare } from 'miniflare';
 import { signToken } from '../../../server/utils/token.js';
 import { hashPassword } from '../../../server/utils/password.js';
 
@@ -204,29 +204,41 @@ async function applyMigrations(database) {
 export async function createProductionHarness(options = {}) {
     const platform = createMockPlatform();
     const logs = [];
-    const bundleDirectory = await mkdtemp(path.join(os.tmpdir(), 'marchcenter-e2e-'));
-    await execFileAsync(process.execPath, [
-        path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'),
-        'deploy', '--dry-run', '--outdir', bundleDirectory
-    ], { cwd: ROOT, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
-    const bundlePath = path.join(bundleDirectory, 'index.js');
+    const sharedBundle = process.env.MARCHCENTER_TEST_WORKER_BUNDLE;
+    const bundleDirectory = sharedBundle ? null : await mkdtemp(path.join(os.tmpdir(), 'marchcenter-e2e-'));
 
     // Assets：优先用真实 dist（已构建时），缺失时用临时桩目录，
     // 保证 SPA fallback / 资源 404 行为可以端到端验证。
     let assetsDirectory = options.assetsDirectory || path.join(ROOT, 'dist');
+    let temporaryAssetsDirectory;
     if (!existsSync(path.join(assetsDirectory, 'index.html'))) {
         assetsDirectory = await mkdtemp(path.join(os.tmpdir(), 'marchcenter-assets-'));
+        temporaryAssetsDirectory = assetsDirectory;
         await writeFile(path.join(assetsDirectory, 'index.html'), '<!doctype html><html><body><div id="root"></div></body></html>');
     }
+    if (!sharedBundle) {
+        await execFileAsync(process.execPath, [
+            path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'),
+            'deploy', '--dry-run', '--outdir', bundleDirectory, '--assets', assetsDirectory
+        ], { cwd: ROOT, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+    }
+    const bundlePath = sharedBundle || path.join(bundleDirectory, 'index.js');
+    if (!existsSync(bundlePath)) throw new Error('Prepared test Worker bundle is missing');
+    const moduleDirectory = path.dirname(bundlePath);
+    const wasmModules = (await readdir(moduleDirectory, { recursive: true }))
+        .filter(name => name.endsWith('.wasm'))
+        .map(name => ({ type: 'CompiledWasm', path: path.join(moduleDirectory, name) }));
+    const workerConfig = await readFile(path.join(ROOT, 'wrangler.jsonc'), 'utf8');
+    const compatibilityDate = workerConfig.match(/^\s*"compatibility_date"\s*:\s*"([^"]+)"/m)?.[1];
+    const compatibilityFlags = workerConfig.match(/^\s*"compatibility_flags"\s*:\s*(\[[^\]]*\])/m)?.[1];
+    if (!compatibilityDate || !compatibilityFlags) throw new Error('Test runtime requires the production compatibility settings');
 
-    const miniflare = new Miniflare({
-        modules: true,
-        scriptPath: bundlePath,
-        compatibilityDate: '2026-07-17',
-        compatibilityFlags: ['nodejs_compat'],
-        // wrangler deploy --dry-run 会把 MozJPEG 的 .wasm 打包成独立模块；
-        // miniflare 需要显式声明 CompiledWasm 规则才能加载它们。
-        modulesRules: [{ type: 'CompiledWasm', include: ['**/*.wasm'] }],
+    const miniflare = new Miniflare(convertV4MiniflareOptions({
+        modulesRoot: moduleDirectory,
+        modules: [{ type: 'ESModule', path: bundlePath }, ...wasmModules],
+        compatibilityDate,
+        compatibilityFlags: JSON.parse(compatibilityFlags),
+        // Declare bundled MozJPEG .wasm modules explicitly for Miniflare 5.
         assets: {
             directory: assetsDirectory,
             binding: 'ASSETS',
@@ -247,14 +259,15 @@ export async function createProductionHarness(options = {}) {
             WALLPAPER_CACHE_DEBUG: options.wallpaperCacheDebug === '0' ? '0' : '1',
             // Keep existing route tests request-isolated.  Dedicated cache
             // tests opt into the Worker isolate cache explicitly.
-            OFFICIAL_TOKEN_CACHE_SCOPE: options.officialTokenCacheScope || 'request'
+            OFFICIAL_TOKEN_CACHE_SCOPE: options.officialTokenCacheScope || 'request',
+            ...(options.bindings || {})
         },
         d1Databases: { DB: `e2e-${crypto.randomUUID()}` },
         r2Buckets: { WALLPAPERS: options.r2BucketName || `e2e-wallpapers-${crypto.randomUUID()}` },
         outboundService: request => platform.fetch(request),
         log: new CaptureLog(logs),
         ...(options.port ? { host: '127.0.0.1', port: options.port } : {})
-    });
+    }));
     const database = await miniflare.getD1Database('DB');
     await applyMigrations(database);
     const passwordHash = options.adminPassword
@@ -338,10 +351,8 @@ export async function createProductionHarness(options = {}) {
         },
         async dispose() {
             await miniflare.dispose();
-            await rm(bundleDirectory, { recursive: true, force: true });
-            if (assetsDirectory !== path.join(ROOT, 'dist')) {
-                await rm(assetsDirectory, { recursive: true, force: true });
-            }
+            if (bundleDirectory) await rm(bundleDirectory, { recursive: true, force: true });
+            if (temporaryAssetsDirectory) await rm(temporaryAssetsDirectory, { recursive: true, force: true });
         }
     };
 }

@@ -464,12 +464,13 @@
   display:grid;
   position:fixed;
   top:22px;
-  right:22px
+  right:22px;
 }
 .feedback-toast button:focus-visible {
   outline:2px solid var(--mc-color-accent);
   outline-offset:2px
 }
+
 .feedback-confirm-backdrop {
   z-index:var(--mc-z-confirm);
   -webkit-backdrop-filter:blur(10px);
@@ -480,8 +481,9 @@
   animation:.18s ease-out both feedback-fade-in;
   display:grid;
   position:fixed;
-  inset:0
+  inset:0;
 }
+
 .feedback-confirm-actions button {
   min-width:88px;
   min-height:var(--mc-touch-size);
@@ -492,7 +494,7 @@
   border-radius:12px;
   padding:10px 16px;
   font-size:12px;
-  font-weight:850
+  font-weight:850;
 }
 .feedback-confirm-actions button:focus-visible {
   outline:2px solid var(--mc-color-accent);
@@ -502,7 +504,7 @@
   background:var(--mc-color-surface);
   border:1px solid var(--mc-color-border);
   transition:background-color .3s,border-color .3s,box-shadow .3s;
-  box-shadow:0 12px 36px #0f172a1a
+  box-shadow:0 12px 36px #0f172a1a;
 }
 .agent-task-scroll {
   overscroll-behavior:contain;
@@ -589,4 +591,3 @@
   border-color:var(--agent-theme-border,#4c1d95b8)!important;
   background-color:#0f172a!important
 }
-

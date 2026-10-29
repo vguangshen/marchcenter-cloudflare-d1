@@ -10,8 +10,6 @@ import {
 import LoginPage from './components/views/LoginPage';
 import PasswordChangeReminder from './components/views/PasswordChangeReminder';
 import Navbar from './components/layouts/Navbar';
-import ContestCard from './components/cards/ContestCard';
-import AgentTaskCard from './components/cards/AgentTaskCard';
 import AnnouncementBanner from './components/views/dashboard/AnnouncementBanner';
 import FeedbackCenter from './components/feedback/FeedbackCenter';
 import { api } from './utils/api';
@@ -61,13 +59,26 @@ const AiGuideModal = lazy(() => import('./components/modals/AiGuideModal'));
 const GiftModal = lazy(() => import('./components/modals/GiftModal'));
 const EditGiftModal = lazy(() => import('./components/modals/EditGiftModal'));
 const ProfileModal = lazy(() => import('./components/modals/ProfileModal'));
+const ContestCard = lazy(() => import('./components/cards/ContestCard'));
+const AgentTaskCard = lazy(() => import('./components/cards/AgentTaskCard'));
+const CardLoadingNotice = () => <div className="min-h-[190px] rounded-3xl border border-slate-200/60 bg-white/60 p-5 dark:border-slate-700 dark:bg-slate-900/60" role="status" aria-live="polite"><Loader2 className="mx-auto mt-10 h-5 w-5 animate-spin text-slate-400" /><span className="sr-only">正在加载卡片…</span></div>;
 export default function App() {
     // Application state
     const {
         currentUser, token, authStatus, isUnlocking, isNavbarTransitioning,
-        completeLoginTransition, completeNavbarTransition, refreshCurrentUser,
+        completeLoginTransition, completeNavbarTransition, refreshCurrentUser, updateCurrentUser,
         isAdmin, canManageUsers, handleLoginSuccess, handleLogout
     } = useAuthSession();
+    const currentUserId = currentUser?.id;
+    const currentUserRole = currentUser?.role;
+    const handleProfileSaved = useCallback((savedUser) => {
+        if (!token || localStorage.getItem('authToken') !== token) return null;
+        if (savedUser) {
+            if (String(savedUser.id) !== String(currentUserId)) return null;
+            return updateCurrentUser(savedUser);
+        }
+        return refreshCurrentUser();
+    }, [currentUserId, refreshCurrentUser, token, updateCurrentUser]);
     const [activePage, setActivePage] = useState('dashboard');
 
     const [isCardEditMode, setIsCardEditMode] = useState(false);
@@ -306,9 +317,9 @@ export default function App() {
     }, [isPageVisible]);
 
     useEffect(() => {
-        if (!currentUser) return;
-        setSettingsTab(currentUser.role === 'super_admin' ? 'api' : 'users');
-    }, [currentUser]);
+        if (!currentUserId) return;
+        setSettingsTab(currentUserRole === 'super_admin' ? 'api' : 'users');
+    }, [currentUserId, currentUserRole]);
 
     const ADMIN_TABS = isAdmin ? [
         { id: 'api', label: 'API 设置', icon: Sparkles },
@@ -325,14 +336,14 @@ export default function App() {
 
     // Effects
     useEffect(() => {
-        if (currentUser && token) {
+        if (currentUserId && token) {
             const updateDeviceInfo = async () => {
                 const deviceInfo = { userAgent: navigator.userAgent, screenResolution: `${window.screen.width}x${window.screen.height}` };
-                try { await api.patch(`/users/${currentUser.id}/device`, deviceInfo, { retry: 0, fallback: '设备信息上报失败' }); } catch (e) { notify(e.message || '设备信息上报失败', 'warning'); }
+                try { await api.patch(`/users/${currentUserId}/device`, deviceInfo, { retry: 0, fallback: '设备信息上报失败' }); } catch (e) { if (localStorage.getItem('authToken') === token) notify(e.message || '设备信息上报失败', 'warning'); }
             };
             updateDeviceInfo();
         }
-    }, [currentUser, token]);
+    }, [currentUserId, token]);
 
     // 壁纸预加载与主题色提取共用同一个 Image 实例（一次下载、一次解码），
     // 详见下方 wallpaperCandidateUrl 变化时的 useEffect。
@@ -389,7 +400,7 @@ export default function App() {
         if (!token) return;
         try {
             const rows = await api.get('/users/classes', { fallback: '班级列表读取失败' });
-            if (Array.isArray(rows)) setClassOptions(rows);
+            if (localStorage.getItem('authToken') === token && Array.isArray(rows)) setClassOptions(rows);
         } catch { /* 保留从用户列表派生的回退数据 */ }
     }, [token]);
     const searchUsersForGift = useCallback(async (keyword) => {
@@ -398,14 +409,15 @@ export default function App() {
         return Array.isArray(data) ? data : (data.users || []);
     }, []);
     const fetchSsoConfigs = useCallback(async () => {
-        if (!token) return;
+        if (!token || !isAdmin) return;
         setSsoConfigsLoadError('');
         try {
-            setSsoConfigs(await api.get('/sso-config', { fallback: 'SSO 配置读取失败' }));
+            const configs = await api.get('/sso-config', { fallback: 'SSO 配置读取失败' });
+            if (localStorage.getItem('authToken') === token) setSsoConfigs(configs);
         } catch (e) {
-            setSsoConfigsLoadError(e.message || 'SSO 配置读取失败，请重试');
+            if (localStorage.getItem('authToken') === token) setSsoConfigsLoadError(e.message || 'SSO 配置读取失败，请重试');
         }
-    }, [token]);
+    }, [isAdmin, token]);
     const fetchSharedContent = useCallback(async () => {
         if (!token) return;
         if (contentRequestRef.current) return contentRequestRef.current;
@@ -433,10 +445,11 @@ export default function App() {
                 setContentLoadError('');
                 return true;
             } catch (e) {
+                if (localStorage.getItem('authToken') !== requestToken) return false;
                 setContentLoadError(e.message || '公告和礼物读取失败，请重试');
                 return false;
             } finally {
-                contentRequestRef.current = null;
+                if (contentRequestRef.current === request) contentRequestRef.current = null;
             }
         })();
         contentRequestRef.current = request;
@@ -447,8 +460,9 @@ export default function App() {
         if (!token) return;
         try {
             const serverConfig = await api.get('/ai/config', { fallback: 'AI 配置读取失败' });
+            if (localStorage.getItem('authToken') !== token) return;
             setAiConfig({ ...DEFAULT_AI_CONFIG, ...serverConfig });
-        } catch (e) { notify(e.message || 'AI 配置读取失败', 'warning'); }
+        } catch (e) { if (localStorage.getItem('authToken') === token) notify(e.message || 'AI 配置读取失败', 'warning'); }
     }, [token]);
 
     // Public site configuration
@@ -476,15 +490,24 @@ export default function App() {
         }
     }, []);
 
+    useEffect(() => { fetchSiteConfig(); }, [fetchSiteConfig]);
+
     useEffect(() => {
-        if (currentUser) fetchSsoConfigs();
-    }, [currentUser, fetchSsoConfigs]);
+        if (token && isAdmin && (isModalOpen || isTaskAppModalOpen || (activePage === 'settings' && settingsTab === 'sso'))) fetchSsoConfigs();
+    }, [activePage, fetchSsoConfigs, isAdmin, isModalOpen, isTaskAppModalOpen, settingsTab, token]);
 
     useEffect(() => {
         setContentLoadError('');
         contentRevisionRef.current = { announcements: '', gifts: '' };
-        fetchSiteConfig();
-        if (token && currentUser) {
+        contentRequestRef.current = null;
+        usersRequestIdRef.current += 1;
+        setUsers([]); setPermissions({}); setUserTimeRules({}); setClassOptions([]);
+        setUsersLoadError(''); setUsersLoading(false); setUsersPage(1);
+        setSsoConfigs([]); setSsoConfigsLoadError(''); setIsProfileModalOpen(false);
+        setIsModalOpen(false); setIsTaskAppModalOpen(false); setIsPermissionModalOpen(false); setIsAddUserModalOpen(false); setIsDeleteUserModalOpen(false);
+        setAnnouncements([]); setGifts([]); setActiveGift(null);
+        setAiConfig(DEFAULT_AI_CONFIG);
+        if (token && currentUserId) {
             fetchLinks({ animate: true });
             fetchStudentAccounts();
             fetchAiConfig();
@@ -493,13 +516,13 @@ export default function App() {
             setAnnouncements([]);
             setGifts([]);
         }
-    }, [currentUser, fetchAiConfig, fetchLinks, fetchSiteConfig, fetchStudentAccounts, resetCompetitionCatalog, token]);
+    }, [currentUserId, currentUserRole, fetchAiConfig, fetchLinks, fetchStudentAccounts, resetCompetitionCatalog, token]);
 
     useEffect(() => {
         setPasswordReminderDismissed(false);
     }, [currentUser?.id]);
     useEffect(() => {
-        if (!token || !currentUser || !isPageVisible) return undefined;
+        if (!token || !currentUserId || !isPageVisible) return undefined;
         let cancelled = false;
         let timer = null;
         const poll = async () => {
@@ -514,7 +537,7 @@ export default function App() {
             cancelled = true;
             if (timer) window.clearTimeout(timer);
         };
-    }, [currentUser, fetchSharedContent, isPageVisible, token]);
+    }, [currentUserId, currentUserRole, fetchSharedContent, isPageVisible, token]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => setDebouncedUsersSearch(usersSearch.trim()), 300);
@@ -529,12 +552,11 @@ export default function App() {
             case 'gifts':
                 fetchUsers({ signal: controller.signal });
                 break;
-            case 'sso': fetchSsoConfigs(); break;
             default: break;
         }
         if (settingsTab === 'users') fetchClasses();
         return () => controller.abort();
-    }, [activePage, canManageUsers, debouncedUsersSearch, fetchClasses, fetchSsoConfigs, fetchUsers, settingsTab, token, usersPage]);
+    }, [activePage, canManageUsers, debouncedUsersSearch, fetchClasses, fetchUsers, settingsTab, token, usersPage]);
 
     useEffect(() => {
         if (currentUser && !isAdmin) {
@@ -1140,7 +1162,8 @@ export default function App() {
                                                             <div className="competition-card-category" title={link.category || '未分类'}>
                                                                 <span>{link.category || '未分类'}</span>
                                                             </div>
-                                                            <ContestCard
+                                                            <Suspense fallback={<CardLoadingNotice />}>
+                                                                <ContestCard
                                                                     link={link} isAdmin={isAdmin} userRole={currentUser?.role} overrideTime={link._overrideTime}
                                                                     onEdit={(l)=>{setEditingLink(l); setIsModalOpen(true);}}
                                                                     onDelete={handleDelete}
@@ -1167,6 +1190,7 @@ export default function App() {
                                                                     onUnsupportedClassDelete={handleUnsupportedClassDelete}
                                                                     classActionKey={classActionKey}
                                                                 />
+                                                            </Suspense>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1199,18 +1223,19 @@ export default function App() {
                                                 <div className="agent-task-scroll" aria-label={group.items.length > 8 ? `${group.label}任务滚动区域，可向下滚动查看全部任务` : undefined}>
                                                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-live="polite">
                                                     {group.items.map(link => (
-                                                        <AgentTaskCard
-                                                            key={link.id}
-                                                            link={link}
-                                                            theme={group.theme}
-                                                            isAdmin={isAdmin}
-                                                            onEdit={(l)=>{setEditingLink(l); setPlatformToEdit(''); setIsTaskAppModalOpen(true);}}
-                                                            onDelete={handleDelete}
-                                                            onOpen={handleOpenCompetition}
-                                                            onReset={handleResetAgentTask}
-                                                            openingCompetitionKeys={openingCompetitionKeys}
-                                                            isCardEditMode={isCardEditMode}
-                                                        />
+                                                        <Suspense key={link.id} fallback={<CardLoadingNotice />}>
+                                                            <AgentTaskCard
+                                                                link={link}
+                                                                theme={group.theme}
+                                                                isAdmin={isAdmin}
+                                                                onEdit={(l)=>{setEditingLink(l); setPlatformToEdit(''); setIsTaskAppModalOpen(true);}}
+                                                                onDelete={handleDelete}
+                                                                onOpen={handleOpenCompetition}
+                                                                onReset={handleResetAgentTask}
+                                                                openingCompetitionKeys={openingCompetitionKeys}
+                                                                isCardEditMode={isCardEditMode}
+                                                            />
+                                                        </Suspense>
                                                     ))}
                                                 </div>
                                                 </div>
@@ -1238,7 +1263,7 @@ export default function App() {
                 {isTaskAppModalOpen && <TaskAppModal isOpen onClose={() => { setIsTaskAppModalOpen(false); setPlatformToEdit(''); }} onSave={async () => { setEditingLink(null); await fetchLinks(); }} onPlatformsChange={async () => { const platforms = await loadAgentPlatforms(); await fetchLinks({ animate: false }); return platforms; }} platforms={agentPlatforms} initialData={editingLink} initialSoftwareUnique={taskAppSoftwareUnique} initialPlatformSoftwareUnique={platformToEdit} ssoConfigs={ssoConfigs} existingLinks={links} />}
                 {isAiModalOpen && <AiGuideModal isOpen onClose={() => setIsAiModalOpen(false)} link={currentAiLink} aiConfig={aiConfig} />}
                 {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} agentPlatforms={agentPlatforms} currentPermissions={targetUserForPermission ? (permissions[targetUserForPermission.id] || []) : []} currentUserTimeRules={targetUserForPermission ? (userTimeRules[targetUserForPermission.id] || {}) : {}} onSave={handleSavePermissions} />}
-                {isProfileModalOpen && <ProfileModal isOpen user={currentUser} onClose={() => setIsProfileModalOpen(false)} onSaved={refreshCurrentUser} />}
+                {isProfileModalOpen && <ProfileModal isOpen user={currentUser} onClose={() => setIsProfileModalOpen(false)} onSaved={handleProfileSaved} />}
                 {activeGift && !isGiftMinimized && <GiftModal isOpen gift={activeGift} onClose={() => setIsGiftMinimized(true)} onOpenLink={markGiftAsRead} />}
             </Suspense>
 

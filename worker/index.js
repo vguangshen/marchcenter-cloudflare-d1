@@ -1,5 +1,5 @@
 import express from '../server/compat/express.js';
-import { runWithRuntime } from '../server/config/runtime.js';
+import { getEnv, runWithRuntime } from '../server/config/runtime.js';
 import { createOfficialTokenStore } from '../server/utils/officialCompat/tokenStore.js';
 
 import authRoutes from '../server/routes/auth.js';
@@ -40,6 +40,11 @@ app.use('/api/email-settings', emailSettingsRoutes);
 app.use('/api/paas-v2', paasV2Routes);
 app.use('/api/map', mapRoutes);
 app.get('/api/health', (_req, res) => res.json({ ok: true, runtime: 'cloudflare-workers', database: 'd1' }));
+app.get('/api/version', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    return res.json({ commit: getEnv('APP_COMMIT_SHA') || null });
+});
 
 function allowedOrigins(env) {
     return new Set(String(env.CORS_ORIGINS || 'https://marchcenter.top,http://localhost:5173,http://127.0.0.1:5173')

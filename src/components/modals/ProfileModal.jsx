@@ -28,15 +28,19 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
     const [passwordError, setPasswordError] = useState('');
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [error, setError] = useState('');
+    const [refreshPending, setRefreshPending] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const userRef = useRef(user);
+    userRef.current = user;
     const fileRef = useRef(null);
     const avatarRef = useRef(null);
-    const busy = saving || changingPassword;
+    const busy = saving || changingPassword || refreshing;
     const close = () => { if (!busy) onClose?.(); };
     const dialogRef = useModalAccessibility(isOpen, close, { initialFocusRef: avatarRef });
 
     useEffect(() => {
         if (!isOpen) return;
-        setDraft(profileDraft(user));
+        setDraft(profileDraft(userRef.current));
         setError('');
         setSaving(false);
         setCurrentPassword('');
@@ -46,7 +50,8 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
         setChangingPassword(false);
         setPasswordError('');
         setPasswordSuccess('');
-    }, [isOpen, user]);
+        setRefreshPending(null);
+    }, [isOpen, user?.id]);
 
     if (!isOpen) return null;
     const username = typeof user?.username === 'string' ? user.username : '';
@@ -54,6 +59,24 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
     const avatarInitial = Array.from(displayName.trim())[0]?.toUpperCase() || 'M';
     const changed = draft.avatarDataUrl !== profileDraft(user).avatarDataUrl;
     const setAvatar = value => { setDraft({ avatarDataUrl: value }); setError(''); };
+
+    const synchronizeSavedUser = async (savedUser, closeAfterRefresh = false) => {
+        try {
+            await onSaved?.(savedUser);
+            setRefreshPending(null);
+            if (closeAfterRefresh) onClose?.();
+            return true;
+        } catch {
+            setRefreshPending({ user: savedUser, closeAfterRefresh });
+            return false;
+        }
+    };
+    const retryRefresh = async () => {
+        if (busy || !refreshPending) return;
+        setRefreshing(true);
+        try { await synchronizeSavedUser(refreshPending.user, refreshPending.closeAfterRefresh); }
+        finally { setRefreshing(false); }
+    };
 
     const chooseFile = event => {
         const file = event.currentTarget.files?.[0];
@@ -76,23 +99,28 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
 
     const save = async event => {
         event.preventDefault();
+        if (busy) return;
         if (draft.avatarDataUrl && (!AVATAR_DATA_URL.test(draft.avatarDataUrl) || avatarBytes(draft.avatarDataUrl) > MAX_AVATAR_BYTES)) {
             setError('头像图片不能超过 100KB，请重新选择');
             return;
         }
         setSaving(true);
         setError('');
+        let result;
         try {
-            const result = await api.patch('/users/me/profile', { avatarDataUrl: draft.avatarDataUrl || null }, { fallback: '个人资料保存失败' });
-            await onSaved?.(result?.user);
-            notify('个人资料已保存', 'success');
-            onClose?.();
+            result = await api.patch('/users/me/profile', { avatarDataUrl: draft.avatarDataUrl || null }, { fallback: '个人资料保存失败' });
         } catch (requestError) {
             setError(requestError.message || '个人资料保存失败，请稍后重试');
-        } finally { setSaving(false); }
+            setSaving(false);
+            return;
+        }
+        notify('个人资料已保存', 'success');
+        try { await synchronizeSavedUser(result?.user, true); }
+        finally { setSaving(false); }
     };
 
     const changePassword = async () => {
+        if (busy) return;
         setPasswordError('');
         setPasswordSuccess('');
         if (!user?.passwordChangeRecommended && !currentPassword) { setPasswordError('请输入当前密码'); return; }
@@ -106,11 +134,14 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
             setPassword('');
             setConfirmation('');
             setPasswordSuccess('登录密码已更新');
-            await onSaved?.();
             notify('登录密码已更新', 'success');
         } catch (requestError) {
             setPasswordError(requestError.message || '修改密码失败，请稍后重试');
-        } finally { setChangingPassword(false); }
+            setChangingPassword(false);
+            return;
+        }
+        try { await synchronizeSavedUser({ ...user, passwordChangeRecommended: false }); }
+        finally { setChangingPassword(false); }
     };
 
     return (
@@ -124,6 +155,7 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
                     <button type="button" onClick={close} disabled={busy} aria-label="关闭个人资料窗口" className="mc-icon-button mc-modal__close !text-white/60 hover:!bg-white/10 hover:!text-white"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="mc-modal__body custom-scrollbar">
+                    {refreshPending && <div className="mc-alert mc-alert--warning mb-4 items-center justify-between" role="status"><span>更改已保存，但账号信息同步失败，请重试刷新。</span><button type="button" disabled={busy} onClick={retryRefresh} className="mc-button mc-button--secondary mc-button--compact">{refreshing ? '刷新中…' : '重试刷新'}</button></div>}
                     <div className="grid gap-5 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
                         <section className="rounded-[1.35rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 p-5 dark:border-indigo-900/60 dark:from-indigo-950/60 dark:via-slate-900 dark:to-violet-950/40">
                             <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-black text-slate-800 dark:text-white">个人头像</h3><p className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">上传一个代表您的 Logo</p></div><Camera className="h-4 w-4 text-indigo-400" /></div>

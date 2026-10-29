@@ -6,6 +6,7 @@
 //   1. 入口无经典内联脚本，控制台无 CSP 违规；
 //   2. localStorage 旧配置不会在服务端确认前设置 preload；
 //   3. React 收到公开配置后只请求一次规范壁纸 URL；
+//   4. 日夜主题下登录按钮渐变覆盖透明边框，且不重复平铺；
 //   6. 非法 ID / 版本 / 外部 URL 仍被拒绝。
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,13 +15,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
 import { chromium } from 'playwright-core';
+import { testBrowserOptions } from '../helpers/browser.mjs';
 
 const projectRoot = path.resolve(import.meta.dirname, '../..');
 const distDir = path.join(projectRoot, 'dist');
-const ORIGIN = 'http://localhost:8787';
+let ORIGIN = 'http://127.0.0.1';
 const WALLPAPER_ID = 8;
 const WALLPAPER_VERSION = 'v1testhash';
-const EXPECTED_URL = `${ORIGIN}/api/wallpapers/${WALLPAPER_ID}/content?v=${WALLPAPER_VERSION}`;
+let EXPECTED_URL;
 const VALID_GLOBAL_THEME = {
     effectMode: 'wallpaper',
     backgroundMode: 'wallpaper',
@@ -33,6 +35,7 @@ const TINY_PNG = Buffer.from(
 );
 
 function runBuild() {
+    if (process.env.MARCHCENTER_TEST_BUILD_READY === '1') return Promise.resolve();
     return new Promise((resolve, reject) => {
         const child = spawn('npm', ['run', 'build'], { cwd: projectRoot, shell: true, stdio: 'ignore' });
         child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`vite build exited ${code}`))));
@@ -178,10 +181,12 @@ before(async () => {
     server = createTestServer(workerCsp, pagesCsp);
     await new Promise((resolve, reject) => {
         server.once('error', reject);
-        server.listen(8787, '127.0.0.1', resolve);
+        server.listen(0, '127.0.0.1', resolve);
     });
+    ORIGIN = `http://127.0.0.1:${server.address().port}`;
     baseUrl = ORIGIN;
-    browser = await chromium.launch({ channel: 'chrome', headless: true });
+    EXPECTED_URL = `${ORIGIN}/api/wallpapers/${WALLPAPER_ID}/content?v=${WALLPAPER_VERSION}`;
+    browser = await chromium.launch(testBrowserOptions());
 });
 
 after(async () => {
@@ -198,6 +203,58 @@ test('CSP 两个来源保持一致', () => {
     const pagesScriptSrc = scriptSrcOf(pagesCsp);
     assert.equal(workerScriptSrc, pagesScriptSrc, '两个 CSP 来源的 script-src 必须完全一致');
     assert.doesNotMatch(workerScriptSrc, /unsafe-inline/, 'script-src 禁止使用 unsafe-inline');
+});
+
+test('登录按钮日夜主题均以完整边框区域绘制渐变且不平铺', async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'reduce' });
+    try {
+        const page = await context.newPage();
+        const { cspViolations, otherConsole } = collectPageErrors(page);
+        await page.route('**/api/config/site', route => route.fulfill({
+            status: 200, contentType: 'application/json',
+            body: JSON.stringify({ globalTheme: { effectMode: 'color', manualColor: 'orange', lightDark: 'light', systemEffects: { loginEntrance: false } } })
+        }));
+        await page.goto(baseUrl, { waitUntil: 'networkidle' });
+        const button = page.locator('.login-auth-submit');
+        await button.waitFor({ state: 'visible' });
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('competition_hub_site_config') || '{}').globalTheme?.manualColor === 'orange');
+        await page.locator('#login-username').fill('visual-regression-user');
+        await page.locator('#login-password').fill('fixture-password');
+        const screenshotDir = path.join(projectRoot, '_build', 'verification');
+        await fs.mkdir(screenshotDir, { recursive: true });
+        for (const theme of ['light', 'dark']) {
+            if (theme === 'dark') await page.getByTitle('切换到夜间模式', { exact: true }).click();
+            await page.waitForFunction(dark => Boolean(document.querySelector('.login-auth-submit')?.closest('.dark')) === dark, theme === 'dark');
+            for (const state of ['normal', 'hover']) {
+                if (state === 'hover') await button.hover();
+                else await page.mouse.move(0, 0);
+                const style = await button.evaluate(element => {
+                    const computed = getComputedStyle(element);
+                    return {
+                        origin: computed.backgroundOrigin, repeat: computed.backgroundRepeat,
+                        clip: computed.backgroundClip, image: computed.backgroundImage,
+                        leftWidth: computed.borderLeftWidth, rightWidth: computed.borderRightWidth,
+                        leftColor: computed.borderLeftColor, rightColor: computed.borderRightColor
+                    };
+                });
+                const label = `${theme}/${state}`;
+                assert.equal(style.origin, 'border-box', `${label} 渐变必须覆盖透明边框区域`);
+                assert.equal(style.repeat, 'no-repeat', `${label} 渐变不得在左右边框重复平铺`);
+                assert.equal(style.clip, 'border-box', `${label} 背景绘制不得裁掉边框区域`);
+                assert.match(style.image, /linear-gradient\(/, `${label} 必须保留登录按钮渐变`);
+                assert.equal(style.leftWidth, '1px', `${label} 保留公共按钮的透明边框`);
+                assert.equal(style.rightWidth, '1px', `${label} 左右边框宽度必须一致`);
+                assert.equal(style.leftColor, 'rgba(0, 0, 0, 0)', `${label} 不得出现有色左边框`);
+                assert.equal(style.rightColor, 'rgba(0, 0, 0, 0)', `${label} 不得出现有色右边框`);
+            }
+            assert.equal(await button.isEnabled(), true, `${theme} 登录按钮保持可用`);
+            assert.equal(await page.locator('#login-username').inputValue(), 'visual-regression-user', '切换主题不得重置用户名');
+            assert.equal(await page.locator('#login-password').inputValue(), 'fixture-password', '切换主题不得重置密码');
+            await page.screenshot({ path: path.join(screenshotDir, `login-button-${theme}.png`), fullPage: true });
+        }
+        assert.deepEqual(cspViolations, [], '日夜主题切换不得产生 CSP 违规');
+        assert.deepEqual(otherConsole, [], '登录页面不得出现运行时或控制台错误');
+    } finally { await context.close(); }
 });
 
 test('生产响应头下：无 CSP 违规，服务端确认前不显示旧缓存壁纸，确认后仅传输一次', async () => {
@@ -246,7 +303,7 @@ test('生产响应头下：无 CSP 违规，服务端确认前不显示旧缓存
     // 单个 <img>（渐进式完整图）加载完成。
     await page.waitForFunction(
         (src) => {
-            const image = document.querySelector(`img[src="${src}"]`);
+            const image = Array.from(document.images).find(image => image.src === src);
             return image && image.naturalWidth > 0;
         },
         EXPECTED_URL,
@@ -258,7 +315,7 @@ test('生产响应头下：无 CSP 违规，服务端确认前不显示旧缓存
     assert.equal(wallpaperRequests[0], EXPECTED_URL, '唯一传输必须是规范内容 URL');
     assert.equal(
         await page.evaluate((src) => {
-            const image = document.querySelector(`img[src="${src}"]`);
+            const image = Array.from(document.images).find(image => image.src === src);
             return image ? image.src : null;
         }, EXPECTED_URL),
         EXPECTED_URL,

@@ -55,7 +55,7 @@ const AgentTaskCard = ({
 
             <div className="flex min-w-0 flex-1 flex-col p-3 pl-4 pb-4">
                 <div className="flex min-w-0 items-start gap-2">
-                    {cover ? <img src={cover} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="agent-task-cover-placeholder grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-sm"><Sparkles className="h-6 w-6" /></span>}
+                    {cover ? <img loading="lazy" decoding="async" src={cover} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="agent-task-cover-placeholder grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-sm"><Sparkles className="h-6 w-6" /></span>}
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                             <span className="agent-task-badge inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-black"><Bot className="h-2.5 w-2.5" />智能体</span>

@@ -7,7 +7,7 @@ import {
 } from "../utils/roleAccess.js";
 import { canSeeUserInClass, getActorWithClass } from "../utils/classAccess.js";
 import { hashPassword } from "../utils/password.js";
-import { CONTENT_TYPES, bumpContentRevision } from '../utils/contentRevision.js';
+import { CONTENT_TYPES } from '../utils/contentRevision.js';
 import { extractGeoFromRequest } from '../utils/geolocation.js';
 import { normalizeAvatarDataUrl, readUserProfile } from '../utils/userProfile.js';
 
@@ -63,7 +63,8 @@ async function getManagedTarget(actor, targetId, { allowSelf = false } = {}) {
 }
 
 const MAX_USER_BATCH_SIZE = 200;
-const MAX_D1_BATCH_STATEMENTS = 900;
+// D1 limits each individual prepared statement to 100 bound parameters.
+const MAX_D1_BOUND_PARAMETERS = 100;
 const USER_PAGE_SIZE_DEFAULT = 50;
 const USER_PAGE_SIZE_MAX = 200;
 
@@ -101,10 +102,24 @@ function httpError(message, status = 400) {
     return error;
 }
 
-async function runBatchStatements(statements) {
-    for (let index = 0; index < statements.length; index += MAX_D1_BATCH_STATEMENTS) {
-        await pool.batch(statements.slice(index, index + MAX_D1_BATCH_STATEMENTS));
+function userIdChunks(ids) {
+    const chunks = [];
+    for (let index = 0; index < ids.length; index += MAX_D1_BOUND_PARAMETERS) {
+        chunks.push(ids.slice(index, index + MAX_D1_BOUND_PARAMETERS));
     }
+    return chunks;
+}
+
+async function deleteUsersAtomically(statements) {
+    const results = await pool.batch([
+        ...statements,
+        [`INSERT INTO content_revisions (content_type, revision, updated_at)
+          VALUES (?, 1, CURRENT_TIMESTAMP)
+          ON CONFLICT(content_type) DO UPDATE SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP`,
+        [CONTENT_TYPES.gifts]],
+        ['SELECT revision FROM content_revisions WHERE content_type = ?', [CONTENT_TYPES.gifts]]
+    ]);
+    return Number(results.at(-1)?.rows?.[0]?.revision || 0);
 }
 
 async function createUsersBatch(actorUser, inputUsers) {
@@ -465,10 +480,14 @@ async function deleteUsersBatch(actorUser, inputIds) {
     if (ids.length > MAX_USER_BATCH_SIZE) throw httpError(`一次最多删除 ${MAX_USER_BATCH_SIZE} 个账号`);
 
     const actor = await getActorWithClass(actorUser);
-    const [targets] = await pool.query(
-        'SELECT id, username, role, class_id FROM users WHERE id IN (?)',
-        [ids]
-    );
+    const targets = [];
+    for (const chunk of userIdChunks(ids)) {
+        const [rows] = await pool.query(
+            'SELECT id, username, role, class_id FROM users WHERE id IN (?)',
+            [chunk]
+        );
+        targets.push(...rows);
+    }
     if (targets.length !== ids.length) {
         const existingIds = new Set(targets.map(item => Number(item.id)));
         const missing = ids.find(id => !existingIds.has(id));
@@ -482,48 +501,55 @@ async function deleteUsersBatch(actorUser, inputIds) {
     }
     const teacherIds = normalizedTargets.filter(target => target.role === ROLES.TEACHER).map(target => target.id);
     if (teacherIds.length) {
-        const [studentRows] = await pool.query(
-            `SELECT c.teacher_user_id AS teacher_id, COUNT(s.id) AS student_count
-             FROM classes c
-             LEFT JOIN users s ON s.class_id = c.id AND s.role = 'student'
-             WHERE c.teacher_user_id IN (?) GROUP BY c.teacher_user_id`,
-            [teacherIds]
-        );
+        const studentRows = [];
+        for (const chunk of userIdChunks(teacherIds)) {
+            const [rows] = await pool.query(
+                `SELECT c.teacher_user_id AS teacher_id, COUNT(s.id) AS student_count
+                 FROM classes c
+                 LEFT JOIN users s ON s.class_id = c.id AND s.role = 'student'
+                 WHERE c.teacher_user_id IN (?) GROUP BY c.teacher_user_id`,
+                [chunk]
+            );
+            studentRows.push(...rows);
+        }
         const occupied = new Set(studentRows.filter(row => Number(row.student_count) > 0).map(row => Number(row.teacher_id)));
         const blocked = normalizedTargets.find(target => occupied.has(Number(target.id)));
         if (blocked) throw httpError(`教师 ${blocked.username} 班级仍有学生，请先删除或转移班级学生`, 409);
     }
 
     const statements = [];
-    for (const target of normalizedTargets) {
-        statements.push(...[
-            'DELETE FROM user_permissions WHERE user_id = ?',
-            'DELETE FROM user_competition_time_rules WHERE user_id = ?',
-            'DELETE FROM user_access_policies WHERE user_id = ?',
-            'DELETE FROM user_workflow_status WHERE user_id = ?',
-            'DELETE FROM user_platform_account_status WHERE user_id = ?',
-            'DELETE FROM user_competition_student_accounts WHERE user_id = ?',
-            'DELETE FROM user_competition_expert_student_bindings WHERE user_id = ?',
-            'DELETE FROM user_competition_expert_accounts WHERE user_id = ?',
-            'DELETE FROM user_manual_teacher_credentials WHERE user_id = ?',
-            'DELETE FROM user_class_removals WHERE user_id = ?',
-            'DELETE FROM login_verification_codes WHERE user_id = ?',
-            'DELETE FROM user_gifts WHERE target_user_id = ?',
-            'UPDATE logo_library SET created_by = NULL WHERE created_by = ?',
-            'UPDATE wallpaper_library SET created_by = NULL WHERE created_by = ?'
-        ].map(sql => [sql, [target.id]]));
-        if (target.role === ROLES.TEACHER) statements.push(['DELETE FROM classes WHERE teacher_user_id = ?', [target.id]]);
-        statements.push(['DELETE FROM users WHERE id = ?', [target.id]]);
+    const dependentQueries = [
+        'DELETE FROM user_permissions WHERE user_id IN (?)',
+        'DELETE FROM user_competition_time_rules WHERE user_id IN (?)',
+        'DELETE FROM user_access_policies WHERE user_id IN (?)',
+        'DELETE FROM user_workflow_status WHERE user_id IN (?)',
+        'DELETE FROM user_platform_account_status WHERE user_id IN (?)',
+        'DELETE FROM user_competition_student_accounts WHERE user_id IN (?)',
+        'DELETE FROM user_competition_expert_student_bindings WHERE user_id IN (?)',
+        'DELETE FROM user_competition_expert_accounts WHERE user_id IN (?)',
+        'DELETE FROM user_manual_teacher_credentials WHERE user_id IN (?)',
+        'DELETE FROM user_class_removals WHERE user_id IN (?)',
+        'DELETE FROM login_verification_codes WHERE user_id IN (?)',
+        'DELETE FROM user_gifts WHERE target_user_id IN (?)',
+        'UPDATE logo_library SET created_by = NULL WHERE created_by IN (?)',
+        'UPDATE wallpaper_library SET created_by = NULL WHERE created_by IN (?)'
+    ];
+    const chunks = userIdChunks(ids);
+    for (const sql of dependentQueries) {
+        for (const chunk of chunks) statements.push([sql, [chunk]]);
     }
-    await runBatchStatements(statements);
-    await bumpContentRevision(CONTENT_TYPES.gifts);
-    return ids;
+    for (const chunk of userIdChunks(teacherIds)) {
+        statements.push(['DELETE FROM classes WHERE teacher_user_id IN (?)', [chunk]]);
+    }
+    for (const chunk of chunks) statements.push(['DELETE FROM users WHERE id IN (?)', [chunk]]);
+    const giftsRevision = await deleteUsersAtomically(statements);
+    return { ids, giftsRevision };
 }
 
 router.delete('/batch', authMiddleware, userManagerOnly, async (req, res) => {
     try {
-        const deletedIds = await deleteUsersBatch(req.user, req.body?.userIds || req.body?.ids);
-        return res.json({ success: true, count: deletedIds.length, userIds: deletedIds });
+        const { ids, giftsRevision } = await deleteUsersBatch(req.user, req.body?.userIds || req.body?.ids);
+        return res.json({ success: true, count: ids.length, userIds: ids, giftsRevision });
     } catch (err) {
         return res.status(err.status || 500).json({ error: err.message });
     }
@@ -567,8 +593,8 @@ router.delete("/:id", authMiddleware, userManagerOnly, async (req, res) => {
             statements.push(['DELETE FROM classes WHERE teacher_user_id = ?', [target.id]]);
         }
         statements.push(['DELETE FROM users WHERE id = ?', [req.params.id]]);
-        await pool.batch(statements);
-        res.json({ success: true, giftsRevision: await bumpContentRevision(CONTENT_TYPES.gifts) });
+        const giftsRevision = await deleteUsersAtomically(statements);
+        res.json({ success: true, giftsRevision });
     } catch (err) {
         res.status(err.status || 500).json({ error: err.message });
     }

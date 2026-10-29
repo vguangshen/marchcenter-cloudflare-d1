@@ -2,12 +2,13 @@ import crypto from 'crypto';
 import express from '../compat/express.js';
 import pool from '../config/db.js';
 import { authMiddleware, adminOnly } from '../middleware/auth.js';
-import { getRuntime } from '../config/runtime.js';
+import { getEnv, getRuntime } from '../config/runtime.js';
 import { assertCompetitionAccess } from '../utils/accessControl.js';
 import { decodeStoredConfig } from '../utils/configSecrets.js';
 import { createOfficialSafeFetch } from '../utils/officialCompat/safeTransport.js';
 import { createPaasV2Adapter } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { deletePlatformAndTasks, findPlatform, listPlatforms, normalizePlatformInput, parseSavedCatalog } from '../utils/paasV2Platforms.js';
+import { MAX_COVER_BYTES, readLimitedCover, waitForCoverOperation } from '../utils/coverDownload.js';
 
 const router = express.Router();
 
@@ -21,12 +22,31 @@ const SOFTWARE_UNIQUE_OPTIONS = Object.freeze([
 const SYNC_ENDPOINT = 'http://paas.itmc.org.cn/paascode/synchronize/getSoftwareInfoToJson';
 const DAYU_LOGIN_ENDPOINT = 'https://dayu.itmc.org.cn/prod-api/auth/login';
 const DAYU_HOT_INDEX_ENDPOINT = 'https://dayu.itmc.org.cn/prod-api/agent/explore/getHotIndex';
-const DAYU_COVER_ADMIN_USERNAME = 'admin';
-const DAYU_COVER_ADMIN_PASSWORD = 'ITMC@123abc..';
 const COVER_R2_PREFIX = 'paas-v2-covers/';
-const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const CACHE_COVER_TIMEOUT_MS = 20000;
+const MAX_COVER_BATCH_SIZE = 100;
+const COVER_BATCH_TIMEOUT_MS = 90000;
+const TRANSIENT_COVER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const CACHED_COVER_PATH = /^\/api\/paas-v2\/covers\/[a-f0-9]{32}\.(?:png|jpe?g|webp|gif|avif)$/i;
+
+function deadlineSignal(timeoutMs, externalSignal) {
+    const controller = new AbortController();
+    const abort = () => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) abort();
+    else externalSignal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => controller.abort(new DOMException('请求超时', 'TimeoutError')), timeoutMs);
+    return {
+        signal: controller.signal,
+        dispose() { clearTimeout(timer); externalSignal?.removeEventListener('abort', abort); }
+    };
+}
+
+function coverEnhancementTimeout() {
+    const configured = Number(getEnv('DAYU_COVER_TIMEOUT_MS', 5000));
+    return Number.isFinite(configured) ? Math.max(50, Math.min(10000, configured)) : 5000;
+}
+
+const emptyCoverIndex = () => ({ byId: new Map(), byName: new Map(), token: '' });
 
 function isPrivateCoverHost(value) {
     const host = String(value || '').replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
@@ -95,63 +115,68 @@ function sniffImageContentType(buffer) {
     return '';
 }
 
-async function cacheCover(coverUrl, timeoutMs = CACHE_COVER_TIMEOUT_MS) {
+async function cacheCover(coverUrl, signal) {
     if (!coverUrl) return '';
     if (CACHED_COVER_PATH.test(coverUrl)) return coverUrl;
-    const attempts = 2;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-        const cached = await cacheCoverOnce(coverUrl, timeoutMs);
-        if (cached && cached !== coverUrl) return cached;
+    if (signal?.aborted) return coverUrl;
+    const bucket = getRuntime().env.WALLPAPERS;
+    if (!bucket) return coverUrl;
+    const key = `${COVER_R2_PREFIX}${coverKey(coverUrl, coverExtension(coverUrl))}`;
+    try {
+        const stored = await waitForCoverOperation(() => bucket.head(key), signal);
+        if (stored && stored.size > 0 && stored.size <= MAX_COVER_BYTES) return `/api/paas-v2/covers/${coverKey(coverUrl, coverExtension(coverUrl))}`;
+    } catch { return coverUrl; }
+    for (let attempt = 0; attempt < 2 && !signal?.aborted; attempt += 1) {
+        const result = await cacheCoverOnce(coverUrl, bucket, key, signal);
+        if (result.cachedUrl) return result.cachedUrl;
+        if (!result.retryable) break;
     }
     return coverUrl;
 }
 
-async function cacheCoverOnce(coverUrl, timeoutMs) {
+async function cacheCoverOnce(coverUrl, bucket, key, externalSignal) {
+    const deadline = deadlineSignal(CACHE_COVER_TIMEOUT_MS, externalSignal);
     try {
         const referer = (() => {
             try { const parsed = new URL(coverUrl); return `${parsed.protocol}//${parsed.host}/`; }
             catch { return 'https://resource.zuoyizuo.com/'; }
         })();
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-            const origin = referer.endsWith('/') ? referer.slice(0, -1) : referer;
-            const response = await fetch(coverUrl, {
-                redirect: 'manual',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-                    'Referer': referer,
-                    'Origin': origin
-                },
-                signal: controller.signal
-            });
-            if (!response.ok) return coverUrl;
-            const ext = coverExtension(coverUrl);
-            const buffer = await response.arrayBuffer();
-            if (!buffer || buffer.byteLength > MAX_COVER_BYTES) return coverUrl;
-            const sniffed = sniffImageContentType(buffer);
-            const headerType = response.headers.get('content-type') || '';
-            let contentType = sniffed;
-            if (!contentType && headerType.toLowerCase().startsWith('image/')) contentType = headerType;
-            if (!contentType) return coverUrl;
-            const key = `${COVER_R2_PREFIX}${coverKey(coverUrl, ext)}`;
-            const bucket = getRuntime().env.WALLPAPERS;
-            if (!bucket) return coverUrl;
-            await bucket.put(key, buffer, {
-                httpMetadata: { contentType }
-            });
-            return `/api/paas-v2/covers/${coverKey(coverUrl, ext)}`;
-        } finally {
-            clearTimeout(timer);
+        const origin = referer.endsWith('/') ? referer.slice(0, -1) : referer;
+        const response = await fetch(coverUrl, {
+            redirect: 'manual',
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                'Referer': referer,
+                'Origin': origin
+            },
+            signal: deadline.signal
+        });
+        if (!response.ok) {
+            void response.body?.cancel().catch(() => {});
+            return { retryable: TRANSIENT_COVER_STATUSES.has(response.status) };
         }
+        const buffer = await readLimitedCover(response, deadline.signal);
+        if (!buffer) return { retryable: false };
+        const sniffed = sniffImageContentType(buffer);
+        const headerType = response.headers.get('content-type') || '';
+        const contentType = sniffed || (headerType.toLowerCase().startsWith('image/') ? headerType : '');
+        if (!contentType) return { retryable: false };
+        try {
+            await waitForCoverOperation(() => bucket.put(key, buffer, {
+                httpMetadata: { contentType }
+            }), deadline.signal);
+        } catch { return { retryable: false }; }
+        return { cachedUrl: `/api/paas-v2/covers/${coverKey(coverUrl, coverExtension(coverUrl))}` };
     } catch {
-        return coverUrl;
+        return { retryable: !deadline.signal.aborted };
+    } finally {
+        deadline.dispose();
     }
 }
 
-async function searchDayuCover(keyword, token) {
-    if (!keyword || !token) return { cover: '', introduce: '' };
+async function searchDayuCover(keyword, token, signal) {
+    if (!keyword || !token || signal.aborted) return { cover: '', introduce: '' };
     try {
         const response = await fetch(DAYU_HOT_INDEX_ENDPOINT, {
             method: 'POST',
@@ -169,9 +194,13 @@ async function searchDayuCover(keyword, token) {
                 score: 0,
                 positions: ''
             }),
-            redirect: 'manual'
+            redirect: 'manual',
+            signal
         });
-        if (!response.ok) return { cover: '', introduce: '' };
+        if (!response.ok) {
+            void response.body?.cancel().catch(() => {});
+            return { cover: '', introduce: '' };
+        }
         const payload = await response.json();
         const items = payload?.data?.content || [];
         const first = items[0] || {};
@@ -181,21 +210,28 @@ async function searchDayuCover(keyword, token) {
     }
 }
 
-async function fetchDayuCoverMap() {
+async function fetchDayuCoverMap(signal) {
+    const username = String(getEnv('DAYU_COVER_USERNAME', '')).trim();
+    const password = String(getEnv('DAYU_COVER_PASSWORD', ''));
+    if (!username || !password || signal.aborted) return emptyCoverIndex();
     try {
         const loginResponse = await fetch(DAYU_LOGIN_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                username: DAYU_COVER_ADMIN_USERNAME,
-                password: DAYU_COVER_ADMIN_PASSWORD
+                username,
+                password
             }),
-            redirect: 'manual'
+            redirect: 'manual',
+            signal
         });
-        if (!loginResponse.ok) return new Map();
+        if (!loginResponse.ok) {
+            void loginResponse.body?.cancel().catch(() => {});
+            return emptyCoverIndex();
+        }
         const loginJson = await loginResponse.json();
         const token = loginJson?.data?.access_token;
-        if (!token) return new Map();
+        if (!token) return emptyCoverIndex();
 
         const hotResponse = await fetch(DAYU_HOT_INDEX_ENDPOINT, {
             method: 'POST',
@@ -213,9 +249,13 @@ async function fetchDayuCoverMap() {
                 score: 0,
                 positions: ''
             }),
-            redirect: 'manual'
+            redirect: 'manual',
+            signal
         });
-        if (!hotResponse.ok) return new Map();
+        if (!hotResponse.ok) {
+            void hotResponse.body?.cancel().catch(() => {});
+            return emptyCoverIndex();
+        }
         const hotJson = await hotResponse.json();
         const items = hotJson?.data?.content || [];
         const byId = new Map();
@@ -229,7 +269,7 @@ async function fetchDayuCoverMap() {
         }
         return { byId, byName, token };
     } catch {
-        return { byId: new Map(), byName: new Map(), token: '' };
+        return emptyCoverIndex();
     }
 }
 
@@ -365,28 +405,30 @@ router.get('/options', authMiddleware, adminOnly, async (_req, res) => {
     catch (error) { return res.status(500).json({ error: error.message || '软件平台读取失败' }); }
 });
 
-async function fetchPlatformCatalog(softwareUnique) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
+async function fetchPlatformCatalog(softwareUnique, externalSignal) {
+    const catalogDeadline = deadlineSignal(20000, externalSignal);
     let payload;
     try {
-        const response = await fetch(SYNC_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `token=${encodeURIComponent(softwareUnique)}`, redirect: 'manual', signal: controller.signal });
+        const response = await fetch(SYNC_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `token=${encodeURIComponent(softwareUnique)}`, redirect: 'manual', signal: catalogDeadline.signal });
         if (!response.ok) throw new Error(`任务目录请求失败：HTTP ${response.status}`);
         try { payload = JSON.parse(await response.text()); } catch { throw new Error('任务目录返回格式无效'); }
-    } finally { clearTimeout(timer); }
+    } finally { catalogDeadline.dispose(); }
     if (String(payload.code) !== '0') throw new Error(payload.msg || '任务目录返回异常');
     if (!payload.data) throw Object.assign(new Error('未找到该 softwareUnique 对应的软件任务目录'), { notFound: true });
-    const coverIndex = await fetchDayuCoverMap();
-    return runWithConcurrency(toTaskRows(payload.data), 4, async task => {
-        const hit = coverIndex.byId.get(String(task.plugFlag));
-        let cover = hit?.cover || matchCover(task.title, task.plugName, coverIndex.byName);
-        let introduce = hit?.introduce || matchIntroduce(task.title, task.plugName, coverIndex.byName);
-        if (!cover || !introduce) {
-            const searched = await searchDayuCover(task.title, coverIndex.token);
-            cover ||= searched.cover; introduce ||= searched.introduce;
-        }
-        return { ...task, cover, introduce };
-    });
+    const enhancementDeadline = deadlineSignal(coverEnhancementTimeout(), externalSignal);
+    try {
+        const coverIndex = await fetchDayuCoverMap(enhancementDeadline.signal);
+        return await runWithConcurrency(toTaskRows(payload.data), 4, async task => {
+            const hit = coverIndex.byId.get(String(task.plugFlag));
+            let cover = hit?.cover || matchCover(task.title, task.plugName, coverIndex.byName);
+            let introduce = hit?.introduce || matchIntroduce(task.title, task.plugName, coverIndex.byName);
+            if (!cover || !introduce) {
+                const searched = await searchDayuCover(task.title, coverIndex.token, enhancementDeadline.signal);
+                cover ||= searched.cover; introduce ||= searched.introduce;
+            }
+            return { ...task, cover, introduce };
+        });
+    } finally { enhancementDeadline.dispose(); }
 }
 
 router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
@@ -399,7 +441,7 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
         const data = { softwareUnique: platform.software_unique, platformCode: platform.code, platformName: platform.name };
         if (saved && req.query.force !== '1') return res.json({ ...data, tasks: parseSavedCatalog(saved.tasks_json), source: 'database', syncedAt: saved.updated_at });
         try {
-            const tasks = await fetchPlatformCatalog(platform.software_unique);
+            const tasks = await fetchPlatformCatalog(platform.software_unique, req.raw.signal);
             await pool.batch([
                 ['INSERT INTO paas_v2_catalogs (platform_id, tasks_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(platform_id) DO UPDATE SET tasks_json = excluded.tasks_json, updated_at = CURRENT_TIMESTAMP', [platform.id, JSON.stringify(tasks)]],
                 ["UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP WHERE id = ?", [platform.id]]
@@ -483,28 +525,22 @@ async function runWithConcurrency(items, limit, worker) {
 }
 
 router.post('/covers/cache', authMiddleware, adminOnly, async (req, res) => {
-    const urls = Array.isArray(req.body?.urls) ? req.body.urls.map(value => String(value || '').trim()).filter(Boolean) : [];
+    const input = Array.isArray(req.body?.urls) ? req.body.urls : [];
+    if (input.length > MAX_COVER_BATCH_SIZE) return res.status(400).json({ error: `每次最多缓存 ${MAX_COVER_BATCH_SIZE} 张封面`, code: 'cover_batch_too_large' });
+    const urls = [...new Set(input.map(value => String(value || '').trim()).filter(Boolean))];
     if (!urls.length) return res.status(400).json({ error: '请提供需要缓存的封面地址' });
+    const deadline = deadlineSignal(COVER_BATCH_TIMEOUT_MS, req.raw.signal);
     try {
         urls.forEach(validateCoverCacheUrl);
-        const entries = await runWithConcurrency(urls, 4, async url => [url, await cacheCover(url)]);
-        const result = Object.fromEntries(entries);
-        const failed = urls.filter(url => result[url] === url);
-        if (failed.length) {
-            console.warn(`[paas-v2-cover-cache] retrying ${failed.length} failed covers`);
-            const retried = await runWithConcurrency(failed, 2, async url => [url, await cacheCover(url, 30000)]);
-            for (const [url, value] of retried) {
-                if (value && value !== url) result[url] = value;
-            }
-        }
-        return res.json({ covers: result });
+        const entries = await runWithConcurrency(urls, 4, async url => [url, await cacheCover(url, deadline.signal)]);
+        return res.json({ covers: Object.fromEntries(entries) });
     } catch (error) {
         console.error('[paas-v2-cover-cache]', error.message);
         return res.status(error.status || 502).json({
             error: error.message || '封面缓存失败',
             ...(error.code === 'cover_url_not_allowed' ? { code: error.code } : {})
         });
-    }
+    } finally { deadline.dispose(); }
 });
 
 router.get('/covers/:key', async (req, res) => {

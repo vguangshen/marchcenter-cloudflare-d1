@@ -1,6 +1,7 @@
 # MarchCenter — Cloudflare Workers + D1
 
 本地恢复版本与验证范围见 [Cloudflare 版本恢复说明](docs/RECOVERY.md)。
+本轮可靠性、性能与发布流程改进见 [改进记录](docs/IMPROVEMENTS.md)。建议使用 Node.js 24 和 `npm ci` 安装锁定依赖。
 
 本版本已经从传统 Node.js/Express + MySQL 服务器迁移为：
 
@@ -108,6 +109,8 @@ npx wrangler secret put SOAP_STUDENT_INITIAL_PASSWORD
 
 也可以在后台“免密登录配置”页按接入方式保存凭据；这些字段会使用 `SSO_CONFIG_ENCRYPTION_KEY` 加密后写入 D1，浏览器读取配置时不会返回密钥原文（管理员可点击“显示”按需解密查看）。
 
+可选的 Dayu 封面增强使用 `DAYU_COVER_USERNAME` 和 `DAYU_COVER_PASSWORD` Secrets。缺少任一值时跳过增强，任务目录仍正常同步。共享超时 `DAYU_COVER_TIMEOUT_MS` 默认 5000 毫秒；本地变量模板见 `.dev.vars.example`。
+
 ## 6. 修改域名设置
 
 编辑 `wrangler.jsonc` 中的：
@@ -125,6 +128,10 @@ npm run cf:deploy
 ```
 
 部署完成后访问 Wrangler 输出的 `workers.dev` 地址，或在 Cloudflare 控制台为 Worker 添加自定义域名。
+
+该命令要求工作区已提交，先执行 `check` 和完整测试，复核代码未变化后发布，并写入 Git 提交号。`npm run cf:deploy:dry-run` 执行同样校验但不发布。`GET /api/version` 返回部署时的提交号；未注入时为 `null`。
+
+GitHub 的 Validate 工作流在 push/PR 时检查代码。Deploy production 工作流只接受 main 分支的手动触发，需要 production 环境中的 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` Secrets。部署命令不会自动迁移远程数据库；现有生产库应先核对实际 schema、备份并确认迁移。
 
 ## 8. 首次初始化
 
@@ -147,6 +154,8 @@ npm run cf:dev
 
 默认地址通常为 `http://localhost:8787`。
 
+需要前端热更新时，另开终端运行 `npm run dev`，Vite 将 `/api` 代理至本机 8787。预览与生产默认使用同源 `/api`；独立 API 可在构建时设置 `VITE_API_BASE`。
+
 ## 测试
 
 ```bash
@@ -154,6 +163,10 @@ npm test
 ```
 
 测试覆盖官方兼容层（300+ 用例：票据、重试、token、SOAP wire、业务分支、e2e 生产路由）以及账号、壁纸、邮件、注册、平台加固等模块。
+
+整套测试只构建一次前端和 Worker，各端到端夹具继续隔离 D1/R2。`npm run test:e2e` 仅运行端到端部分。浏览器测试默认使用本机 Chrome；CI 设置 `MARCHCENTER_TEST_BROWSER=chromium`，并通过 `npm exec -- playwright-core install --with-deps chromium` 安装浏览器。
+
+AI 请求使用统一 fetch 传输，响应正文受超时和 2 MiB 限制。接口地址应填写最终端点；遇到重定向会给出配置提示。
 
 ## 数据备份
 

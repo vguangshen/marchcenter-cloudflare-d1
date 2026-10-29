@@ -16,6 +16,21 @@ export function useAuthSession() {
     const verifiedTokenRef = useRef(null);
     const pendingLoginRef = useRef(null);
 
+    const updateCurrentUser = useCallback((user) => {
+        if (!user || typeof user !== 'object' || !user.id) throw new Error('用户状态无效');
+        setCurrentUser(user);
+        localStorage.setItem('authUser', JSON.stringify(user));
+        return user;
+    }, []);
+
+    const refreshCurrentUser = useCallback(async () => {
+        const requestToken = localStorage.getItem('authToken');
+        if (!requestToken) return null;
+        const data = await api.get('/auth/me', { retry: 0, fallback: '用户状态刷新失败' });
+        if (localStorage.getItem('authToken') !== requestToken) return null;
+        return updateCurrentUser(data.user);
+    }, [updateCurrentUser]);
+
     const completeNavbarTransition = useCallback(() => {
         setIsNavbarTransitioning(false);
     }, []);
@@ -72,12 +87,13 @@ export function useAuthSession() {
         const controller = new AbortController();
         api.get('/auth/me', { signal: controller.signal, retry: 0, fallback: '登录状态校验失败' })
             .then(data => {
+                if (controller.signal.aborted || localStorage.getItem('authToken') !== token) return;
                 setCurrentUser(data.user);
                 setAuthStatus('authenticated');
                 localStorage.setItem('authUser', JSON.stringify(data.user));
             })
             .catch(error => {
-                if (error.name === 'AbortError') return;
+                if (error.name === 'AbortError' || controller.signal.aborted || localStorage.getItem('authToken') !== token) return;
                 if (error.status === 401) logout();
                 else {
                     let cachedUser = null;
@@ -96,8 +112,10 @@ export function useAuthSession() {
         return () => controller.abort();
     }, [token, logout]);
 
-    useEffect(() => onUnauthorized(() => {
-        if (!localStorage.getItem('authToken')) return;
+    useEffect(() => onUnauthorized(event => {
+        const activeToken = localStorage.getItem('authToken');
+        if (!activeToken) return;
+        if (Object.hasOwn(event?.detail || {}, 'token') && event.detail.token !== activeToken) return;
         logout();
         notify('登录状态已失效或账号已被禁用，请重新登录', 'warning');
     }), [logout]);
@@ -113,12 +131,8 @@ export function useAuthSession() {
         isAdmin: currentUser?.role === 'super_admin',
         canManageUsers: ['super_admin', 'admin', 'teacher'].includes(currentUser?.role),
         handleLoginSuccess: login,
-        refreshCurrentUser: async () => {
-            const data = await api.get('/auth/me', { retry: 0, fallback: '用户状态刷新失败' });
-            setCurrentUser(data.user);
-            localStorage.setItem('authUser', JSON.stringify(data.user));
-            return data.user;
-        },
+        updateCurrentUser,
+        refreshCurrentUser,
         handleLogout: logout
     };
 }

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../utils/api';
 
 export function useCompetitionCatalog({ token, currentUser, revealEnabled = true }) {
+    const sessionIdentity = currentUser?.id ? `${currentUser.id}:${currentUser.role}` : '';
+    const revealEnabledRef = useRef(revealEnabled);
+    revealEnabledRef.current = revealEnabled;
     const [links, setLinks] = useState([]);
     const [linksPhase, setLinksPhase] = useState('loading');
     const [linksLoadError, setLinksLoadError] = useState('');
@@ -20,14 +23,14 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
         const requestId = linksRequestRef.current.id + 1;
         const controller = new AbortController();
         linksRequestRef.current = { id: requestId, controller };
-        if (!token || !currentUser) {
+        if (!token || !sessionIdentity) {
             setLinks([]);
             setLinksLoadError('');
             setLinksPhase('ready');
             return;
         }
 
-        const shouldAnimate = animate && revealEnabled;
+        const shouldAnimate = animate && revealEnabledRef.current;
         if (animate) setLinksPhase('loading');
         setLinksLoadError('');
         try {
@@ -42,7 +45,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
             setLinksLoadError(error.message || '竞赛卡片暂时没有加载成功，请检查网络后重试');
             setLinksPhase('error');
         }
-    }, [currentUser, revealEnabled, token]);
+    }, [sessionIdentity, token]);
 
     const completeLinksReveal = useCallback(() => {
         setLinksPhase(previous => previous === 'revealing' ? 'ready' : previous);
@@ -80,6 +83,8 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
     const resetCompetitionCatalog = useCallback(() => {
         linksRequestRef.current.controller?.abort();
         accountsRequestRef.current.controller?.abort();
+        linksRequestRef.current = { id: linksRequestRef.current.id + 1, controller: null };
+        accountsRequestRef.current = { id: accountsRequestRef.current.id + 1, controller: null };
         setLinks([]);
         setLinksLoadError('');
         setLinksPhase('ready');

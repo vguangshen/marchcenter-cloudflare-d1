@@ -11,6 +11,20 @@ before(async () => {
     harness.platform.fetch = async request => {
         requests.push(request.url);
         if (request.url.includes('/unavailable.png')) return new Response('Unavailable', { status: 503 });
+        if (request.url.includes('/missing.png')) return new Response('Missing', { status: 404 });
+        if (request.url.includes('/invalid.png')) return new Response('not an image', { headers: { 'Content-Type': 'text/plain' } });
+        if (request.url.includes('/oversized-length.png')) return new Response(png, { headers: { 'Content-Type': 'image/png', 'Content-Length': String(5 * 1024 * 1024 + 1) } });
+        if (request.url.includes('/oversized-stream.png')) {
+            let chunks = 0;
+            return new Response(new ReadableStream({
+                pull(controller) {
+                    if (chunks++ >= 8) { controller.close(); return; }
+                    const chunk = new Uint8Array(1024 * 1024);
+                    if (chunks === 1) chunk.set(png);
+                    controller.enqueue(chunk);
+                }
+            }), { headers: { 'Content-Type': 'image/png' } });
+        }
         return new Response(png, { headers: { 'Content-Type': 'image/png' } });
     };
 });
@@ -40,7 +54,43 @@ test('ordinary public upstream failure retains the existing original-URL fallbac
     assert.equal(response.status, 200);
     assert.equal(response.data.covers[url], url);
     assert.equal(response.data.code, undefined);
-    assert.ok(requests.length > 0);
+    assert.equal(requests.length, 2, 'transient upstream failures get at most one retry');
+});
+
+test('repeat source URLs reuse R2 and duplicates in one batch download once', async () => {
+    const url = 'https://images.example.invalid/duplicate.png';
+    requests.length = 0;
+    const first = await harness.api('/api/paas-v2/covers/cache', { body: { urls: [url, url] } });
+    assert.equal(first.status, 200, first.text);
+    assert.equal(requests.length, 1);
+    requests.length = 0;
+    const second = await harness.api('/api/paas-v2/covers/cache', { body: { urls: [url] } });
+    assert.deepEqual(second.data, first.data);
+    assert.equal(requests.length, 0);
+});
+
+test('invalid images, permanent errors and declared or streamed oversized images retain the URL without retries', async () => {
+    for (const filename of ['missing.png', 'invalid.png', 'oversized-length.png', 'oversized-stream.png']) {
+        const url = `https://images.example.invalid/${filename}`;
+        requests.length = 0;
+        const result = await harness.api('/api/paas-v2/covers/cache', { body: { urls: [url] } });
+        assert.equal(result.status, 200, result.text);
+        assert.equal(result.data.covers[url], url, filename);
+        assert.equal(requests.length, 1, filename);
+    }
+    const bucket = await harness.miniflare.getR2Bucket('WALLPAPERS');
+    const stored = await bucket.list({ prefix: 'paas-v2-covers/' });
+    assert.equal(stored.objects.length, 3, 'only the three valid images from this fixture are cached');
+});
+
+test('cover batches above the resource limit are rejected before outbound work', async () => {
+    requests.length = 0;
+    const result = await harness.api('/api/paas-v2/covers/cache', { body: {
+        urls: Array.from({ length: 101 }, (_, index) => `https://images.example.invalid/${index}.png`)
+    } });
+    assert.equal(result.status, 400);
+    assert.equal(result.data.code, 'cover_batch_too_large');
+    assert.equal(requests.length, 0);
 });
 
 test('disallowed cover URLs return the production downgrade code before any request in the batch is fetched', async () => {

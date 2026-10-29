@@ -12,6 +12,13 @@ SOAP_CLIENT_USERNAME=
 SOAP_CLIENT_PASSWORD=
 SOAP_STUDENT_INITIAL_PASSWORD=
 
+# Optional Dayu cover enrichment. Leave either credential empty to skip login.
+# In production, set credentials with `wrangler secret put`, never in source.
+DAYU_COVER_USERNAME=
+DAYU_COVER_PASSWORD=
+# Shared enrichment deadline in milliseconds; default 5000, bounded to 50-10000.
+DAYU_COVER_TIMEOUT_MS=5000
+
 # Public AMap Web JS API key and the deployed security proxy host used by the
 # recovered domestic login map. Keep the private security code in that proxy.
 AMAP_WEB_KEY=

@@ -41,6 +41,7 @@ const createRequestSignal = (externalSignal, timeoutMs) => {
     return {
         signal: controller.signal,
         didTimeout: () => timedOut,
+        abort: reason => controller.abort(reason),
         dispose: () => {
             if (timer) window.clearTimeout(timer);
             externalSignal?.removeEventListener?.('abort', abortFromExternal);
@@ -53,11 +54,15 @@ const wait = (ms, signal) => new Promise((resolve, reject) => {
         reject(signal.reason || new DOMException('请求已取消', 'AbortError'));
         return;
     }
-    const timer = window.setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
+    const abort = () => {
         window.clearTimeout(timer);
         reject(signal.reason || new DOMException('请求已取消', 'AbortError'));
-    }, { once: true });
+    };
+    const timer = window.setTimeout(() => {
+        signal?.removeEventListener('abort', abort);
+        resolve();
+    }, ms);
+    signal?.addEventListener('abort', abort, { once: true });
 });
 
 const isRetryableMethod = method => ['GET', 'HEAD', 'OPTIONS'].includes(method);
@@ -71,6 +76,80 @@ export class ApiError extends Error {
         this.code = code;
         this.requestId = requestId;
     }
+}
+
+function requestError(error, requestSignal) {
+    if (requestSignal.didTimeout()) {
+        return new ApiError('请求超时，请检查网络后重试', { code: 'request_timeout', cause: error });
+    }
+    if (requestSignal.signal.aborted) {
+        return new DOMException('请求已取消', 'AbortError');
+    }
+    if (error?.name === 'AbortError' || error instanceof ApiError) return error;
+    return new ApiError('网络连接失败，请检查网络后重试', { code: 'network_error', cause: error });
+}
+
+// fetch resolves when headers arrive. Keep the deadline and caller's abort
+// connection alive until the body finishes, fails, or is explicitly cancelled.
+function responseWithDeadline(response, requestSignal) {
+    if (!response.body) {
+        requestSignal.dispose();
+        return response;
+    }
+    const reader = response.body.getReader();
+    let settled = false;
+    let target;
+    const release = () => {
+        try { reader.releaseLock(); } catch { /* A pending read releases after cancellation. */ }
+    };
+    const finish = () => {
+        settled = true;
+        requestSignal.signal.removeEventListener('abort', abort);
+        requestSignal.dispose();
+    };
+    const abort = () => {
+        if (settled) return;
+        const error = requestError(requestSignal.signal.reason, requestSignal);
+        finish();
+        target.error(error);
+        reader.cancel(error).catch(() => {}).finally(release);
+    };
+    const body = new ReadableStream({
+        start(controller) {
+            target = controller;
+            requestSignal.signal.addEventListener('abort', abort, { once: true });
+            if (requestSignal.signal.aborted) abort();
+        },
+        async pull(controller) {
+            try {
+                const chunk = await reader.read();
+                if (settled) return;
+                if (chunk.done) {
+                    finish();
+                    release();
+                    controller.close();
+                } else controller.enqueue(chunk.value);
+            } catch (error) {
+                if (settled) return;
+                const failure = requestError(error, requestSignal);
+                finish();
+                release();
+                controller.error(failure);
+            }
+        },
+        async cancel(reason) {
+            if (settled) return;
+            finish();
+            try { await reader.cancel(reason); } finally { release(); }
+        }
+    });
+    const managed = new Response(body, {
+        status: response.status, statusText: response.statusText, headers: response.headers
+    });
+    for (const key of ['url', 'redirected', 'type']) {
+        Object.defineProperty(managed, key, { value: response[key] });
+    }
+    return managed;
 }
 
 export const apiFetch = async (input, options = {}) => {
@@ -117,7 +196,10 @@ export const apiFetch = async (input, options = {}) => {
             }
             if (response.status === 401 && isApiUrl(url) && (token || headers.has('Authorization'))) {
                 window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT, {
-                    detail: { url, status: response.status }
+                    detail: {
+                        url, status: response.status,
+                        token: /^Bearer\s+(.+)$/i.exec(headers.get('Authorization') || '')?.[1] || null
+                    }
                 }));
             }
             if (attempt < retryCount && isRetryableMethod(method) && isRetryableStatus(response.status)) {
@@ -125,29 +207,27 @@ export const apiFetch = async (input, options = {}) => {
                 await wait(Number(retryDelayMs) * (attempt + 1), requestSignal.signal);
                 continue;
             }
-            return response;
+            return responseWithDeadline(response, requestSignal);
         }
     } catch (error) {
-        if (requestSignal.didTimeout()) {
-            throw new ApiError('请求超时，请检查网络后重试', {
-                code: 'request_timeout',
-                cause: error
-            });
-        }
-        if (error?.name === 'AbortError') throw error;
-        if (error instanceof ApiError) throw error;
-        throw new ApiError('网络连接失败，请检查网络后重试', {
-            code: 'network_error',
-            cause: error
-        });
-    } finally {
         requestSignal.dispose();
+        throw requestError(error, requestSignal);
     }
 };
 
 export const parseApiResponse = async (response, fallback = '请求失败') => {
     if (response.status === 204) return null;
-    const data = await response.json().catch(() => ({}));
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        if (response.ok) {
+            throw new ApiError('服务器返回了无效数据，请稍后重试', {
+                status: response.status, code: 'invalid_response', cause: error
+            });
+        }
+        data = {};
+    }
     if (!response.ok) {
         throw new ApiError(data.error || data.message || fallback, {
             status: response.status,
@@ -184,25 +264,19 @@ export const apiStream = async (input, options = {}, onEvent = () => {}) => {
         fallback = '请求失败',
         ...requestOptions
     } = options;
-    const controller = new AbortController();
-    let timedOut = false;
-    const timeout = Number(timeoutMs) > 0
-        ? window.setTimeout(() => {
-            timedOut = true;
-            controller.abort(new DOMException('请求超时', 'TimeoutError'));
-        }, Number(timeoutMs))
-        : null;
+    const requestSignal = createRequestSignal(requestOptions.signal, timeoutMs);
+    let reader;
     try {
         const response = await apiFetch(input, {
             ...requestOptions,
             retry: 0,
             timeoutMs: 0,
-            signal: controller.signal
+            signal: requestSignal.signal
         });
-        if (!response.ok) return parseApiResponse(response, fallback);
+        if (!response.ok) return await parseApiResponse(response, fallback);
         if (!response.body) throw new ApiError('服务器未返回阶段流', { code: 'empty_stream' });
 
-        const reader = response.body.getReader();
+        reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
         let finalData;
@@ -242,11 +316,13 @@ export const apiStream = async (input, options = {}, onEvent = () => {}) => {
         if (finalData === undefined) throw new ApiError('服务器未返回执行结果', { code: 'missing_stream_result' });
         return finalData;
     } catch (error) {
-        if (timedOut) throw new ApiError('请求超时，请检查网络后重试', { code: 'request_timeout', cause: error });
+        if (requestSignal.didTimeout()) throw requestError(error, requestSignal);
         throw error;
     } finally {
-        if (timeout) window.clearTimeout(timeout);
-        controller.abort();
+        await reader?.cancel().catch(() => {});
+        reader?.releaseLock();
+        requestSignal.dispose();
+        requestSignal.abort();
     }
 };
 
