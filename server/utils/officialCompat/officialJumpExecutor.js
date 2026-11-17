@@ -133,8 +133,7 @@ export async function executeOfficialJump(config, context = {}, dependencies) {
         const adapter = createPaasV2Adapter({
             config,
             fetchImplementation: dependencies.fetchImplementation,
-            timeoutMs: dependencies.timeoutMs,
-            maxResponseBytes: dependencies.maxResponseBytes
+            tokenStore: dependencies.paasV2TokenStore
         });
         await reportStage('check_connection', '正在获取大渔智能体平台 token…');
         const postForm = await adapter.buildJumpForm(mappedParameters, context);

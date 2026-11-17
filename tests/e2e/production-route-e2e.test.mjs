@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createDecipheriv } from 'node:crypto';
+import { createDecipheriv, generateKeyPairSync } from 'node:crypto';
 import test, { after, before, beforeEach } from 'node:test';
 import {
     createProductionHarness,
@@ -542,6 +542,64 @@ test('official JAVA token is reused across production requests in one Worker iso
             cacheHarness.platform.state.requests.map(request => request.operationName),
             ['trainingExamPaper']
         );
+    } finally {
+        await cacheHarness.dispose();
+    }
+});
+
+test('paasV2 SSE uses one task entry for students and teachers with separate account caches', async () => {
+    const cacheHarness = await createProductionHarness({ officialTokenCacheScope: 'isolate' });
+    try {
+        const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+        const pem = publicKey.export({ type: 'spki', format: 'pem' });
+        const apiBaseUrl = 'https://localhost:9289/agent-practice';
+        const jumpBaseUrl = `${apiBaseUrl}/enter`;
+        const configId = await cacheHarness.seedConfig({
+            method: 'paasV2', apiBaseUrl, jumpBaseUrl, externalPublicKey: pem, publicKey: pem,
+            productId: 'E2E', softwareUnique: 'e2e-training', plugFlag: 'e2e-task'
+        });
+        const competitionId = await cacheHarness.seedCompetition({
+            configId, method: 'paasV2', url: jumpBaseUrl
+        });
+        const sessionTokens = {};
+        for (const [id, role] of [[2, 'student'], [3, 'teacher']]) {
+            const user = { id, username: `e2e-agent-${role}`, role };
+            await cacheHarness.seedUser(user);
+            await cacheHarness.run('INSERT INTO user_access_policies (user_id, configured) VALUES (?, 1)', id);
+            await cacheHarness.run('INSERT INTO user_permissions (user_id, competition_id) VALUES (?, ?)', id, competitionId);
+            sessionTokens[role] = await cacheHarness.issueToken(user);
+        }
+        cacheHarness.platform.queueJava('GetTokenInfo', [success('mock-student'), success('mock-teacher')]);
+
+        async function launch(sessionToken, loginRole = 'student') {
+            const response = await cacheHarness.api('/api/sso/execute/stream', {
+                body: { competitionId, context: { loginRole } },
+                headers: { Authorization: `Bearer ${sessionToken}` }
+            });
+            assert.equal(response.status, 200, response.text);
+            assert.match(response.response.headers.get('cache-control') || '', /\bno-store\b/);
+            const result = response.text.match(/event: result\ndata: (.+)/);
+            assert.ok(result, response.text);
+            const { postForm } = JSON.parse(result[1]).data;
+            assert.equal(postForm.action, jumpBaseUrl);
+            assert.equal(postForm.method, 'POST');
+            assert.ok(postForm.fields.data);
+            return postForm.fields.platformToken;
+        }
+
+        assert.equal(await launch(sessionTokens.student), 'mock-student');
+        assert.equal(await launch(sessionTokens.student), 'mock-student');
+        assert.equal(await launch(sessionTokens.teacher), 'mock-teacher');
+        assert.equal(await launch(sessionTokens.teacher, 'teacher'), 'mock-teacher');
+        assert.deepEqual(
+            cacheHarness.platform.state.requests.map(request => request.operationName),
+            ['GetTokenInfo', 'GetTokenInfo']
+        );
+        const readiness = await cacheHarness.rows(
+            'SELECT user_id, login_role FROM user_platform_account_status WHERE competition_id = ? ORDER BY user_id',
+            competitionId
+        );
+        assert.deepEqual(readiness.map(row => [row.user_id, row.login_role]), [[2, 'student'], [3, 'student']]);
     } finally {
         await cacheHarness.dispose();
     }

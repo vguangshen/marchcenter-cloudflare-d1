@@ -52,7 +52,7 @@ async function refresh(harness) {
     assert.equal(result.status, 200, result.text);
     assert.equal(result.data.source, 'remote');
     assert.equal(result.data.tasks[0].plugFlag, 'task-1');
-    assert.equal(result.data.tasks[0].answerType, '2,4');
+    assert.equal(result.data.tasks[0].answerType, '1');
     assert.equal(result.text.includes(fakePassword), false);
     assert.equal(result.text.includes('fixture-access-token'), false);
     return result;

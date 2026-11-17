@@ -174,7 +174,7 @@ function currentIdentity(config, context) {
     const studentLoginName = hasOwn(context, 'accountName')
         ? context.accountName
         : `${config.studentPrefix ?? 'mcs'}${currentLoginName}${suffix}`;
-    const loginRole = ownValue(context, config, 'loginRole', 'student') === 'teacher'
+    const loginRole = config.method !== 'paasV2' && ownValue(context, config, 'loginRole', 'student') === 'teacher'
         ? 'teacher'
         : 'student';
     const loginName = hasOwn(context, 'loginName')

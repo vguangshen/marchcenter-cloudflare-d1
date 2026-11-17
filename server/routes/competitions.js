@@ -5,6 +5,7 @@ import { assertCompetitionAccess, filterCompetitionsForUser } from "../utils/acc
 import { decodeStoredConfig, decryptSecretValue, encryptSecretValue } from '../utils/configSecrets.js';
 import { isSuperAdmin } from '../utils/roleAccess.js';
 import { validateOfficialCardAddress } from '../utils/officialCompat/cardAddress.js';
+import { PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { isClassDeleteMappingReady, normalizeClassDeleteMapping } from '../utils/accountManagementApi.js';
 
 const router = express.Router();
@@ -189,6 +190,7 @@ async function persistOfficialCardAddress(data) {
 // 🟢 获取当前用户可见竞赛
 // ==========================================
 router.get("/", authMiddleware, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     try {
         const query = `
                 SELECT
@@ -214,6 +216,8 @@ router.get("/", authMiddleware, async (req, res) => {
                     c.paas_v2_answer_type AS paasV2AnswerType,
                     c.paas_v2_software_unique AS paasV2SoftwareUnique,
                     c.paas_v2_cover AS paasV2Cover,
+                    result.status AS agentResultStatus,
+                    result.score AS agentResultScore,
                     c.created_at,
                     CASE WHEN uws.id IS NOT NULL THEN 1 ELSE 0 END AS has_executed,
                     EXISTS(
@@ -243,17 +247,26 @@ router.get("/", authMiddleware, async (req, res) => {
                 FROM competitions c
                 LEFT JOIN user_workflow_status uws
                        ON c.id = uws.competition_id AND uws.user_id = ?
+                LEFT JOIN user_agent_task_results result
+                       ON c.sso_method = 'paasV2' AND result.user_id = ? AND result.competition_id = c.id
+                      AND result.sso_config_id = c.sso_config_id AND result.target_url = c.url
+                      AND result.task_id IS c.paas_v2_plug_flag
+                      AND result.answer_type IS c.paas_v2_answer_type
+                      AND result.software_unique IS c.paas_v2_software_unique
                 ORDER BY c.id DESC
             `;
         const [rows] = await pool.query(query, [
-            req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id
+            req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id
         ]);
-        const parsedRows = rows.map(row => {
+        const parsedRows = rows.map(({ agentResultStatus, agentResultScore, ...row }) => {
             const parsed = {
                 ...row,
                 classDeleteMapping: row.classDeleteMapping ? JSON.parse(row.classDeleteMapping) : null,
                 hasAdminEntryPassword: Boolean(row.adminEntryCredentials)
             };
+            if (row.ssoMethod === 'paasV2') {
+                parsed.agentResult = agentResultStatus ? { status: agentResultStatus, score: agentResultScore } : null;
+            }
             if (isSuperAdmin(req.user) && row.adminEntryCredentials) {
                 parsed.adminEntryUsername = decodeAdminEntryCredentials(row.adminEntryCredentials).username;
             }
@@ -303,15 +316,13 @@ router.post('/batch-paas-v2', authMiddleware, adminOnly, async (req, res) => {
         const tasks = input.map(item => {
             if (!item || typeof item !== 'object') throw Object.assign(new Error('任务数据格式无效'), { status: 400 });
             const task = {};
-            for (const field of ['title', 'subtitle', 'url', 'category', 'statusText', 'description', 'color', 'paasV2PlugFlag', 'paasV2AnswerType', 'paasV2SoftwareUnique', 'paasV2Cover']) {
+            for (const field of ['title', 'subtitle', 'url', 'category', 'statusText', 'description', 'color', 'paasV2PlugFlag', 'paasV2SoftwareUnique', 'paasV2Cover']) {
                 task[field] = String(item[field] ?? '').trim();
             }
             task.ssoMethod = 'paasV2';
-            task.paasV2AnswerType ||= '1,2,3,4';
             if (!task.title || task.title.length > 500 || !task.url || task.url.length > 2048
                 || !task.paasV2PlugFlag || task.paasV2PlugFlag.length > 160
                 || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(task.paasV2SoftwareUnique)
-                || !/^[1-4](?:,[1-4])*$/.test(task.paasV2AnswerType)
                 || task.description.length > 30000 || task.paasV2Cover.length > 4096) {
                 throw Object.assign(new Error('任务名称、地址、任务编码、软件标识或答题类型无效'), { status: 400 });
             }
@@ -331,7 +342,7 @@ router.post('/batch-paas-v2', authMiddleware, adminOnly, async (req, res) => {
              WHERE NOT EXISTS (SELECT 1 FROM competitions WHERE sso_method = 'paasV2'
                 AND paas_v2_software_unique = ? COLLATE NOCASE AND paas_v2_plug_flag = ? COLLATE NOCASE)`,
             [task.title, task.subtitle, task.url, task.category, task.statusText, task.description, task.color || 'violet',
-                configId, task.paasV2PlugFlag, task.paasV2AnswerType, task.paasV2SoftwareUnique, task.paasV2Cover || null,
+                configId, task.paasV2PlugFlag, PAAS_V2_ANSWER_TYPE, task.paasV2SoftwareUnique, task.paasV2Cover || null,
                 task.paasV2SoftwareUnique, task.paasV2PlugFlag]
         ]);
         const results = await pool.batch(statements);
@@ -362,7 +373,7 @@ router.post("/", authMiddleware, adminOnly, async (req, res) => {
                 d.logoBackground || 'transparent',
                 times.unlockTime,
                 times.lockTime,
-                d.customPrompt, effectiveSsoConfigId, d.ssoMethod || null, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), d.paasV2PlugFlag || null, d.paasV2AnswerType || null, d.paasV2SoftwareUnique || null, d.paasV2Cover || null
+                d.customPrompt, effectiveSsoConfigId, d.ssoMethod || null, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), d.paasV2PlugFlag || null, d.ssoMethod === 'paasV2' ? PAAS_V2_ANSWER_TYPE : d.paasV2AnswerType || null, d.paasV2SoftwareUnique || null, d.paasV2Cover || null
             ]
         );
         res.json(publicCompetitionMutation(d, {
@@ -407,7 +418,7 @@ router.put("/:id", authMiddleware, adminOnly, async (req, res) => {
                 d.logoBackground || 'transparent',
                 times.unlockTime,
                 times.lockTime,
-                d.customPrompt, effectiveSsoConfigId, d.ssoMethod || null, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), d.paasV2PlugFlag || null, d.paasV2AnswerType || null, d.paasV2SoftwareUnique || null, d.paasV2Cover || null,
+                d.customPrompt, effectiveSsoConfigId, d.ssoMethod || null, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), d.paasV2PlugFlag || null, d.ssoMethod === 'paasV2' ? PAAS_V2_ANSWER_TYPE : d.paasV2AnswerType || null, d.paasV2SoftwareUnique || null, d.paasV2Cover || null,
                 req.params.id
             ]
         );

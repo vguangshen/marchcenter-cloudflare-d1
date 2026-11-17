@@ -75,6 +75,7 @@ export function createOfficialDependencyFactory(options = {}) {
     return Object.freeze({
         fetchImplementation,
         tokenStore,
+        paasV2TokenStore: options.paasV2TokenStore,
         clock,
         credentialsProvider,
         logger,

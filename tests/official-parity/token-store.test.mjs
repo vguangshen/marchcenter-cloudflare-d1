@@ -34,6 +34,18 @@ test('the same store instance reuses a token across calls', () => {
     assert.equal(store.get('/open'), 'reused-token');
 });
 
+test('the bounded token store evicts the oldest write at capacity', () => {
+    const store = createOfficialTokenStore({ maxEntries: 2 });
+    store.set('first', 'old');
+    store.set('second', 'second-token');
+    store.set('first', 'renewed');
+    store.set('third', 'third-token');
+
+    assert.equal(store.get('first'), 'renewed');
+    assert.equal(store.get('second'), null);
+    assert.equal(store.get('third'), 'third-token');
+});
+
 test('writing an empty token invalidates the entry immediately', () => {
     const store = createOfficialTokenStore({ now: () => 100 });
     store.set('/open', 'old-token');

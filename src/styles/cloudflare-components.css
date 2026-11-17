@@ -511,7 +511,7 @@
   scrollbar-gutter:stable;
   scrollbar-width:thin;
   scrollbar-color:var(--agent-theme-solid,#7c3aed8c) transparent;
-  max-height:410px;
+  max-height:494px;
   padding-right:.25rem;
   overflow-y:auto
 }
@@ -575,6 +575,20 @@
 .agent-task-badge {
   background-color:var(--agent-theme-badge-bg,#ede9fe)!important;
   color:var(--agent-theme-badge-text,#6d28d9)!important
+}
+.agent-task-score {
+  border-color:color-mix(in srgb,var(--agent-theme-border,#ddd6fe) 65%,transparent);
+  background:color-mix(in srgb,var(--agent-theme-soft,#f5f3ff) 78%,var(--mc-color-surface));
+}
+.agent-task-score-label,.agent-task-score-value,.agent-task-score-action {
+  color:var(--agent-theme-badge-text,#6d28d9);
+}
+.dark .agent-task-score {
+  border-color:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 32%,transparent);
+  background:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 13%,#0f172a);
+}
+.dark .agent-task-score-label,.dark .agent-task-score-value,.dark .agent-task-score-action {
+  color:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 30%,#f8fafc);
 }
 .agent-task-enter-button {
   background-image:var(--agent-theme-button,linear-gradient(90deg, #4f46e5, #7c3aed))!important

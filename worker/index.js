@@ -1,6 +1,6 @@
 import express from '../server/compat/express.js';
 import { getEnv, runWithRuntime } from '../server/config/runtime.js';
-import { createOfficialTokenStore } from '../server/utils/officialCompat/tokenStore.js';
+import { createOfficialTokenStore, PAAS_V2_TOKEN_TTL_MS } from '../server/utils/officialCompat/tokenStore.js';
 
 import authRoutes from '../server/routes/auth.js';
 import competitionRoutes from '../server/routes/competitions.js';
@@ -24,6 +24,10 @@ const app = express();
 // passed explicitly through the runtime context; correctness never depends
 // on its survival because an evicted isolate simply fetches a new token.
 const workerOfficialTokenStore = createOfficialTokenStore();
+const workerPaasV2TokenStore = createOfficialTokenStore({
+    ttlMs: PAAS_V2_TOKEN_TTL_MS,
+    maxEntries: 1024
+});
 app.use('/api/auth', authRoutes);
 app.use('/api/competitions', competitionRoutes);
 app.use('/api/users', userRoutes);
@@ -194,7 +198,10 @@ export default {
     async fetch(request, env, ctx) {
         const services = env.OFFICIAL_TOKEN_CACHE_SCOPE === 'request'
             ? {}
-            : { officialTokenStore: workerOfficialTokenStore };
+            : {
+                officialTokenStore: workerOfficialTokenStore,
+                paasV2TokenStore: workerPaasV2TokenStore
+            };
         return runWithRuntime(env, ctx, async () => {
             const url = new URL(request.url);
             const origin = request.headers.get('Origin');

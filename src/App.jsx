@@ -31,6 +31,7 @@ import { useAuthSession } from './hooks/useAuthSession';
 import { useThemeController } from './hooks/useThemeController';
 import { useCompetitionActions } from './hooks/useCompetitionActions';
 import { useCompetitionCatalog } from './hooks/useCompetitionCatalog';
+import { useAgentTaskResults } from './hooks/useAgentTaskResults';
 import { useWallpaperPresentation } from './hooks/useWallpaperPresentation';
 import { CACHED_SITE_CONFIG_KEY, readStoredJson } from './utils/uiThemeSettings';
 import {
@@ -149,6 +150,9 @@ export default function App() {
         revealEnabled: uiThemeSettings.systemEffects.dashboardCardReveal !== false
     });
     const {
+        agentScoreStates, refreshAgentTaskScore, trackAgentTaskReturn, handleResetAgentTask
+    } = useAgentTaskResults({ token, userId: currentUserId, setLinks, fetchLinks });
+    const {
         createPanel, setCreatePanel, creatingStudentCardId, deletingStudentKey,
         classActionKey, openingCompetitionKeys,
         handleCreateStudent, handleDeleteStudent, handleDeleteClass,
@@ -159,7 +163,8 @@ export default function App() {
         currentUser,
         setLinks,
         studentAccountsByCard,
-        setStudentAccountsByCard
+        setStudentAccountsByCard,
+        trackAgentTaskReturn
     });
 
     const [activeThemeColor, setActiveThemeColor] = useState('blue');
@@ -685,22 +690,6 @@ export default function App() {
             setIsModalOpen(false); setEditingLink(null); await fetchLinks();
         } catch (e) { notify(e.message, 'error'); }
     };
-    const handleResetAgentTask = async (link) => {
-        if (!token) return notify('请先登录', 'warning');
-        if (!await confirmAction({
-            title: '重置智能体任务',
-            message: '该操作会清空当前账号在大渔平台的此任务进度，并重置 MarchCenter 中的完成状态。操作后需要重新开始，确定继续吗？',
-            confirmText: '确认重置'
-        })) return;
-        try {
-            await api.post('/paas-v2/reset', { competitionId: link.id }, { fallback: '重置任务失败' });
-            await fetchLinks({ animate: false });
-            notify('重置任务已提交', 'success');
-        } catch (error) {
-            notify(error.message || '重置任务失败', 'error');
-        }
-    };
-
     const handleDelete = async (id) => {
         if (!token || !await confirmAction({
             title: '删除竞赛卡片',
@@ -1211,7 +1200,7 @@ export default function App() {
                                                 <div className="mb-4 flex items-center justify-between gap-3">
                                                     <div className="flex items-center gap-2">
                                                         <span className="agent-task-module-icon grid h-9 w-9 shrink-0 place-items-center rounded-2xl text-white shadow-sm"><Sparkles className="h-4 w-4" /></span>
-                                                        <div><h3 className="agent-task-module-title text-sm font-black">{group.label}</h3><p className="text-[10px] font-bold text-slate-400">共 {group.items.length} 个任务{group.items.length > 8 ? ' · 默认显示 8 个，可向下滚动' : ''}</p></div>
+                                                        <div><h3 className="agent-task-module-title text-sm font-black">{group.label}</h3><p className="text-[10px] font-bold text-slate-400">共 {group.items.length} 个任务{group.items.length > 8 ? ' · 向下滚动查看更多' : ''}</p></div>
                                                     </div>
                                                     {isAdmin && isCardEditMode && (
                                                         <div className="flex shrink-0 items-center gap-1.5">
@@ -1232,6 +1221,10 @@ export default function App() {
                                                                 onDelete={handleDelete}
                                                                 onOpen={handleOpenCompetition}
                                                                 onReset={handleResetAgentTask}
+                                                                scoreResult={agentScoreStates[link.id]?.result}
+                                                                scoreLoading={agentScoreStates[link.id]?.loading}
+                                                                scoreError={agentScoreStates[link.id]?.error}
+                                                                onRefreshScore={refreshAgentTaskScore}
                                                                 openingCompetitionKeys={openingCompetitionKeys}
                                                                 isCardEditMode={isCardEditMode}
                                                             />

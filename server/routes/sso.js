@@ -2,6 +2,7 @@ import express from '../compat/express.js';
 import pool from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { buildManualCredentialTarget } from '../utils/officialCompat/manualCredentialTarget.js';
+import { PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { deletePlatformStudent } from '../utils/platformJumpDispatcher.js';
 import {
     deletePlatformClass,
@@ -54,13 +55,13 @@ const CLASS_DELETE_METHODS = new Set([
     'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement'
 ]);
 
-// The Worker composition root may provide one isolate-scoped token store for
+// The Worker composition root may provide isolate-scoped token stores for
 // all requests.  Route/unit tests that do not run inside the Worker runtime
 // intentionally receive no override and therefore keep request-local state.
 function officialDependencyOverrides() {
     try {
-        const tokenStore = getRuntime().officialTokenStore;
-        return tokenStore ? { officialTokenStore: tokenStore } : {};
+        const { officialTokenStore, paasV2TokenStore } = getRuntime();
+        return { officialTokenStore, paasV2TokenStore };
     } catch {
         return {};
     }
@@ -133,7 +134,7 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
     let record = null;
     let config = null;
 
-    if (method) {
+    if (method && (method !== 'paasV2' || !configId)) {
         if (!ALLOWED_METHODS.has(method)) {
             const error = new Error('不支持的免密登录方式');
             error.status = 400;
@@ -172,6 +173,9 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
         }
         record = rows[0];
         config = { ...parseConfig(record), ...(classType ? { classType: Number(classType) } : {}) };
+        if (method === 'paasV2' && config.method !== 'paasV2') {
+            throw Object.assign(new Error('该智能体任务绑定了无效的免密配置'), { status: 409 });
+        }
         if (config.canaryOnly === true) {
             const error = new Error('专用 canary 配置不能通过普通 SSO 路由执行');
             error.status = 403;
@@ -227,7 +231,6 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
                     restore_original_password_before_sso AS restoreOriginalPasswordBeforeSso,
                     restore_original_password_ciphertext AS restoreOriginalPasswordCiphertext,
                     paas_v2_plug_flag AS paasV2PlugFlag,
-                    paas_v2_answer_type AS paasV2AnswerType,
                     paas_v2_software_unique AS paasV2SoftwareUnique
              FROM competitions WHERE id = ?`,
             [competitionId]
@@ -238,13 +241,14 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
             throw error;
         }
         const card = cards[0];
+        if (card.ssoMethod === 'paasV2') trustedContext.loginRole = 'student';
         restoreCard = card;
         trustedConfig = {
             configId: card.ssoConfigId,
             method: card.ssoMethod,
             classType: card.classType,
             plugFlag: card.paasV2PlugFlag || null,
-            answerType: card.paasV2AnswerType || null,
+            answerType: card.ssoMethod === 'paasV2' ? PAAS_V2_ANSWER_TYPE : null,
             softwareUnique: card.paasV2SoftwareUnique || null
         };
         trustedContext.cardUrl = card.url;
@@ -418,12 +422,13 @@ router.post('/execute/stream', authMiddleware, async (req, res) => {
     });
     return res.stream(stream, {
         'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
+        'Cache-Control': 'no-store, no-transform',
         'X-Accel-Buffering': 'no'
     });
 });
 
 router.post('/execute', authMiddleware, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     try {
         return res.json(await executeSsoRequest(req, req.body));
     } catch (error) {

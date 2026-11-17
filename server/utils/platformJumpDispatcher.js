@@ -17,7 +17,8 @@ function officialDependencies(config, context, dependencies) {
         ...(dependencies.official || {}),
         baseUrl: selectOfficialBaseUrl(config, context),
         allowHttp: config.allowHttp === true,
-        ...(dependencies.officialTokenStore ? { tokenStore: dependencies.officialTokenStore } : {})
+        ...(dependencies.officialTokenStore ? { tokenStore: dependencies.officialTokenStore } : {}),
+        ...(dependencies.paasV2TokenStore ? { paasV2TokenStore: dependencies.paasV2TokenStore } : {})
     });
 }
 

@@ -49,15 +49,16 @@ test('catalog returns saved cloud data and uses that data when a forced refresh 
     const cached = await harness.api('/api/paas-v2/catalog?softwareUnique=SCYXCJRH');
     assert.equal(cached.status, 200);
     assert.equal(cached.data.source, 'database');
-    assert.deepEqual(cached.data.tasks, tasks);
+    const expectedTasks = tasks.map(task => ({ ...task, answerType: '1' }));
+    assert.deepEqual(cached.data.tasks, expectedTasks);
     const fallback = await harness.api('/api/paas-v2/catalog?softwareUnique=scyxcjrh&force=1');
     assert.equal(fallback.status, 200);
     assert.equal(fallback.data.source, 'database-fallback');
-    assert.deepEqual(fallback.data.tasks, tasks);
+    assert.deepEqual(fallback.data.tasks, expectedTasks);
     assert.ok(fallback.data.refreshError);
 });
 
-test('batch import preserves task answer types, is idempotent, and rejects invalid input before writing', async () => {
+test('batch import fixes the answer type, is idempotent, and rejects invalid input before writing', async () => {
     await harness.seedConfig({ method: 'paasV2', jumpBaseUrl: 'https://training.example.invalid/enter' });
     const tasks = ['one', 'two'].map((plugFlag, index) => ({ title: `任务${index}`, url: 'https://training.example.invalid/enter', ssoMethod: 'paasV2', paasV2PlugFlag: plugFlag, paasV2SoftwareUnique: 'batch-platform', paasV2AnswerType: index ? '2,4' : '1,2,3,4' }));
     const first = await harness.api('/api/competitions/batch-paas-v2', { body: { tasks } });
@@ -67,7 +68,7 @@ test('batch import preserves task answer types, is idempotent, and rejects inval
     assert.equal(duplicate.status, 200);
     assert.equal(duplicate.data.created, 0);
     assert.equal((await harness.rows("SELECT id FROM competitions WHERE paas_v2_software_unique = 'batch-platform'")).length, 2);
-    assert.deepEqual((await harness.rows("SELECT paas_v2_answer_type AS answerType FROM competitions WHERE paas_v2_software_unique = 'batch-platform' ORDER BY id")).map(row => row.answerType), ['1,2,3,4', '2,4']);
+    assert.deepEqual((await harness.rows("SELECT paas_v2_answer_type AS answerType FROM competitions WHERE paas_v2_software_unique = 'batch-platform' ORDER BY id")).map(row => row.answerType), ['1', '1']);
     const invalid = await harness.api('/api/competitions/batch-paas-v2', { body: { tasks: [{ ...tasks[0], paasV2PlugFlag: 'must-not-save' }, { ...tasks[1], url: 'javascript:alert(1)' }] } });
     assert.notEqual(invalid.status, 200);
     assert.equal((await harness.rows("SELECT id FROM competitions WHERE paas_v2_plug_flag = 'must-not-save'")).length, 0);

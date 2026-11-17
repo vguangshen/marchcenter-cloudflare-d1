@@ -34,7 +34,8 @@ export function useCompetitionActions({
     currentUser,
     setLinks,
     studentAccountsByCard,
-    setStudentAccountsByCard
+    setStudentAccountsByCard,
+    trackAgentTaskReturn
 }) {
     const [createPanel, setCreatePanel] = useState(EMPTY_PANEL);
     const [creatingStudentCardId, setCreatingStudentCardId] = useState(null);
@@ -337,6 +338,7 @@ export function useCompetitionActions({
                 clearCreatePanel();
                 if (data.postForm) submitPostForm(launchWindow, data.postForm);
                 else navigateLaunchWindow(launchWindow, data.redirectUrl);
+                if (link.ssoMethod === 'paasV2') trackAgentTaskReturn?.(link);
                 // The workflow-status write is bookkeeping only. Start the
                 // vendor navigation first so D1 latency cannot delay the
                 // teacher/student entering the platform.

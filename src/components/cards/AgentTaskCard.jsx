@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Bot, Edit2, Trash2, Loader2, Sparkles, ExternalLink, RotateCcw } from 'lucide-react';
+import { Bot, Edit2, Trash2, Loader2, Sparkles, ExternalLink, RotateCcw, RefreshCw, Award } from 'lucide-react';
 import { agentPlatformThemeStyle } from '../../utils/paasV2Platforms';
+
+const scoreFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
 
 const PLATFORM_LABELS = {
     KJDZSWRJXT: 'PT0401 跨境电子商务',
@@ -21,6 +23,10 @@ const AgentTaskCard = ({
     onDelete,
     onOpen,
     onReset,
+    onRefreshScore,
+    scoreResult = link.agentResult,
+    scoreLoading = false,
+    scoreError = '',
     openingCompetitionKeys = new Set(),
     isCardEditMode = false
 }) => {
@@ -28,6 +34,13 @@ const AgentTaskCard = ({
     const hasEntered = Number(link.has_executed) === 1;
     const [resetting, setResetting] = useState(false);
     const cover = link.paasV2Cover || link.cover || '';
+    const status = scoreResult?.status;
+    const hasScore = status === 'completed' && Number.isFinite(scoreResult.score);
+    const scoreStatus = scoreError ? '查分失败' : scoreLoading ? '查询中' : status === 'scoring' ? '评分中'
+        : status === 'in_progress' ? '未完成' : status === 'completed' ? '暂无得分' : '未查分';
+    const refreshLabel = scoreLoading ? '查询中' : scoreError ? '重试查分' : scoreResult ? '刷新得分' : '查询得分';
+    const openLabel = isOpening ? '进入中' : status === 'completed' ? '查看智能体任务'
+        : hasEntered || status === 'scoring' ? '继续智能体任务' : '进入智能体任务';
 
     const openTask = event => {
         event.preventDefault();
@@ -67,12 +80,38 @@ const AgentTaskCard = ({
 
                 {link.description ? <p className="mt-2 line-clamp-4 text-[10px] leading-4 text-slate-500 dark:text-slate-400" title={link.description}>{link.description}</p> : null}
 
-                <div className="mt-auto flex items-center gap-1.5">
-                    {onReset && <button type="button" onClick={resetTask} disabled={resetting} className="mc-button mc-button--secondary mc-button--compact !min-h-10 !w-[82px] !px-2 text-[10px] disabled:cursor-wait"><RotateCcw className={`h-3 w-3 ${resetting ? 'animate-spin' : ''}`} />重置任务</button>}
-                    <button type="button" onClick={openTask} disabled={isOpening} className="mc-button mc-button--accent agent-task-enter-button !min-h-10 flex-1 !rounded-xl !text-[11px] !font-black text-white shadow-sm disabled:cursor-wait disabled:opacity-70">
-                        {isOpening ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                        {isOpening ? '进入中' : hasEntered ? '继续智能体任务' : '进入智能体任务'}
-                    </button>
+                <div className="mt-auto pt-2.5">
+                    <div className="agent-task-score flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-xl border px-2.5 py-1">
+                        <div role="status" className="flex min-h-8 min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5" title={scoreError || undefined}>
+                            <span className="agent-task-score-label inline-flex items-center gap-1 text-[11px] font-semibold"><Award aria-hidden="true" className="h-3.5 w-3.5" />得分</span>
+                            {hasScore ? (
+                                <>
+                                    <span className="agent-task-score-value text-base leading-none font-extrabold tabular-nums">{scoreFormatter.format(scoreResult.score)}<span className="ml-0.5 text-[10px] font-semibold">分</span></span>
+                                    {scoreError && <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300">刷新失败</span>}
+                                </>
+                            ) : (
+                                <span className={`text-[11px] font-semibold ${scoreError ? 'text-rose-700 dark:text-rose-300' : status === 'scoring' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}`}>{scoreStatus}</span>
+                            )}
+                        </div>
+                        {onRefreshScore && (
+                            <button type="button" onClick={() => onRefreshScore(link)} disabled={scoreLoading || resetting} aria-busy={scoreLoading} className="mc-button mc-button--ghost agent-task-score-action ml-auto !min-h-8 !gap-1 !rounded-lg !px-1.5 !py-1 !text-[10px]">
+                                <RefreshCw aria-hidden="true" className={`h-3 w-3 shrink-0 ${scoreLoading ? 'animate-spin' : ''}`} />
+                                {refreshLabel}
+                            </button>
+                        )}
+                    </div>
+                    <div className="mt-2 flex min-w-0 items-center gap-1.5">
+                        {onReset && (
+                            <button type="button" onClick={resetTask} disabled={resetting || isOpening || scoreLoading} aria-busy={resetting} className="mc-button mc-button--secondary mc-button--compact !min-h-10 shrink-0 !rounded-xl !px-2 !text-[11px]">
+                                {resetting ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />}
+                                {resetting ? '重置中' : '重置任务'}
+                            </button>
+                        )}
+                        <button type="button" onClick={openTask} disabled={isOpening || resetting} aria-busy={isOpening} title={openLabel} className="mc-button mc-button--accent agent-task-enter-button !min-h-10 min-w-0 flex-1 !gap-1.5 !rounded-xl !px-2 !text-[11px] !font-black text-white shadow-sm">
+                            {isOpening ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />}
+                            <span className="truncate">{openLabel}</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="pointer-events-none absolute bottom-0 left-4 right-4 flex h-3 min-w-0 select-none items-end justify-between gap-2 text-[8px] font-mono font-medium leading-none opacity-40 text-slate-500 dark:text-slate-400">

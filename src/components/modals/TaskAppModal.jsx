@@ -10,7 +10,6 @@ import {
     getAgentPlatformTheme, normalizeAgentPlatforms, normalizeAgentPlatformTheme, normalizePlatformKey
 } from '../../utils/paasV2Platforms';
 
-const DEFAULT_ANSWER_TYPE = '1,2,3,4';
 const EMPTY_ITEMS = Object.freeze([]);
 const samePlatform = (left, right) => normalizePlatformKey(left) !== '' && normalizePlatformKey(left) === normalizePlatformKey(right);
 const taskKey = (softwareUnique, plugFlag) => `${normalizePlatformKey(softwareUnique)}\u0000${normalizePlatformKey(plugFlag)}`;
@@ -83,7 +82,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
     useEffect(() => {
         if (!isOpen) return;
         const initialPaasConfig = paasConfigRef.current;
-        setFormData({ title: initialData?.title || '', subtitle: initialData?.subtitle || '', url: initialData?.url || initialPaasConfig.jumpBaseUrl || '', category: initialData?.category || '智能体任务', statusText: initialData?.statusText || '长期开放', description: initialData?.description || '', color: initialData?.color || 'violet', plugFlag: initialData?.paasV2PlugFlag || initialData?.plugFlag || '', answerType: initialData?.paasV2AnswerType || initialData?.answerType || DEFAULT_ANSWER_TYPE, softwareUnique: initialData?.paasV2SoftwareUnique || initialData?.softwareUnique || 'scyxcjrh', cover: initialData?.paasV2Cover || initialData?.cover || '' });
+        setFormData({ title: initialData?.title || '', subtitle: initialData?.subtitle || '', url: initialData?.url || initialPaasConfig.jumpBaseUrl || '', category: initialData?.category || '智能体任务', statusText: initialData?.statusText || '长期开放', description: initialData?.description || '', color: initialData?.color || 'violet', plugFlag: initialData?.paasV2PlugFlag || initialData?.plugFlag || '', softwareUnique: initialData?.paasV2SoftwareUnique || initialData?.softwareUnique || 'scyxcjrh', cover: initialData?.paasV2Cover || initialData?.cover || '' });
         resetCatalog(); setMenuSoftwareUnique(null); setShowManual(false); setEditingBuiltin(false); setEditingSoftwareUnique(null);
         setManualPlatform({ code: '', name: '', softwareUnique: '', theme: DEFAULT_AGENT_PLATFORM_THEME });
         if (!initialData?.id) setSoftwareUnique(initialSoftwareUnique || initialPaasConfig.productModuleId || 'scyxcjrh');
@@ -174,7 +173,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
     const saveSingle = async () => {
         if (busy || operationRef.current) return;
         if (!formData.title || !formData.plugFlag || !formData.url || !formData.softwareUnique) { notify('请填写任务名称、跳转地址、任务编码和软件标识', 'warning'); return; }
-        const data = { title: formData.title, subtitle: formData.subtitle, url: formData.url, category: formData.category, statusText: formData.statusText, description: formData.description, color: formData.color, ssoMethod: 'paasV2', paasV2PlugFlag: formData.plugFlag, paasV2AnswerType: formData.answerType, paasV2SoftwareUnique: formData.softwareUnique, paasV2Cover: formData.cover };
+        const data = { title: formData.title, subtitle: formData.subtitle, url: formData.url, category: formData.category, statusText: formData.statusText, description: formData.description, color: formData.color, ssoMethod: 'paasV2', paasV2PlugFlag: formData.plugFlag, paasV2SoftwareUnique: formData.softwareUnique, paasV2Cover: formData.cover };
         operationRef.current = true;
         setSaving(true);
         try { await api.put(`/competitions/${initialData.id}`, data, { fallback: '智能体任务更新失败' }); await onSave?.(); notify('智能体任务已更新', 'success'); onClose(); }
@@ -200,7 +199,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
                 }
             }
             setImportProgress({ total: selected.length, done: 0, phase: 'tasks' });
-            const tasks = selected.map(task => ({ title: task.title, subtitle: '', url: task.trainJumpPath || paasConfig.jumpBaseUrl || '', category: catalogPlatform?.name || '智能体任务', statusText: '长期开放', description: task.introduce || '', color: 'violet', ssoMethod: 'paasV2', paasV2PlugFlag: task.plugFlag, paasV2AnswerType: task.answerType || DEFAULT_ANSWER_TYPE, paasV2SoftwareUnique: softwareUnique, paasV2Cover: task.cover ? coverMap[task.cover] || task.cover : '' }));
+            const tasks = selected.map(task => ({ title: task.title, subtitle: '', url: task.trainJumpPath || paasConfig.jumpBaseUrl || '', category: catalogPlatform?.name || '智能体任务', statusText: '长期开放', description: task.introduce || '', color: 'violet', ssoMethod: 'paasV2', paasV2PlugFlag: task.plugFlag, paasV2SoftwareUnique: softwareUnique, paasV2Cover: task.cover ? coverMap[task.cover] || task.cover : '' }));
             const result = await api.post('/competitions/batch-paas-v2', { tasks }, { fallback: '智能体任务导入失败', timeoutMs: 120_000, retry: 0 });
             const reportedCount = Number(result?.created);
             const created = Number.isFinite(reportedCount) ? Math.max(0, Math.min(selected.length, reportedCount)) : selected.length;
@@ -218,7 +217,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
                 <div className="mc-modal__body custom-scrollbar !p-6">
                     {initialData?.id ? <div className="mt-5 grid gap-3 md:grid-cols-2">
                         {[['title', '任务名称'], ['subtitle', '副标题'], ['cover', '封面图片 Cover URL'], ['url', '跳转地址 trainJumpPath'], ['plugFlag', '任务编码 plugFlag']].map(([key, label]) => <label key={key} className="space-y-2"><span className="text-[10px] font-bold text-slate-500">{label}</span><input value={formData[key] || ''} onChange={event => update(key, event.target.value)} className={`${GLASS_INPUT} h-10 w-full px-3`} /></label>)}
-                        <label className="space-y-2"><span className="text-[10px] font-bold text-slate-500">答题类型 answerType</span><select value={formData.answerType} onChange={event => update('answerType', event.target.value)} className={`${GLASS_INPUT} h-10 w-full px-3`}><option value="1,2,3,4">1,2,3,4（全部）</option>{['1', '2', '3', '4'].map(value => <option key={value}>{value}</option>)}</select></label>
+                        <label className="space-y-2"><span className="text-[10px] font-bold text-slate-500">答题类型 answerType</span><input value="1" readOnly className={`${GLASS_INPUT} h-10 w-full px-3`} /></label>
                         <label className="space-y-2"><span className="text-[10px] font-bold text-slate-500">软件标识 softwareUnique</span><select value={formData.softwareUnique} onChange={event => update('softwareUnique', event.target.value)} className={`${GLASS_INPUT} h-10 w-full px-3`}>{allPlatforms.map(item => <option key={item.softwareUnique} value={item.softwareUnique}>{item.code} · {item.name}</option>)}{!allPlatforms.some(item => samePlatform(item.softwareUnique, formData.softwareUnique)) && <option value={formData.softwareUnique}>{formData.softwareUnique} · 当前平台</option>}</select></label>
                         {[['category', '分类'], ['statusText', '状态文字']].map(([key, label]) => <label key={key} className="space-y-2"><span className="text-[10px] font-bold text-slate-500">{label}</span><input value={formData[key] || ''} onChange={event => update(key, event.target.value)} className={`${GLASS_INPUT} h-10 w-full px-3`} /></label>)}
                     </div> : <div className="mt-5"><div className="space-y-3"><div className="flex gap-2 overflow-x-auto pb-3 pt-1">{allPlatforms.map(item => <PlatformCard key={item.softwareUnique} item={item} active={samePlatform(softwareUnique, item.softwareUnique)} menuOpen={samePlatform(menuSoftwareUnique, item.softwareUnique)} disabled={busy} status={platformStatus(item)} onSelect={selected => selectPlatform(selected.softwareUnique)} onToggleMenu={selected => setMenuSoftwareUnique(current => samePlatform(current, selected.softwareUnique) ? null : selected.softwareUnique)} onEdit={editPlatform} onDelete={deletePlatform} />)}<button type="button" onClick={openManual} disabled={busy} aria-label="手动添加软件平台" className="grid min-h-[76px] w-[104px] shrink-0 place-items-center rounded-2xl border-2 border-dashed border-violet-200 bg-violet-50/40 text-violet-500"><span className="grid place-items-center gap-1"><Plus className="h-5 w-5" /><span className="text-[9px] font-bold">添加软件</span></span></button></div>

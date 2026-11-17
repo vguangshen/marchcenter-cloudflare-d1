@@ -10,6 +10,7 @@ import {
     validateOfficialBaseUrlConfirmation
 } from './officialJumpConfig.js';
 import { OfficialJumpConfigError } from './errors.js';
+import { selectPaasV2PublicKeys } from './paasV2/paasV2Adapter.js';
 
 const JAVA_LONG_MIN = -(2n ** 63n);
 const JAVA_LONG_MAX = (2n ** 63n) - 1n;
@@ -78,15 +79,13 @@ export function validateOfficialJumpConfiguration(config = {}, context = {}) {
     if (method === 'paasV2') {
         const baseUrl = validateOfficialPaasV2Address(suppliedBaseUrl, 'paasV2 apiBaseUrl/trainPath');
         const jumpBaseUrl = validateOfficialPaasV2Address(config.jumpBaseUrl || config.trainJumpPath, 'paasV2 jumpBaseUrl/trainJumpPath');
-        const tempKey = config.tempKey && typeof config.tempKey === 'string'
-            ? safeParseTempKey(config.tempKey)
-            : (config.tempKey || null);
-        if (!config.externalPublicKey && !tempKey?.publicKey) {
+        const { issuerPublicKey, applicationPublicKey } = selectPaasV2PublicKeys(config);
+        if (!issuerPublicKey.trim()) {
             throw new OfficialJumpConfigError('paasV2 缺少 externalPublicKey 或 tempKey.publicKey', {
                 code: 'OFFICIAL_JUMP_PARAMETER_REQUIRED', details: { parameter: 'externalPublicKey' }
             });
         }
-        if (!config.publicKey && !tempKey?.applicationPublicKey) {
+        if (!applicationPublicKey.trim()) {
             throw new OfficialJumpConfigError('paasV2 缺少 publicKey 或 tempKey.applicationPublicKey', {
                 code: 'OFFICIAL_JUMP_PARAMETER_REQUIRED', details: { parameter: 'publicKey' }
             });
@@ -167,10 +166,4 @@ export async function preflightOfficialPlatform(config = {}, context = {}, depen
         await dependencies.credentialsProvider.getCredentials({ method: report.method, config });
     }
     return report;
-}
-
-
-function safeParseTempKey(value) {
-    try { return JSON.parse(value); }
-    catch { return null; }
 }

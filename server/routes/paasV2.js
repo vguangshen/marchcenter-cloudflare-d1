@@ -5,8 +5,11 @@ import { authMiddleware, adminOnly } from '../middleware/auth.js';
 import { getEnv, getRuntime } from '../config/runtime.js';
 import { assertCompetitionAccess } from '../utils/accessControl.js';
 import { decodeStoredConfig } from '../utils/configSecrets.js';
+import { withD1Lock } from '../utils/d1Lock.js';
+import { mapCardAddressToOfficialConfig, validateOfficialTransportAddress } from '../utils/officialCompat/cardAddress.js';
+import { mapMarchCenterToOfficialParameters, selectOfficialBaseUrl } from '../utils/officialCompat/officialJumpConfig.js';
 import { createOfficialSafeFetch } from '../utils/officialCompat/safeTransport.js';
-import { createPaasV2Adapter } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
+import { createPaasV2Adapter, PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { deletePlatformAndTasks, findPlatform, listPlatforms, normalizePlatformInput, parseSavedCatalog } from '../utils/paasV2Platforms.js';
 import { MAX_COVER_BYTES, readLimitedCover, waitForCoverOperation } from '../utils/coverDownload.js';
 
@@ -321,7 +324,7 @@ function toTaskRows(data) {
             plugFlag,
             title: task.taskTitle || plug.plugName || plugFlag,
             plugName: plug.plugName || '',
-            answerType: app.answerType || '1,2,3,4',
+            answerType: PAAS_V2_ANSWER_TYPE,
             trainType: app.trainType ?? null,
             appType: app.appType ?? null,
             trainPath: app.trainPath || '',
@@ -439,7 +442,8 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
         if (!platform) return res.status(404).json({ error: '请先保存这个软件平台' });
         const [[saved]] = await pool.query('SELECT tasks_json, updated_at FROM paas_v2_catalogs WHERE platform_id = ? LIMIT 1', [platform.id]);
         const data = { softwareUnique: platform.software_unique, platformCode: platform.code, platformName: platform.name };
-        if (saved && req.query.force !== '1') return res.json({ ...data, tasks: parseSavedCatalog(saved.tasks_json), source: 'database', syncedAt: saved.updated_at });
+        const savedTasks = saved ? parseSavedCatalog(saved.tasks_json).map(task => ({ ...task, answerType: PAAS_V2_ANSWER_TYPE })) : null;
+        if (saved && req.query.force !== '1') return res.json({ ...data, tasks: savedTasks, source: 'database', syncedAt: saved.updated_at });
         try {
             const tasks = await fetchPlatformCatalog(platform.software_unique, req.raw.signal);
             await pool.batch([
@@ -449,7 +453,7 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
             return res.json({ ...data, tasks, source: 'remote' });
         } catch (error) {
             await pool.query('UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ?', [error.notFound ? 'not_found' : 'error', platform.id]);
-            if (saved) return res.json({ ...data, tasks: parseSavedCatalog(saved.tasks_json), source: 'database-fallback', syncedAt: saved.updated_at, refreshError: error.message || '任务目录获取失败' });
+            if (saved) return res.json({ ...data, tasks: savedTasks, source: 'database-fallback', syncedAt: saved.updated_at, refreshError: error.message || '任务目录获取失败' });
             return res.status(502).json({ error: error.message || '任务目录获取失败' });
         }
     } catch (error) {
@@ -458,55 +462,111 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
     }
 });
 
-router.post('/reset', authMiddleware, async (req, res) => {
+async function withPaasV2Task(req, action) {
     const competitionId = Number(req.body?.competitionId);
     if (!Number.isInteger(competitionId) || competitionId <= 0) {
-        return res.status(400).json({ error: '竞赛卡片编号无效' });
+        throw Object.assign(new Error('竞赛卡片编号无效'), { status: 400 });
     }
-    try {
-        await assertCompetitionAccess(req.user, competitionId);
+    const { user } = req;
+    await assertCompetitionAccess(user, competitionId);
+    return withD1Lock(`paas-v2-task:${user.id}:${competitionId}`, async () => {
         const [[card]] = await pool.query(
             `SELECT id, url, sso_config_id AS ssoConfigId, sso_method AS ssoMethod,
-                    paas_v2_plug_flag AS plugFlag, paas_v2_answer_type AS answerType,
+                    paas_v2_plug_flag AS plugFlag,
                     paas_v2_software_unique AS softwareUnique
              FROM competitions WHERE id = ?`,
             [competitionId]
         );
         if (!card || card.ssoMethod !== 'paasV2') {
-            return res.status(400).json({ error: '该卡片不是智能体任务' });
+            throw Object.assign(new Error('该卡片不是智能体任务'), { status: 400 });
         }
         const [[sso]] = await pool.query('SELECT config_data FROM sso_configs WHERE id = ?', [card.ssoConfigId]);
-        if (!sso) return res.status(409).json({ error: '该智能体任务尚未绑定免密配置' });
-        const config = decodeStoredConfig(sso.config_data || {});
-        config.plugFlag = card.plugFlag || config.plugFlag;
-        config.answerType = card.answerType || config.answerType;
-        config.softwareUnique = card.softwareUnique || config.softwareUnique;
-        const baseUrl = config.apiBaseUrl || config.officialBaseUrl || '';
-        if (!baseUrl) return res.status(409).json({ error: '该智能体任务缺少 apiBaseUrl' });
-        const fetchImplementation = createOfficialSafeFetch({
+        if (!sso) {
+            throw Object.assign(new Error('该智能体任务尚未绑定免密配置'), { status: 409 });
+        }
+        const stored = decodeStoredConfig(sso.config_data || {});
+        if (stored.method !== 'paasV2' || stored.canaryOnly === true) {
+            throw Object.assign(new Error('该智能体任务绑定了无效的免密配置'), { status: 409 });
+        }
+        const config = mapCardAddressToOfficialConfig({
+            ...stored,
+            plugFlag: card.plugFlag || stored.plugFlag,
+            answerType: PAAS_V2_ANSWER_TYPE,
+            softwareUnique: card.softwareUnique || stored.softwareUnique
+        }, card.url);
+        const context = { user, loginRole: 'student', cardUrl: card.url };
+        validateOfficialTransportAddress(config, context);
+        const baseUrl = selectOfficialBaseUrl(config, context);
+        const safeFetch = createOfficialSafeFetch({
             baseUrl,
-            allowHttp: config.allowHttp === true
+            allowHttp: config.allowHttp === true,
+            timeoutMs: 15000
         });
-        const adapter = createPaasV2Adapter({ config, fetchImplementation });
-        await adapter.resetTaskData({
-            loginRole: 'student',
-            loginName: `mcs${req.user.username}1`,
-            teacherUserName: `mc${req.user.username}`,
-            className: `mc${req.user.username}`,
-            userName: req.user.name || req.user.username,
-            currentLoginName: req.user.username,
-            userId: req.user.id,
-            plugFlag: config.plugFlag,
-            answerType: config.answerType,
-            softwareUnique: config.softwareUnique
+        const deadline = deadlineSignal(50000);
+        const fetchImplementation = async (input, options) => {
+            deadline.signal.throwIfAborted();
+            const response = await safeFetch(input, { ...options, signal: deadline.signal });
+            deadline.signal.throwIfAborted();
+            return response;
+        };
+        try {
+            const adapter = createPaasV2Adapter({
+                config,
+                fetchImplementation,
+                tokenStore: getRuntime().paasV2TokenStore
+            });
+            const parameters = mapMarchCenterToOfficialParameters(config, context, baseUrl);
+            return await action({ adapter, parameters, context, card });
+        } finally {
+            deadline.dispose();
+        }
+    }, { leaseMs: 90000 });
+}
+
+router.post('/result', authMiddleware, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+        const result = await withPaasV2Task(req, async ({ adapter, parameters, context, card }) => {
+            const result = await adapter.getTaskResult(parameters, context);
+            await pool.query(
+                `INSERT INTO user_agent_task_results
+                    (user_id, competition_id, sso_config_id, target_url, task_id,
+                     answer_type, software_unique, status, score)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(user_id, competition_id) DO UPDATE SET
+                    sso_config_id = excluded.sso_config_id,
+                    target_url = excluded.target_url,
+                    task_id = excluded.task_id,
+                    answer_type = excluded.answer_type,
+                    software_unique = excluded.software_unique,
+                    status = excluded.status,
+                    score = excluded.score`,
+                [req.user.id, card.id, card.ssoConfigId, card.url, card.plugFlag,
+                    PAAS_V2_ANSWER_TYPE, card.softwareUnique, result.status, result.score]
+            );
+            return result;
         });
-        await pool.query(
-            'DELETE FROM user_workflow_status WHERE user_id = ? AND competition_id = ?',
-            [req.user.id, competitionId]
-        );
+        return res.json(result);
+    } catch (error) {
+        console.error('[paas-v2-result]', error.code || error.name);
+        const status = error.code?.startsWith('PAAS_V2_') ? 502 : (error.status || 502);
+        return res.status(status).json({ error: status < 500 && error.message ? error.message : '成绩暂时无法查询，请稍后刷新' });
+    }
+});
+
+router.post('/reset', authMiddleware, async (req, res) => {
+    try {
+        await withPaasV2Task(req, async ({ adapter, parameters, card }) => {
+            await adapter.resetTaskData(parameters);
+            const binding = [req.user.id, card.id];
+            await pool.batch([
+                ['DELETE FROM user_workflow_status WHERE user_id = ? AND competition_id = ?', binding],
+                ['DELETE FROM user_agent_task_results WHERE user_id = ? AND competition_id = ?', binding]
+            ]);
+        });
         return res.json({ success: true });
     } catch (error) {
-        console.error('[paas-v2-reset]', error, error?.cause);
+        console.error('[paas-v2-reset]', error.code || error.name);
         return res.status(error.status || 500).json({ error: error.message || '重置智能体任务失败' });
     }
 });
