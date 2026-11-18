@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const app = await readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
+const app = await readFile(new URL('../../src/Dashboard.jsx', import.meta.url), 'utf8');
 const navbar = await readFile(new URL('../../src/components/layouts/Navbar.jsx', import.meta.url), 'utf8');
 const editModal = await readFile(new URL('../../src/components/modals/EditModal.jsx', import.meta.url), 'utf8');
 const contestCard = await readFile(new URL('../../src/components/cards/ContestCard.jsx', import.meta.url), 'utf8');
 const competitionActions = await readFile(new URL('../../src/hooks/useCompetitionActions.js', import.meta.url), 'utf8');
-const appSource = await readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../../src/main.jsx', import.meta.url), 'utf8');
 const workerSource = await readFile(new URL('../../worker/index.js', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../../src/index.css', import.meta.url), 'utf8');
@@ -173,8 +172,8 @@ test('card theme picker supports transparent and white surfaces', () => {
 });
 
 test('stale hashed chunks recover without leaving a permanently stuck tab', () => {
-    assert.match(appSource, /import DeleteUserModal from ['"]\.\/components\/modals\/DeleteUserModal['"]/);
-    assert.doesNotMatch(appSource, /const DeleteUserModal = lazy\(\(\) => import\(['"]\.\/components\/modals\/DeleteUserModal/);
+    assert.match(app, /import DeleteUserModal from ['"]\.\/components\/modals\/DeleteUserModal['"]/);
+    assert.doesNotMatch(app, /const DeleteUserModal = lazy\(\(\) => import\(['"]\.\/components\/modals\/DeleteUserModal/);
     assert.match(mainSource, /unhandledrejection/);
     assert.match(mainSource, /__mc_chunk_reload/);
     assert.match(mainSource, /attempts >= 2/);

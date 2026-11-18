@@ -7,6 +7,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
     revealEnabledRef.current = revealEnabled;
     const [links, setLinks] = useState([]);
     const [linksPhase, setLinksPhase] = useState('loading');
+    const [loadedSession, setLoadedSession] = useState(null);
     const [linksLoadError, setLinksLoadError] = useState('');
     const [studentAccountsByCard, setStudentAccountsByCard] = useState({});
     const [studentAccountsLoadError, setStudentAccountsLoadError] = useState('');
@@ -25,6 +26,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
         linksRequestRef.current = { id: requestId, controller };
         if (!token || !sessionIdentity) {
             setLinks([]);
+            setLoadedSession(null);
             setLinksLoadError('');
             setLinksPhase('ready');
             return;
@@ -39,6 +41,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
             });
             if (linksRequestRef.current.id !== requestId) return;
             setLinks(Array.isArray(data) ? data : []);
+            setLoadedSession({ token, sessionIdentity });
             setLinksPhase(shouldAnimate ? 'revealing' : 'ready');
         } catch (error) {
             if (error?.name === 'AbortError' || linksRequestRef.current.id !== requestId) return;
@@ -86,6 +89,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
         linksRequestRef.current = { id: linksRequestRef.current.id + 1, controller: null };
         accountsRequestRef.current = { id: accountsRequestRef.current.id + 1, controller: null };
         setLinks([]);
+        setLoadedSession(null);
         setLinksLoadError('');
         setLinksPhase('ready');
         setStudentAccountsByCard({});
@@ -101,6 +105,7 @@ export function useCompetitionCatalog({ token, currentUser, revealEnabled = true
         links,
         setLinks,
         linksPhase,
+        linksLoadedForSession: Boolean(token && loadedSession?.token === token && loadedSession.sessionIdentity === sessionIdentity),
         linksLoadError,
         studentAccountsByCard,
         setStudentAccountsByCard,

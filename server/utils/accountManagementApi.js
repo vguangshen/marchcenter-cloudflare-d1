@@ -150,18 +150,18 @@ export async function testDeviceDatabaseConfig(rawConfig, connections) {
     return data;
 }
 
-export async function applyDeviceDatabaseConfig(rawConfig, envelope) {
+export async function applyDeviceDatabaseConfig(rawConfig, envelope, { signal } = {}) {
     const config = normalizeAccountManagementConfig(rawConfig, { requireEndpoint: true });
-    const { data } = await requestAccountManagementApi(config, '/api/v1/device/config/apply', { method: 'POST', payload: envelope });
+    const { data } = await requestAccountManagementApi(config, '/api/v1/device/config/apply', { method: 'POST', payload: envelope, signal });
     if (data.success !== true) throw new Error('执行端未确认数据库配置已生效');
     return data;
 }
 
-export async function ensureDeviceDatabaseConfig(rawConfig) {
+export async function ensureDeviceDatabaseConfig(rawConfig, { signal } = {}) {
     const config = normalizeAccountManagementConfig(rawConfig, { requireEndpoint: true });
     if (!config.databaseConnections) throw new Error('该 API 服务器尚未保存数据库连接信息');
     const version = Number(config.databaseConfigVersion) || Math.floor(Date.now() / 1000);
-    return applyDeviceDatabaseConfig(config, await createDatabaseConfigEnvelope(config, config.databaseConnections, version));
+    return applyDeviceDatabaseConfig(config, await createDatabaseConfigEnvelope(config, config.databaseConnections, version), { signal });
 }
 
 export async function rollbackDeviceDatabaseConfig(rawConfig) {
@@ -191,7 +191,7 @@ function authenticationHeaders(config, url, method = 'GET', body = '') {
     return hmacHeaders(config, url, method, body);
 }
 
-async function requestAccountManagementApi(rawConfig, path, { method = 'GET', payload = null } = {}) {
+async function requestAccountManagementApi(rawConfig, path, { method = 'GET', payload = null, signal } = {}) {
     const config = normalizeAccountManagementConfig(rawConfig, { requireEndpoint: true });
     if (!config.enabled) throw new Error('账号管理 API 尚未启用');
     const url = new URL(`${config.endpointUrl}${path}`);
@@ -205,6 +205,7 @@ async function requestAccountManagementApi(rawConfig, path, { method = 'GET', pa
             ...authenticationHeaders(config, url, method, body)
         },
         ...(body ? { body } : {}),
+        signal,
         timeoutMs: config.timeoutMs,
         maxResponseBytes: 64 * 1024
     });
@@ -260,11 +261,12 @@ export async function issueManualCredential(rawConfig, system, username, platfor
     };
 }
 
-export async function restoreOriginalPassword(rawConfig, system, username, platformUrl = '', databaseName = '', accountTable = '', usernameColumn = '', passwordColumn = '', passwordAlgorithm = '', originalPasswordCiphertext = '') {
+export async function restoreOriginalPassword(rawConfig, system, username, platformUrl = '', databaseName = '', accountTable = '', usernameColumn = '', passwordColumn = '', passwordAlgorithm = '', originalPasswordCiphertext = '', { signal } = {}) {
     const config = normalizeAccountManagementConfig(rawConfig, { requireEndpoint: true });
-    await ensureDeviceDatabaseConfig(config);
+    await ensureDeviceDatabaseConfig(config, { signal });
     const { data } = await requestAccountManagementApi(config, '/api/v1/accounts/reset-password', {
         method: 'POST',
+        signal,
         payload: { system, username, platformUrl, databaseName, accountTable, usernameColumn, passwordColumn, passwordAlgorithm, originalPasswordCiphertext }
     });
     if (data.success !== true || data.updated !== true) {

@@ -59,6 +59,7 @@ export function createOfficialDependencyFactory(options = {}) {
         ? createOfficialSafeFetch({
             baseUrl: options.baseUrl,
             allowHttp: options.allowHttp === true,
+            signal: options.signal,
             timeoutMs: options.timeoutMs,
             maxResponseBytes: options.maxResponseBytes
         })

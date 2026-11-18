@@ -16,7 +16,7 @@ const EMPTY_DATABASES = {
     mySql: { Enabled: false, Host: '', Port: 3306, User: '', Password: '', InitialDatabase: 'mysql', CharacterSet: 'utf8mb4', SslMode: 'None', CommandTimeoutSeconds: 10 }
 };
 
-const AccountManagementApiManager = ({ token }) => {
+const AccountManagementApiManager = ({ token, onBindingsChange }) => {
     const [services, setServices] = useState([]);
     const [form, setForm] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -73,11 +73,13 @@ const AccountManagementApiManager = ({ token }) => {
     const save = async () => {
         if (!form) return;
         setBusy('save'); setNotice(null);
+        let saved = false;
         try {
             const creating = !form.id;
             const data = await request(creating ? '/services' : `/services/${form.id}`, {
                 method: creating ? 'POST' : 'PUT', body: JSON.stringify(payload())
             });
+            saved = true;
             const serviceId = data.config.id;
             await request(`/services/${serviceId}/database-config`, {
                 method: 'PUT', body: JSON.stringify({ connections: databases })
@@ -85,7 +87,10 @@ const AccountManagementApiManager = ({ token }) => {
             setNotice({ type: 'success', text: creating ? 'API 服务及数据库配置已添加' : 'API 服务、认证与数据库配置已保存' });
             await load(serviceId);
         } catch (error) { setNotice({ type: 'error', text: error.message }); }
-        finally { setBusy(''); }
+        finally {
+            if (saved) void onBindingsChange?.();
+            setBusy('');
+        }
     };
 
     const updateDatabase = (provider, key, value) => setDatabases(previous => ({ ...previous, [provider]: { ...previous[provider], [key]: value } }));
@@ -109,6 +114,7 @@ const AccountManagementApiManager = ({ token }) => {
                     ? `执行端连接成功 · ${result.latencyMs} ms，已读取加密公钥`
                     : `连接检测通过 · 执行端 ${result.latencyMs} ms${hasEnabledDatabase ? ` · ${providerNames.join('、')}` : ''}`
             });
+            void onBindingsChange?.();
             await load(form.id);
             setDatabases(databaseDraft);
         } catch (error) {
@@ -123,6 +129,7 @@ const AccountManagementApiManager = ({ token }) => {
         setBusy(`toggle-${service.id}`);
         try {
             await request(`/services/${service.id}`, { method: 'PUT', body: JSON.stringify({ enabled: !service.enabled }) });
+            void onBindingsChange?.();
             await load(service.id);
         } catch (error) { setNotice({ type: 'error', text: error.message }); }
         finally { setBusy(''); }
@@ -137,6 +144,7 @@ const AccountManagementApiManager = ({ token }) => {
         setBusy(`delete-${service.id}`);
         try {
             const result = await request(`/services/${service.id}`, { method: 'DELETE' });
+            void onBindingsChange?.();
             const count = Number(result.unboundCompetitionCount || 0);
             setNotice({ type: 'success', text: count > 0 ? `API 服务已删除，并自动解绑 ${count} 张竞赛卡片` : 'API 服务已删除' });
             await load();
@@ -152,7 +160,12 @@ const AccountManagementApiManager = ({ token }) => {
             confirmText: '清除'
         })) return;
         setBusy('clear');
-        try { await request(`/services/${form.id}`, { method: 'PUT', body: JSON.stringify(payload(form, { clearCredentials: true })) }); await load(form.id); setNotice({ type: 'success', text: '认证凭证已清除' }); }
+        try {
+            await request(`/services/${form.id}`, { method: 'PUT', body: JSON.stringify(payload(form, { clearCredentials: true })) });
+            void onBindingsChange?.();
+            await load(form.id);
+            setNotice({ type: 'success', text: '认证凭证已清除' });
+        }
         catch (error) { setNotice({ type: 'error', text: error.message }); }
         finally { setBusy(''); }
     };

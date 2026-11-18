@@ -20,9 +20,7 @@ test('moving glass surfaces use isolated compositor hints without removing their
     assert.match(contestCard, /backdrop-blur-xl border border-slate-200\/50[\s\S]*glass-motion-surface[\s\S]*transition-all duration-500/);
     assert.match(styles, /@keyframes manual-login-panel-in[\s\S]*translate3d\(0, -10px, 0\) scale\(0\.94\)[\s\S]*translate3d\(0, 2px, 0\) scale\(1\.01\)[\s\S]*translate3d\(0, 0, 0\) scale\(1\)/);
     assert.match(classAction, /glass-motion-surface absolute inset-0[\s\S]*backdrop-blur-md animate-in fade-in zoom-in-95 duration-200/);
-    assert.match(classAction, /系统维护[\s\S]*账号已同步[\s\S]*修复登录[\s\S]*删除班级/);
-    assert.match(classAction, /Java[\s\S]*\.NET[\s\S]*修复登录/);
-    assert.match(contestCard, /onRepairAccountReadiness[\s\S]*repair:\$\{link\.id\}[\s\S]*ClassActionOverlay/);
+    assert.match(classAction, /系统维护[\s\S]*修复登录[\s\S]*删除班级/);
     assert.match(accountManager, /glass-motion-container grid transition-\[grid-template-rows,opacity,transform\] duration-500/);
     assert.match(accountManager, /glass-motion-surface rounded-2xl[\s\S]*backdrop-blur-sm/);
     assert.match(announcement, /glass-motion-container mb-8[\s\S]*transition-all duration-700/);

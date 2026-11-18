@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { createDecipheriv, generateKeyPairSync } from 'node:crypto';
+import { constants, createDecipheriv, generateKeyPairSync, privateDecrypt } from 'node:crypto';
 import test, { after, before, beforeEach } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
     createProductionHarness,
     E2E_SECRETS,
@@ -473,6 +474,43 @@ test('official JAVA second entry skips duplicate account sync but refreshes its 
     assert.equal((await statusRows()).length, 1);
 });
 
+test('concurrent login attempts recheck readiness after acquiring the account lock', async () => {
+    const { competitionId } = await routeConfig(officialConfig('java'));
+    const originalFetch = harness.platform.fetch;
+    harness.platform.fetch = async request => {
+        if (new URL(request.url).pathname.endsWith('/getUserName')) await delay(150);
+        return originalFetch(request);
+    };
+    try {
+        const results = await Promise.all([execute(competitionId), execute(competitionId)]);
+        assert.deepEqual(results.map(result => result.status), [200, 200]);
+        assert.deepEqual(results.map(result => result.data.accountWasReady).sort(), [false, true]);
+        assert.equal(operationNames().filter(name => name === 'getUserName').length, 1);
+    } finally { harness.platform.fetch = originalFetch; }
+});
+
+test('the SSE launch reports the Worker deadline and a retry can enter normally', async () => {
+    const local = await createProductionHarness({ bindings: { SSO_LAUNCH_TIMEOUT_MS: '300' } });
+    try {
+        const configId = await local.seedConfig(officialConfig('java'));
+        const competitionId = await local.seedCompetition({ configId, method: 'java' });
+        const originalFetch = local.platform.fetch;
+        local.platform.fetch = async request => {
+            if (new URL(request.url).pathname.endsWith('/trainingExamPaper')) await delay(900);
+            return originalFetch(request);
+        };
+        const launch = () => local.api('/api/sso/execute/stream', { body: { competitionId } });
+        const timedOut = await launch();
+        assert.match(timedOut.text, /event: error\ndata: .*"status":504,"code":"sso_timeout"/);
+        assert.doesNotMatch(timedOut.text, /event: result/);
+        assert.deepEqual(await local.rows('SELECT * FROM user_platform_account_status'), []);
+        local.platform.fetch = originalFetch;
+        const retry = await launch();
+        assert.match(retry.text, /event: result/);
+        assert.equal((await local.rows('SELECT * FROM user_platform_account_status')).length, 1);
+    } finally { await local.dispose(); }
+});
+
 test('JAVA login repair immediately resyncs teacher, primary student and additional students', async () => {
     const { competitionId } = await routeConfig(officialConfig('java'));
     await harness.run(
@@ -510,6 +548,26 @@ test('JAVA login repair immediately resyncs teacher, primary student and additio
     assert.equal(student.status, 200, JSON.stringify(student.data));
     assert.equal(student.data.accountWasReady, true);
     assert.deepEqual(operationNames(), ['tokenInfo', 'trainingExamPaper']);
+});
+
+test('a failed student repair keeps readiness and the next repair can target only that student', async () => {
+    const { competitionId } = await routeConfig(officialConfig('java'));
+    assert.equal((await execute(competitionId, { loginRole: 'student' })).status, 200);
+    const repair = body => harness.api(`/api/sso/account-readiness/${competitionId}/repair`, { body });
+    harness.platform.queueJava('trainingExamPaper', new Error('fixture platform unavailable'));
+    const partial = await repair({});
+    assert.equal(partial.status, 200, partial.text);
+    assert.equal(partial.data.success, false);
+    assert.deepEqual(partial.data.repaired, [{ loginRole: 'teacher', studentIndex: 1 }]);
+    const targets = partial.data.failed.map(({ loginRole, studentIndex }) => ({ loginRole, studentIndex }));
+    assert.deepEqual(targets, [{ loginRole: 'student', studentIndex: 1 }]);
+    assert.deepEqual((await statusRows()).map(row => row.login_role), ['student', 'teacher']);
+    harness.platform.state.requests.length = 0;
+    const retry = await repair({ targets });
+    assert.equal(retry.status, 200, retry.text);
+    assert.equal(retry.data.success, true);
+    assert.deepEqual(retry.data.repaired, targets);
+    assert.deepEqual(operationNames(), ['tokenInfo', 'getUserName', 'trainingExamPaper']);
 });
 
 test('official JAVA token is reused across production requests in one Worker isolate', async () => {
@@ -550,14 +608,16 @@ test('official JAVA token is reused across production requests in one Worker iso
 test('paasV2 SSE uses one task entry for students and teachers with separate account caches', async () => {
     const cacheHarness = await createProductionHarness({ officialTokenCacheScope: 'isolate' });
     try {
-        const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
+        const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
         const pem = publicKey.export({ type: 'spki', format: 'pem' });
         const apiBaseUrl = 'https://localhost:9289/agent-practice';
         const jumpBaseUrl = `${apiBaseUrl}/enter`;
-        const configId = await cacheHarness.seedConfig({
+        const config = {
             method: 'paasV2', apiBaseUrl, jumpBaseUrl, externalPublicKey: pem, publicKey: pem,
-            productId: 'E2E', softwareUnique: 'e2e-training', plugFlag: 'e2e-task'
-        });
+            productId: 'E2E', softwareUnique: 'e2e-training', plugFlag: 'e2e-task',
+            returnUrl: 'http://marchcenter.local/dashboard?view=tasks&agentTaskId=0#legacy'
+        };
+        const configId = await cacheHarness.seedConfig(config);
         const competitionId = await cacheHarness.seedCompetition({
             configId, method: 'paasV2', url: jumpBaseUrl
         });
@@ -571,9 +631,19 @@ test('paasV2 SSE uses one task entry for students and teachers with separate acc
         }
         cacheHarness.platform.queueJava('GetTokenInfo', [success('mock-student'), success('mock-teacher')]);
 
+        function verifyReturnUrl(postForm, expected) {
+            const ciphertext = Buffer.from(postForm.fields.data, 'base64');
+            const plaintext = [];
+            for (let offset = 0; offset < ciphertext.length; offset += 128) {
+                plaintext.push(privateDecrypt({ key: privateKey, padding: constants.RSA_PKCS1_PADDING },
+                    ciphertext.subarray(offset, offset + 128)));
+            }
+            assert.equal(JSON.parse(Buffer.concat(plaintext).toString('utf8')).returnUrl, expected);
+        }
+
         async function launch(sessionToken, loginRole = 'student') {
             const response = await cacheHarness.api('/api/sso/execute/stream', {
-                body: { competitionId, context: { loginRole } },
+                body: { competitionId, context: { loginRole, competitionId: -1, returnUrl: 'https://other.invalid/' } },
                 headers: { Authorization: `Bearer ${sessionToken}` }
             });
             assert.equal(response.status, 200, response.text);
@@ -583,7 +653,7 @@ test('paasV2 SSE uses one task entry for students and teachers with separate acc
             const { postForm } = JSON.parse(result[1]).data;
             assert.equal(postForm.action, jumpBaseUrl);
             assert.equal(postForm.method, 'POST');
-            assert.ok(postForm.fields.data);
+            verifyReturnUrl(postForm, `http://marchcenter.local/?view=tasks&agentTaskId=${competitionId}`);
             return postForm.fields.platformToken;
         }
 
@@ -591,6 +661,13 @@ test('paasV2 SSE uses one task entry for students and teachers with separate acc
         assert.equal(await launch(sessionTokens.student), 'mock-student');
         assert.equal(await launch(sessionTokens.teacher), 'mock-teacher');
         assert.equal(await launch(sessionTokens.teacher, 'teacher'), 'mock-teacher');
+        await cacheHarness.run('UPDATE sso_configs SET config_data = ? WHERE id = ?',
+            JSON.stringify({ ...config, returnUrl: 'https://other.invalid/dashboard' }), configId);
+        const jsonLaunch = await cacheHarness.api('/api/sso/execute', {
+            body: { competitionId }, headers: { Authorization: `Bearer ${sessionTokens.student}` }
+        });
+        assert.equal(jsonLaunch.status, 200, jsonLaunch.text);
+        verifyReturnUrl(jsonLaunch.data.postForm, `http://marchcenter.local/?agentTaskId=${competitionId}`);
         assert.deepEqual(
             cacheHarness.platform.state.requests.map(request => request.operationName),
             ['GetTokenInfo', 'GetTokenInfo']

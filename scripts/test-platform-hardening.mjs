@@ -113,7 +113,7 @@ for (const file of sourceFiles) {
 assert.deepEqual(blockingCalls, [], 'native alert/confirm calls must not return');
 assert.deepEqual(unmanagedFetches, [], 'API calls must use the shared request transport');
 
-const appSource = await fs.readFile(path.join(sourceRoot, 'App.jsx'), 'utf8');
+const dashboardSource = await fs.readFile(path.join(sourceRoot, 'Dashboard.jsx'), 'utf8');
 const stylesSource = await fs.readFile(path.join(sourceRoot, 'index.css'), 'utf8');
 const sharedConfigSource = await fs.readFile(path.join(sourceRoot, 'constants', 'config.js'), 'utf8');
 const settingsDarkStylesSource = await fs.readFile(path.join(sourceRoot, 'styles', 'settings-dark.css'), 'utf8');
@@ -193,7 +193,7 @@ assert.match(stylesSource, /\.dark\s*\{\s*color-scheme:\s*dark;/, '夜间模式�
 assert.match(navbarSource, /dashboard-navbar-entering/, '首页状态栏必须提供与登录栏衔接的入场状态');
 assert.match(stylesSource, /\.login-portal-header-unlocking[\s\S]*?--login-navbar-dock-side/, '登录状态栏必须收拢到首页悬浮栏几何位置');
 assert.match(navbarSource, /THEMES\[activeThemeColor\][\s\S]*?navbarTheme\.gradient/, '首页 Logo 必须与登录页共用系统主题渐变');
-assert.match(appSource, /<Navbar[\s\S]*?activeThemeColor=\{activeThemeColor\}/, '首页必须把当前系统主题色传入顶部栏');
+assert.match(dashboardSource, /<Navbar[\s\S]*?activeThemeColor=\{activeThemeColor\}/, '工作台顶部栏应使用当前系统主题色');
 assert.doesNotMatch(stylesSource, /view-transition-name:\s*marchcenter-navbar|@keyframes dashboard-navbar-arrive/, '顶部栏不得使用浏览器快照或直接移动玻璃模糊层');
 assert.doesNotMatch(stylesSource, /@keyframes dashboard-navbar-control-in\s*\{[^}]*transform:/, '首页控件入场不得改变坐标，避免动画层退出时产生像素跳动');
 assert.doesNotMatch(authSessionSource, /navbarTransitionTimerRef/, '顶部栏入场结束不得通过定时状态更新触发整栏重渲染');

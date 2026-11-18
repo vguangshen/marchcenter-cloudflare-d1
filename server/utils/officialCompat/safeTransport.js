@@ -62,6 +62,10 @@ export function createOfficialSafeFetch(options = {}) {
 
     return async function officialSafeFetch(input, init = {}) {
         const target = assertExactTarget(base, input);
+        const requestSignal = init.signal || (input instanceof Request ? input.signal : undefined);
+        const signal = options.signal && requestSignal
+            ? AbortSignal.any([options.signal, requestSignal]) : options.signal || requestSignal;
+        signal?.throwIfAborted();
         const headers = new Headers(input instanceof Request ? input.headers : undefined);
         new Headers(init.headers || undefined).forEach((value, key) => headers.set(key, value));
         if (headers.has('host')) {
@@ -82,6 +86,7 @@ export function createOfficialSafeFetch(options = {}) {
                 method: init.method || (input instanceof Request ? input.method : 'GET'),
                 headers: Object.fromEntries(headers.entries()),
                 body: requestBody,
+                ...(signal && { signal }),
                 timeoutMs: options.timeoutMs,
                 maxResponseBytes: options.maxResponseBytes
             });
@@ -106,6 +111,7 @@ export function createOfficialSafeFetch(options = {}) {
         }
         const response = await fetchImplementation(target.toString(), {
             ...init,
+            ...(signal && { signal }),
             headers,
             redirect: 'manual'
         });

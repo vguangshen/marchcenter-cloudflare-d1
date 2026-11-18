@@ -183,7 +183,7 @@ const CredentialField = ({ label, value, onChange, help = '\u00a0', type = 'text
     </label>
 );
 
-const SsoManager = ({ configs = [], token, fetchConfigs, loadError = '', onRetry }) => {
+const SsoManager = ({ configs = [], token, fetchConfigs, onBindingsChange, loadError = '', onRetry }) => {
     const [selectedId, setSelectedId] = useState(null);
     const [configName, setConfigName] = useState('JAVA 通用配置');
     const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -349,7 +349,7 @@ const SsoManager = ({ configs = [], token, fetchConfigs, loadError = '', onRetry
             const data = selectedId
                 ? await api.put(`/sso-config/${selectedId}`, payload, { fallback: '保存失败' })
                 : await api.post('/sso-config', payload, { fallback: '保存失败' });
-            await fetchConfigs();
+            await Promise.all([fetchConfigs(), onBindingsChange?.()]);
             if (!selectedId && data.id) setSelectedId(data.id);
             setEditingSecrets({ tokenPassword: false, soapPassword: false, studentInitialPassword: false });
             setShowSecrets(false);

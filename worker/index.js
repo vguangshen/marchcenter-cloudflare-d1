@@ -1,5 +1,6 @@
 import express from '../server/compat/express.js';
 import { getEnv, runWithRuntime } from '../server/config/runtime.js';
+import pool from '../server/config/db.js';
 import { createOfficialTokenStore, PAAS_V2_TOKEN_TTL_MS } from '../server/utils/officialCompat/tokenStore.js';
 
 import authRoutes from '../server/routes/auth.js';
@@ -44,6 +45,17 @@ app.use('/api/email-settings', emailSettingsRoutes);
 app.use('/api/paas-v2', paasV2Routes);
 app.use('/api/map', mapRoutes);
 app.get('/api/health', (_req, res) => res.json({ ok: true, runtime: 'cloudflare-workers', database: 'd1' }));
+app.get('/api/ready', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    try {
+        await pool.query(`SELECT EXISTS (SELECT 1 FROM users),
+            EXISTS (SELECT 1 FROM competitions), EXISTS (SELECT 1 FROM user_agent_task_results)`);
+        return res.json({ ready: true });
+    } catch {
+        return res.status(503).json({ ready: false });
+    }
+});
 app.get('/api/version', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('CDN-Cache-Control', 'no-store');

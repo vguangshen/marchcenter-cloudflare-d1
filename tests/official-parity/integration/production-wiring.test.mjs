@@ -260,8 +260,12 @@ test('production SSO route imports only the official dispatcher and neutral manu
 });
 
 test('ordinary SSO route excludes dedicated canary-only configurations', async () => {
-    const source = await readFile(new URL('../../../server/routes/sso.js', import.meta.url), 'utf8');
+    const [source, configs] = await Promise.all([
+        readFile(new URL('../../../server/routes/sso.js', import.meta.url), 'utf8'),
+        readFile(new URL('../../../server/utils/ssoConfigurations.js', import.meta.url), 'utf8')
+    ]);
     assert.match(source, /config\.canaryOnly === true/);
-    assert.match(source, /candidate\.canaryOnly !== true/);
+    assert.match(source, /\(await readDefaultSsoConfigs\(\)\)\.get\(method\)/);
+    assert.match(configs, /config\.canaryOnly !== true/);
     assert.match(source, /专用 canary 配置不能通过普通 SSO 路由执行/);
 });

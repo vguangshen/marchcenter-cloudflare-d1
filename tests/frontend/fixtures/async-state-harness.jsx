@@ -1,26 +1,85 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '../../../src/App.jsx';
+import AgentTaskCard from '../../../src/components/cards/AgentTaskCard.jsx';
 import ProfileModal from '../../../src/components/modals/ProfileModal.jsx';
 import TaskAppModal from '../../../src/components/modals/TaskAppModal.jsx';
+import { useAgentTaskResults } from '../../../src/hooks/useAgentTaskResults.js';
 import { useAuthSession } from '../../../src/hooks/useAuthSession.js';
+import { useCompetitionActions } from '../../../src/hooks/useCompetitionActions.js';
 
 const scenario = new URLSearchParams(window.location.search);
+const mode = scenario.get('mode');
+
+const moduleFixtureLink = (id, title, softwareUnique, agentModule, agentResult) => ({
+    id, title, ssoMethod: 'paasV2', paasV2SoftwareUnique: softwareUnique,
+    agentModule, agentResult
+});
+const marketModule = { id: '1', title: '市场分析', order: 1 };
+const supplyModule = { id: '2', title: '供应链数据分析', order: 2 };
+const moduleFixtureLinks = [
+    moduleFixtureLink(43, '仓储任务', 'sjfxah', { ...supplyModule, taskOrder: 1 }),
+    moduleFixtureLink(42, '甲类指标解读', 'sjfxah', { ...marketModule, taskOrder: 2 }),
+    moduleFixtureLink(45, '补充练习', 'sjfxah'),
+    moduleFixtureLink(41, '乙类指标解读', 'sjfxah', { ...marketModule, taskOrder: 1 }, { status: 'completed', score: 0 }),
+    moduleFixtureLink(51, '独立平台案例', 'another-platform', marketModule),
+    moduleFixtureLink(52, '独立平台练习', 'another-platform', supplyModule),
+    moduleFixtureLink(61, '历史任务', 'legacy-platform')
+];
+const moduleFixturePlatforms = [
+    { softwareUnique: 'sjfxah', code: 'SJFX', name: '数据分析方法与工具应用' },
+    { softwareUnique: 'another-platform', code: 'OTHER', name: '独立平台' },
+    { softwareUnique: 'legacy-platform', code: 'LEGACY', name: '历史平台' }
+];
+const missingDeleteBinding = '班级删除映射未配置';
+const unconfiguredMaintenance = {
+    delete: missingDeleteBinding,
+    repair: '登录修复未绑定平台实例',
+    initialize: '系统初始化未绑定平台实例'
+};
+let configuredJavaCard = {
+    id: 73, title: '已绑定实训', url: 'https://fixture.example/bound', ssoMethod: 'java', teacherReady: 1,
+    classDeleteMapping: {
+        enabled: true, apiId: 'fixture-account-service', databaseName: 'training', classTable: 'classes',
+        classNameColumn: 'class_name', classIdColumn: 'id', userTable: 'accounts', userClassColumn: 'class_id'
+    }
+};
+
 const avatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 window.__calls = [];
 window.__notifications = [];
 window.__activeCoverRequests = 0;
 window.__maxCoverRequests = 0;
+window.__agentResult = mode === 'agent-modules' ? { status: 'completed', score: 86.5 } : null;
 window.__failRefresh = scenario.get('rejectRefresh') === '1';
-window.__profileUser = { id: 7, username: 'fixture-user', role: 'student', avatarDataUrl: avatar, passwordChangeRecommended: false };
+window.__profileUser = {
+    id: 7, username: 'fixture-user', role: mode === 'maintenance' ? 'super_admin' : 'student',
+    avatarDataUrl: avatar, passwordChangeRecommended: false
+};
 window.__testApi = async (method, url, body, requestToken) => {
     window.__calls.push({ method, url, body });
+    if (method === 'POST' && url === '/sso/class/remove') return { deleted: true, className: '演示班' };
+    if (method === 'POST' && url === '/sso/account-readiness/73/repair') {
+        const student = { loginRole: 'student', studentIndex: 1 };
+        return body.targets ? { repaired: [student], failed: [] }
+            : { repaired: [{ loginRole: 'teacher', studentIndex: 1 }], failed: [student] };
+    }
     if (method === 'DELETE') return new Promise(resolve => { window.__releaseDelete = resolve; });
     if (method === 'PATCH' && url === '/users/me/profile') {
         window.__profileUser = { ...window.__profileUser, ...body };
         return { success: true, user: window.__profileUser };
     }
     if (method === 'POST' && url === '/auth/change-password') return { success: true };
+    if (method === 'POST' && url === '/auth/login') return { user: window.__profileUser, token: 'fixture-token' };
+    if (method === 'POST' && url === '/paas-v2/result') return window.__agentResult;
+    if (method === 'POST' && url === '/paas-v2/reset') {
+        if (window.__failAgentReset) throw new Error('Fixture reset failed');
+        return { success: true };
+    }
+    if (method === 'POST' && url === '/sso/execute/stream') {
+        if (window.__failAgentLaunch) throw new Error('Fixture launch failed');
+        return { success: true, redirectUrl: `${location.origin}/provider` };
+    }
     if (method === 'POST' && url === '/paas-v2/covers/cache') {
         window.__activeCoverRequests += 1;
         window.__maxCoverRequests = Math.max(window.__maxCoverRequests, window.__activeCoverRequests);
@@ -37,9 +96,39 @@ window.__testApi = async (method, url, body, requestToken) => {
             window.__oldAuthRejected = true;
         };
     });
+    if (url === '/auth/me' && scenario.get('deferAuth') === 'success') {
+        await new Promise(resolve => { window.__releaseAuth = resolve; });
+    }
     if (url === '/auth/me') return { user: window.__profileUser };
-    if (url === '/competitions' || url === '/sso/student-accounts') return [];
-    if (url === '/paas-v2/platforms') return [];
+    if (mode === 'maintenance' && method === 'GET' && url === '/sso-config') {
+        return [{ id: 'fixture-java', configData: { method: 'java' } }];
+    }
+    if (mode === 'maintenance' && method === 'PUT' && url === '/competitions/73') {
+        configuredJavaCard = { ...configuredJavaCard, ...body };
+        return { success: true };
+    }
+    if (url === '/competitions' && mode === 'maintenance') return [
+        { id: 71, title: 'Java 实训', url: 'https://fixture.example/java', ssoMethod: 'java', maintenance: unconfiguredMaintenance },
+        { id: 72, title: '直达实训', url: 'https://fixture.example/direct', ssoMethod: 'direct' },
+        {
+            ...configuredJavaCard,
+            maintenance: {
+                delete: configuredJavaCard.classDeleteMapping?.enabled ? null : missingDeleteBinding,
+                repair: null,
+                initialize: null
+            }
+        }
+    ];
+    if (url === '/competitions' && mode === 'agent-modules') {
+        const links = [...moduleFixtureLinks, { id: 90, title: '普通竞赛', ssoMethod: 'java' }];
+        if (scenario.get('deferCatalog') === '1') {
+            await new Promise(resolve => { window.__releaseCatalog = resolve; });
+        }
+        return links;
+    }
+    if (url === '/competitions') return [];
+    if (url === '/sso/student-accounts') return [];
+    if (url === '/paas-v2/platforms') return mode === 'agent-modules' ? moduleFixturePlatforms : [];
     if (url.startsWith('/paas-v2/catalog')) return { tasks: scenario.get('largeCatalog') === '1'
         ? Array.from({ length: 500 }, (_, index) => ({ title: `Fixture task ${index}`, plugFlag: `task-${index}`, answerType: '1', cover: `https://covers.example/${index}.png` }))
         : [{ title: 'Fixture task', plugFlag: 'task-1', answerType: '1' }] };
@@ -70,9 +159,47 @@ function AuthFixture() {
     return <p data-testid="session-user">{window.__session.currentUser?.username || 'anonymous'}</p>;
 }
 
-const mode = scenario.get('mode');
-if (mode === 'app' || mode === 'auth') {
+window.__agentPopups = [];
+if (scenario.get('mode') === 'agent-score') {
+    window.open = () => {
+        const popup = {
+            document: document.implementation.createHTMLDocument('Fixture popup'),
+            closed: false,
+            close() { this.closed = true; },
+            location: { replace(url) { popup.url = url; } }
+        };
+        window.__agentPopups.push(popup);
+        return popup;
+    };
+}
+
+function AgentScoreFixture() {
+    const [links, setLinks] = useState([{
+        id: 42, title: 'Fixture agent task', ssoMethod: 'paasV2',
+        agentResult: scenario.get('legacyProgress') === '1' ? { status: 'in_progress', score: null } : null
+    }]);
+    const { agentScoreStates, refreshAgentTaskScore, handleResetAgentTask, trackAgentTaskReturn } = useAgentTaskResults({
+        token: 'fixture-token', userId: window.__profileUser.id, links, setLinks, fetchLinks: async () => {}
+    });
+    const { handleOpenCompetition, openingCompetitionKeys } = useCompetitionActions({
+        token: 'fixture-token', currentUser: window.__profileUser, setLinks, refreshAgentTaskScore, trackAgentTaskReturn
+    });
+    const link = links[0];
+    const scoreState = agentScoreStates[link.id];
+    const openTask = (card, role, target, options) => {
+        window.__calls.push({ action: 'open-agent', cardId: card.id, role, target, options });
+        return handleOpenCompetition(card, role, target, options);
+    };
+    return <AgentTaskCard link={link} scoreResult={scoreState?.result} scoreLoading={scoreState?.loading}
+        scoreError={scoreState?.error} resetting={scoreState?.resetting} onRefreshScore={refreshAgentTaskScore}
+        onOpen={openTask} onReset={handleResetAgentTask}
+        openingCompetitionKeys={openingCompetitionKeys} />;
+}
+
+if (['app', 'auth', 'agent-score', 'agent-modules', 'maintenance'].includes(mode) && scenario.get('signedOut') !== '1') {
     localStorage.setItem('authToken', 'fixture-token');
     localStorage.setItem('authUser', JSON.stringify(window.__profileUser));
 }
-createRoot(document.getElementById('root')).render(mode === 'profile' ? <ProfileFixture /> : mode === 'platform' ? <PlatformFixture /> : mode === 'auth' ? <AuthFixture /> : <App />);
+const fixtures = { profile: ProfileFixture, platform: PlatformFixture, auth: AuthFixture, 'agent-score': AgentScoreFixture };
+const Fixture = fixtures[mode] || App;
+createRoot(document.getElementById('root')).render(<Fixture />);

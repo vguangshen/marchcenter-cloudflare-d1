@@ -1,17 +1,7 @@
 export const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
 // R2 operations do not accept an AbortSignal; stop waiting when the batch ends.
-export async function waitForCoverOperation(operation, signal) {
-    if (signal?.aborted) throw signal.reason;
-    if (!signal) return operation();
-    let abort;
-    const canceled = new Promise((_, reject) => {
-        abort = () => reject(signal.reason);
-        signal.addEventListener('abort', abort, { once: true });
-    });
-    try { return await Promise.race([operation(), canceled]); }
-    finally { signal.removeEventListener('abort', abort); }
-}
+export { waitForSignal as waitForCoverOperation } from './requestDeadline.js';
 
 /** Read at most the cover budget and cancel upstream before retaining extra chunks. */
 export async function readLimitedCover(response, signal) {

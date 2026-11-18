@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { api } from '../utils/api';
 import { confirmAction, notify } from '../utils/uiFeedback';
 import { renderLaunchWindow } from '../utils/launchWindow';
+import { SSO_LAUNCH_TIMEOUT_MS, SSO_REPAIR_TIMEOUT_MS, SSO_RESPONSE_GRACE_MS } from '../constants/ssoTiming.js';
 
 const EMPTY_PANEL = Object.freeze({
     visible: false, step: 0, title: '', message: '', error: null, linkId: null, launchUrl: null
@@ -35,12 +36,16 @@ export function useCompetitionActions({
     setLinks,
     studentAccountsByCard,
     setStudentAccountsByCard,
-    trackAgentTaskReturn
+    trackAgentTaskReturn,
+    refreshAgentTaskScore,
+    refreshCompetitionBindings
 }) {
     const [createPanel, setCreatePanel] = useState(EMPTY_PANEL);
     const [creatingStudentCardId, setCreatingStudentCardId] = useState(null);
     const [deletingStudentKey, setDeletingStudentKey] = useState(null);
     const [classActionKey, setClassActionKey] = useState(null);
+    const [repairFailures, setRepairFailures] = useState(null);
+    const repairFailuresByCard = repairFailures?.token === token ? repairFailures?.cards : null;
     const [openingCompetitionKeys, setOpeningCompetitionKeys] = useState(() => new Set());
     const openingCompetitionRef = useRef(new Set());
 
@@ -155,49 +160,70 @@ export function useCompetitionActions({
 
     const handleRepairAccountReadiness = async (link) => {
         if (!token || classActionKey) return;
-        const isJavaResync = link.ssoMethod === 'java';
-        const platformLabel = isJavaResync ? 'Java' : '.NET';
+        const platformLabel = link.ssoMethod === 'java' ? 'Java' : link.ssoMethod === 'net' ? '.NET' : '竞赛';
+        const targets = repairFailuresByCard?.[link.id];
         if (!await confirmAction({
             title: `修复 ${platformLabel} 平台登录`,
-            message: '将立即重新同步教师、主学生和附加学生账号。这不会打开平台、删除班级或清除业务数据。',
-            confirmText: '立即修复'
+            message: targets ? `将重新同步上次失败的 ${targets.length} 个账号。` : '将重新同步教师、主学生和附加学生账号。',
+            confirmText: targets ? '重试同步' : '立即修复'
         })) return;
+        if (localStorage.getItem('authToken') !== token) return;
         setClassActionKey(`repair:${link.id}`);
         try {
-            await api.post(`/sso/account-readiness/${link.id}/repair`, {}, {
+            const result = await api.post(`/sso/account-readiness/${link.id}/repair`, targets ? { targets } : {}, {
                 fallback: `${platformLabel} 登录修复失败`,
                 retry: 0,
-                timeoutMs: 150_000
+                timeoutMs: SSO_REPAIR_TIMEOUT_MS + SSO_RESPONSE_GRACE_MS
             });
+            if (localStorage.getItem('authToken') !== token) return;
+            const repaired = Array.isArray(result?.repaired) ? result.repaired : [];
+            const failed = Array.isArray(result?.failed) ? result.failed : [];
+            const teacherReady = repaired.some(target => target.loginRole === 'teacher');
+            const studentIndexes = new Set(repaired.filter(target => target.loginRole === 'student').map(target => target.studentIndex));
             setLinks(previous => previous.map(item => item.id === link.id
-                ? { ...item, teacherReady: 1, studentReady: 1 }
+                ? { ...item, teacherReady: teacherReady ? 1 : item.teacherReady, studentReady: studentIndexes.has(1) ? 1 : item.studentReady }
                 : item));
             const cardKey = String(link.id);
             setStudentAccountsByCard(previous => ({
                 ...previous,
-                [cardKey]: (previous[cardKey] || []).map(account => ({
-                    ...account,
-                    platformReady: 1
-                }))
+                [cardKey]: (previous[cardKey] || []).map(account => studentIndexes.has(Number(account.studentIndex))
+                    ? { ...account, platformReady: 1 } : account)
             }));
-            notify(`${platformLabel} 账号同步完成，可再次尝试教师端或学生端登录`, 'success');
+            setRepairFailures(previous => ({ token, cards: {
+                ...(previous?.token === token ? previous.cards : {}),
+                [link.id]: failed.length ? failed.map(({ loginRole, studentIndex }) => ({ loginRole, studentIndex })) : undefined
+            } }));
+            if (link.manualCredentialActive && link.restoreOriginalPasswordBeforeSso) void refreshCompetitionBindings?.();
+            if (failed.length) {
+                notify(`已同步 ${repaired.length} 个账号，${failed.length} 个待重试。可从系统维护重试失败账号`, 'warning');
+            } else {
+                notify(`${platformLabel} 账号同步完成`, 'success');
+            }
         } catch (error) {
+            if (localStorage.getItem('authToken') !== token) return;
+            if (targets && error.status === 400) setRepairFailures(previous => ({ token, cards: { ...previous?.cards, [link.id]: undefined } }));
             notify(error.message || '重新校验准备失败', 'error');
         } finally {
             setClassActionKey(null);
         }
     };
 
-    const markAsExecuted = async (id) => {
+    const markAsExecuted = async (id, { agentTask = false } = {}) => {
         try {
             await api.post(`/competitions/${id}/complete`, {}, { fallback: '状态记录失败', retry: 0 });
-            setLinks(previous => previous.map(card => card.id === id ? { ...card, has_executed: 1 } : card));
         } catch (error) {
-            notify(error.message || '状态记录失败', 'warning');
+            if (localStorage.getItem('authToken') === token) notify(error.message || '状态记录失败', 'warning');
+            if (!agentTask) return;
         }
+        if (localStorage.getItem('authToken') !== token) return;
+        setLinks(previous => previous.map(card => {
+            if (card.id !== id) return card;
+            const clearUncheckedScore = agentTask && Number(card.has_executed) !== 1 && card.agentResult?.status === 'in_progress';
+            return { ...card, has_executed: 1, ...(clearUncheckedScore && { agentResult: null }) };
+        }));
     };
 
-    const handleOpenCompetition = async (link, loginRole = 'student', studentTarget = null) => {
+    const handleOpenCompetition = async (link, loginRole = 'student', studentTarget = null, { scoreDetails = false } = {}) => {
         if (!token) {
             setCreatePanel({
                 visible: true, step: 0, title: link.title, message: '',
@@ -213,14 +239,16 @@ export function useCompetitionActions({
         openingCompetitionRef.current.add(requestKey);
         setOpeningCompetitionKeys(previous => new Set(previous).add(requestKey));
         let launchWindow = null;
+        let launchController;
+        let windowMonitor;
         const openLaunchWindow = () => {
             const opened = window.open('about:blank', '_blank');
             if (!opened) throw new Error('浏览器阻止了新窗口，请允许本站打开弹窗后重试');
             try { opened.opener = null; } catch { /* best effort */ }
             try {
                 renderLaunchWindow(opened, {
-                    title: loginRole === 'expert' ? '正在进入评委端' : '正在进入竞赛平台',
-                    message: loginRole === 'expert'
+                    title: scoreDetails ? '正在打开得分详情' : loginRole === 'expert' ? '正在进入评委端' : '正在进入竞赛平台',
+                    message: scoreDetails ? '正在确认大渔工坊的任务状态…' : loginRole === 'expert'
                         ? '正在绑定所选学生并获取评委票据…'
                         : '正在同步账号并准备免密登录…',
                     tone: loginRole === 'expert' ? 'violet' : 'indigo'
@@ -293,12 +321,26 @@ export function useCompetitionActions({
                     manualCredentialEnabled && link.restoreOriginalPasswordBeforeSso && link.manualCredentialActive
                 );
                 launchWindow = openLaunchWindow();
+                if (scoreDetails) {
+                    const result = await refreshAgentTaskScore(link);
+                    if (!result) throw new Error('暂时无法确认任务状态，请重试');
+                    if (result.status !== 'completed') {
+                        launchWindow.close();
+                        notify(result.status === 'scoring' ? '任务正在评分，请稍后刷新得分' : '任务尚未完成，请继续任务', 'warning');
+                        return;
+                    }
+                    if (launchWindow.closed) throw new Error('详情窗口已被关闭，请重试');
+                }
                 if (!accountAlreadyReady || needsPasswordRestore) {
                     setCreatePanel({
                         visible: true, step: 1, title: link.title,
                         message: '正在检查平台连接…', error: null, linkId: link.id
                     });
                 }
+                launchController = new AbortController();
+                windowMonitor = window.setInterval(() => {
+                    if (launchWindow.closed || localStorage.getItem('authToken') !== token) launchController.abort();
+                }, 500);
                 const data = await api.stream('/sso/execute/stream', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -307,7 +349,8 @@ export function useCompetitionActions({
                         configId: link.ssoConfigId || null,
                         context: { loginRole, studentIndex }
                     }),
-                    timeoutMs: 90_000,
+                    signal: launchController.signal,
+                    timeoutMs: SSO_LAUNCH_TIMEOUT_MS + SSO_RESPONSE_GRACE_MS,
                     fallback: 'SSO 执行失败',
                     retry: 0
                 }, ({ event, data: eventData }) => {
@@ -318,6 +361,12 @@ export function useCompetitionActions({
                         ...previous, step, message: eventData.message || previous.message
                     }));
                 });
+                window.clearInterval(windowMonitor);
+                if (localStorage.getItem('authToken') !== token) {
+                    launchWindow.close();
+                    clearCreatePanel();
+                    return;
+                }
                 if (!data?.success || (!data.redirectUrl && !data.postForm)) throw new Error('平台接口未返回有效的登录地址');
                 if (!isAdditionalStudent) {
                     const readyField = loginRole === 'teacher' ? 'teacherReady' : 'studentReady';
@@ -336,13 +385,15 @@ export function useCompetitionActions({
                     }));
                 }
                 clearCreatePanel();
+                if (data.passwordRestored) void refreshCompetitionBindings?.();
                 if (data.postForm) submitPostForm(launchWindow, data.postForm);
                 else navigateLaunchWindow(launchWindow, data.redirectUrl);
-                if (link.ssoMethod === 'paasV2') trackAgentTaskReturn?.(link);
-                // The workflow-status write is bookkeeping only. Start the
-                // vendor navigation first so D1 latency cannot delay the
-                // teacher/student entering the platform.
-                void markAsExecuted(link.id);
+                if (link.ssoMethod === 'paasV2') {
+                    if (Number(link.has_executed) === 1 || scoreDetails) trackAgentTaskReturn?.(link);
+                    await markAsExecuted(link.id, { agentTask: true });
+                } else {
+                    void markAsExecuted(link.id);
+                }
                 return;
             }
             if (link.url) {
@@ -353,16 +404,21 @@ export function useCompetitionActions({
             if (launchWindow && !launchWindow.closed) {
                 try { launchWindow.close(); } catch { /* already closed */ }
             }
+            if (launchController?.signal.aborted) {
+                clearCreatePanel();
+                return;
+            }
             setCreatePanel(previous => ({
                 ...previous,
                 visible: true,
                 step: previous.linkId === link.id ? previous.step || 1 : 1,
                 title: link.title,
                 message: previous.linkId === link.id ? previous.message : '',
-                error: `SSO 失败：${error.message}`,
+                error: `${scoreDetails ? '得分详情打开失败' : 'SSO 失败'}：${error.message}`,
                 linkId: link.id
             }));
         } finally {
+            window.clearInterval(windowMonitor);
             openingCompetitionRef.current.delete(requestKey);
             setOpeningCompetitionKeys(previous => {
                 const next = new Set(previous);
@@ -385,6 +441,7 @@ export function useCompetitionActions({
             setLinks(previous => previous.map(item => item.id === link.id
                 ? { ...item, manualCredentialActive: 1 }
                 : item));
+            if (link.restoreOriginalPasswordBeforeSso) void refreshCompetitionBindings?.();
         }
         return data.credential || null;
     };
@@ -455,6 +512,7 @@ export function useCompetitionActions({
         creatingStudentCardId,
         deletingStudentKey,
         classActionKey,
+        repairFailuresByCard,
         openingCompetitionKeys,
         handleCreateStudent,
         handleDeleteStudent,
@@ -462,7 +520,6 @@ export function useCompetitionActions({
         handleInitializeClass,
         handleRepairAccountReadiness,
         handleRestoreClass,
-        handleUnsupportedClassDelete: () => notify('该接入方式不支持删除班级', 'warning'),
         handleOpenCompetition,
         handleRequestManualCredential,
         handleOpenAdminEntry

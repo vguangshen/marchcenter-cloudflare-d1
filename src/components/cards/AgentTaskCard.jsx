@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Bot, Edit2, Trash2, Loader2, Sparkles, ExternalLink, RotateCcw, RefreshCw, Award } from 'lucide-react';
+import React from 'react';
+import { Bot, Edit2, Trash2, Loader2, Sparkles, ExternalLink, RotateCcw, RefreshCw, Award, ClipboardList } from 'lucide-react';
 import { agentPlatformThemeStyle } from '../../utils/paasV2Platforms';
 
 const scoreFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
@@ -27,33 +27,34 @@ const AgentTaskCard = ({
     scoreResult = link.agentResult,
     scoreLoading = false,
     scoreError = '',
+    resetting = false,
     openingCompetitionKeys = new Set(),
     isCardEditMode = false
 }) => {
     const isOpening = openingCompetitionKeys.has(`${link.id}:student:`);
     const hasEntered = Number(link.has_executed) === 1;
-    const [resetting, setResetting] = useState(false);
     const cover = link.paasV2Cover || link.cover || '';
     const status = scoreResult?.status;
-    const hasScore = status === 'completed' && Number.isFinite(scoreResult.score);
-    const scoreStatus = scoreError ? '查分失败' : scoreLoading ? '查询中' : status === 'scoring' ? '评分中'
+    const isCompleted = status === 'completed';
+    const hasStarted = hasEntered || isCompleted || status === 'scoring';
+    const hasScore = isCompleted && Number.isFinite(scoreResult.score);
+    const scoreStatus = !hasStarted ? '未开始' : scoreError ? '查分失败' : scoreLoading ? '查询中' : status === 'scoring' ? '评分中'
         : status === 'in_progress' ? '未完成' : status === 'completed' ? '暂无得分' : '未查分';
     const refreshLabel = scoreLoading ? '查询中' : scoreError ? '重试查分' : scoreResult ? '刷新得分' : '查询得分';
-    const openLabel = isOpening ? '进入中' : status === 'completed' ? '查看智能体任务'
-        : hasEntered || status === 'scoring' ? '继续智能体任务' : '进入智能体任务';
+    const openLabel = isCompleted ? (isOpening ? '正在打开详情' : '得分详情') : isOpening ? '进入中'
+        : hasStarted ? '继续智能体任务' : '进入智能体任务';
 
     const openTask = event => {
         event.preventDefault();
         event.stopPropagation();
-        if (onOpen) onOpen(link, 'student', null);
+        if (isCompleted) onOpen?.(link, 'student', null, { scoreDetails: true });
+        else onOpen?.(link, 'student', null);
     };
 
-    const resetTask = async event => {
+    const resetTask = event => {
         event.preventDefault();
         event.stopPropagation();
-        if (!onReset || resetting) return;
-        setResetting(true);
-        try { await onReset(link); } finally { setResetting(false); }
+        onReset?.(link);
     };
 
     return (
@@ -92,9 +93,10 @@ const AgentTaskCard = ({
                             ) : (
                                 <span className={`text-[11px] font-semibold ${scoreError ? 'text-rose-700 dark:text-rose-300' : status === 'scoring' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}`}>{scoreStatus}</span>
                             )}
+                            {isCompleted && <span className="agent-task-badge rounded-full px-1.5 py-0.5 text-[10px] font-semibold">已完成</span>}
                         </div>
-                        {onRefreshScore && (
-                            <button type="button" onClick={() => onRefreshScore(link)} disabled={scoreLoading || resetting} aria-busy={scoreLoading} className="mc-button mc-button--ghost agent-task-score-action ml-auto !min-h-8 !gap-1 !rounded-lg !px-1.5 !py-1 !text-[10px]">
+                        {hasStarted && onRefreshScore && (
+                            <button type="button" onClick={() => onRefreshScore(link)} disabled={scoreLoading || resetting || isOpening} aria-busy={scoreLoading} className="mc-button mc-button--ghost agent-task-score-action ml-auto !min-h-8 !gap-1 !rounded-lg !px-1.5 !py-1 !text-[10px]">
                                 <RefreshCw aria-hidden="true" className={`h-3 w-3 shrink-0 ${scoreLoading ? 'animate-spin' : ''}`} />
                                 {refreshLabel}
                             </button>
@@ -102,13 +104,13 @@ const AgentTaskCard = ({
                     </div>
                     <div className="mt-2 flex min-w-0 items-center gap-1.5">
                         {onReset && (
-                            <button type="button" onClick={resetTask} disabled={resetting || isOpening || scoreLoading} aria-busy={resetting} className="mc-button mc-button--secondary mc-button--compact !min-h-10 shrink-0 !rounded-xl !px-2 !text-[11px]">
+                            <button type="button" onClick={resetTask} disabled={resetting || isOpening} aria-busy={resetting} className="mc-button mc-button--secondary mc-button--compact !min-h-10 shrink-0 !rounded-xl !px-2 !text-[11px]">
                                 {resetting ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />}
                                 {resetting ? '重置中' : '重置任务'}
                             </button>
                         )}
-                        <button type="button" onClick={openTask} disabled={isOpening || resetting} aria-busy={isOpening} title={openLabel} className="mc-button mc-button--accent agent-task-enter-button !min-h-10 min-w-0 flex-1 !gap-1.5 !rounded-xl !px-2 !text-[11px] !font-black text-white shadow-sm">
-                            {isOpening ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />}
+                        <button type="button" onClick={openTask} disabled={isOpening || resetting || (isCompleted && scoreLoading)} aria-busy={isOpening} title={openLabel} className={`mc-button ${isCompleted ? 'agent-task-details-button' : 'mc-button--accent agent-task-enter-button text-white shadow-sm'} !min-h-10 min-w-0 flex-1 !gap-1.5 !rounded-xl !px-2 !text-[11px] !font-black`}>
+                            {isOpening ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 animate-spin" /> : isCompleted ? <ClipboardList aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /> : <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />}
                             <span className="truncate">{openLabel}</span>
                         </button>
                     </div>

@@ -33,3 +33,17 @@ test('the health contract stays unchanged and version does not accept writes', a
     const write = await configured.miniflare.dispatchFetch('http://marchcenter.local/api/version', { method: 'POST' });
     assert.equal(write.status, 404);
 });
+
+test('readiness depends on the current D1 schema while liveness remains available', async () => {
+    const read = () => unconfigured.miniflare.dispatchFetch('http://marchcenter.local/api/ready');
+    const available = await read();
+    assert.equal(available.status, 200);
+    assert.equal(available.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(await available.json(), { ready: true });
+    await unconfigured.run('DROP TABLE user_agent_task_results');
+    const unavailable = await read();
+    assert.equal(unavailable.status, 503);
+    assert.deepEqual(await unavailable.json(), { ready: false });
+    const health = await unconfigured.miniflare.dispatchFetch('http://marchcenter.local/api/health');
+    assert.equal(health.status, 200);
+});

@@ -15,7 +15,8 @@ before(async () => {
         const request = (method, url, body) => window.__testApi(method, url, body, localStorage.getItem('authToken'));
         export const api = { get: url => request('GET',url), post: (url,body) => request('POST',url,body),
             patch: (url,body) => request('PATCH',url,body), put: (url,body) => request('PUT',url,body),
-            delete: url => request('DELETE',url), blob: url => request('GET',url), stream: url => request('POST',url) };
+            delete: url => request('DELETE',url), blob: url => request('GET',url),
+            stream: (url, options) => request('POST', url, options?.body ? JSON.parse(options.body) : undefined) };
         export const onUnauthorized = listener => { window.addEventListener('fixture-unauthorized', listener); return () => window.removeEventListener('fixture-unauthorized', listener); };
         export const apiFetch = async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } });
     `;
@@ -138,6 +139,321 @@ test('SSO settings arriving after the task modal opens preserve selected tasks a
     } finally { await page.close(); }
 });
 
+test('agent task starts unstarted, shows score actions after entering, and restores initial actions after reset', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=agent-score`);
+        const enter = page.getByRole('button', { name: '进入智能体任务', exact: true });
+        const query = page.getByRole('button', { name: '查询得分', exact: true });
+        await page.getByText('未开始', { exact: true }).waitFor();
+        assert.equal(await query.count(), 0);
+        await enter.click();
+        await page.getByText('未查分', { exact: true }).waitFor();
+        await page.getByRole('button', { name: '继续智能体任务', exact: true }).waitFor();
+        assert.equal(await query.isEnabled(), true);
+        assert.equal(await page.evaluate(() => {
+            window.dispatchEvent(new Event('focus'));
+            return window.__calls.some(call => call.url === '/paas-v2/result');
+        }), false);
+        assert.equal(await page.getByRole('button', { name: '得分详情', exact: true }).count(), 0);
+
+        await page.evaluate(() => { window.__agentResult = { status: 'scoring', score: null }; });
+        await query.click();
+        await page.getByText('评分中', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('button', { name: '得分详情', exact: true }).count(), 0);
+
+        await page.evaluate(() => { window.__agentResult = { status: 'completed', score: 0 }; });
+        await page.getByRole('button', { name: '刷新得分', exact: true }).click();
+        const scoreDetails = page.getByRole('button', { name: '得分详情', exact: true });
+        await scoreDetails.waitFor();
+        assert.match(await page.getByRole('status').textContent(), /0\s*分/);
+        assert.equal(await page.getByRole('button', { name: '继续智能体任务', exact: true }).count(), 0);
+        await scoreDetails.click();
+        await page.waitForFunction(() => window.__agentPopups.filter(popup => popup.url).length === 2);
+        assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.action === 'open-agent')), [
+            { action: 'open-agent', cardId: 42, role: 'student', target: null, options: undefined },
+            { action: 'open-agent', cardId: 42, role: 'student', target: null, options: { scoreDetails: true } }
+        ]);
+        const launchCalls = await page.evaluate(() => window.__calls.filter(call => call.url === '/sso/execute/stream'));
+        assert.equal(launchCalls.length, 2);
+        assert.deepEqual(launchCalls[1].body, launchCalls[0].body);
+
+        await page.evaluate(() => { window.__agentResult = { status: 'completed', score: null }; });
+        await page.getByRole('button', { name: '刷新得分', exact: true }).click();
+        await page.getByText('暂无得分', { exact: true }).waitFor();
+        assert.equal(await scoreDetails.isEnabled(), true);
+
+        await page.evaluate(() => { window.__agentResult = { status: 'in_progress', score: null }; });
+        await scoreDetails.click();
+        await page.getByRole('button', { name: '继续智能体任务', exact: true }).waitFor();
+        await page.waitForFunction(() => window.__agentPopups.length === 3 && window.__agentPopups[2].closed);
+        assert.equal(await page.evaluate(() => window.__calls.filter(call => call.url === '/sso/execute/stream').length), 2);
+
+        await page.getByRole('button', { name: '重置任务', exact: true }).click();
+        await enter.waitFor();
+        await page.getByText('未开始', { exact: true }).waitFor();
+        assert.equal(await scoreDetails.count(), 0);
+        assert.equal(await query.count(), 0);
+    } finally { await page.close(); }
+});
+
+test('a stale progress cache and failed launch or reset preserve the appropriate score actions', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=agent-score&legacyProgress=1`);
+        const enter = page.getByRole('button', { name: '进入智能体任务', exact: true });
+        const query = page.getByRole('button', { name: '查询得分', exact: true });
+        await page.evaluate(() => { window.__failAgentLaunch = true; });
+        await enter.click();
+        await page.waitForFunction(() => window.__agentPopups[0]?.closed);
+        await page.getByText('未开始', { exact: true }).waitFor();
+        assert.equal(await query.count(), 0);
+
+        await page.evaluate(() => { window.__failAgentLaunch = false; });
+        await enter.click();
+        await page.getByText('未查分', { exact: true }).waitFor();
+        await page.evaluate(() => { window.__agentResult = { status: 'scoring', score: null }; });
+        await page.getByRole('button', { name: '继续智能体任务', exact: true }).click();
+        await page.waitForFunction(() => window.__agentPopups[2]?.url);
+        await page.evaluate(() => { window.dispatchEvent(new Event('focus')); });
+        await page.getByText('评分中', { exact: true }).waitFor();
+        await page.evaluate(() => {
+            window.__agentResult = { status: 'completed', score: 88 };
+            window.__failAgentReset = true;
+        });
+        await page.getByRole('button', { name: '刷新得分', exact: true }).click();
+        const scoreDetails = page.getByRole('button', { name: '得分详情', exact: true });
+        await scoreDetails.waitFor();
+        await page.getByRole('button', { name: '重置任务', exact: true }).click();
+        await page.waitForFunction(() => window.__notifications.some(notification => notification.message === 'Fixture reset failed'));
+        assert.equal(await scoreDetails.isEnabled(), true);
+        assert.match(await page.getByRole('status').textContent(), /88\s*分/);
+        assert.equal(await enter.count(), 0);
+    } finally { await page.close(); }
+});
+
+test('agent project filters are scoped to their platform and include unclassified cards', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=agent-modules`);
+        const platforms = page.locator('section.agent-task-module');
+        const analytics = platforms.filter({ has: page.getByRole('heading', { name: /数据分析方法与工具应用/ }) });
+        const other = platforms.filter({ has: page.getByRole('heading', { name: /独立平台/ }) });
+        const legacy = platforms.filter({ has: page.getByRole('heading', { name: /历史平台/ }) });
+        const market = analytics.getByRole('button', { name: /^市场分析/ });
+        await market.waitFor();
+        await legacy.getByRole('heading', { name: '历史任务', exact: true }).waitFor();
+        assert.match(await market.textContent(), /2\s*$/);
+        assert.match(await analytics.getByRole('button', { name: /^全部/ }).textContent(), /4\s*$/);
+        assert.deepEqual(await analytics.getByRole('heading', { level: 4 }).allTextContents(), [
+            '市场分析', '供应链数据分析', '其他任务'
+        ]);
+        assert.deepEqual(await analytics.getByRole('article').getByRole('heading').allTextContents(), [
+            '乙类指标解读', '甲类指标解读', '仓储任务', '补充练习'
+        ]);
+        assert.equal(await legacy.getByRole('button', { name: /^(全部|其他任务)/ }).count(), 0);
+        assert.equal(await legacy.getByRole('article').count(), 1);
+
+        await market.click();
+        assert.equal(await market.getAttribute('aria-pressed'), 'true');
+        assert.equal(await analytics.getByRole('article').count(), 2);
+        assert.equal(await analytics.locator('article').count(), 2);
+        assert.equal(await other.getByRole('article').count(), 2);
+        assert.equal(await analytics.getByRole('button', { name: '得分详情', exact: true }).count(), 1);
+
+        await analytics.getByRole('button', { name: /^其他任务/ }).click();
+        assert.deepEqual(await analytics.getByRole('article').getByRole('heading').allTextContents(), ['补充练习']);
+
+        const searchBox = page.getByPlaceholder('搜索竞赛或类目...').first();
+        await searchBox.fill('供应链数据分析');
+        await analytics.getByRole('heading', { name: '仓储任务', exact: true }).waitFor();
+        assert.equal(await analytics.getByRole('article').count(), 1);
+        assert.equal(await analytics.getByRole('heading', { name: '补充练习', exact: true }).count(), 0);
+    } finally { await page.close(); }
+});
+
+const readMaintenanceCalls = page => page.evaluate(() => window.__calls.filter(call =>
+    call.url === '/competitions' || call.url.startsWith('/sso') || call.method !== 'GET'
+));
+
+test('maintenance has a keyboard entry and touch explanation for disabled actions', async () => {
+    const page = await browser.newPage({ hasTouch: true, reducedMotion: 'reduce' });
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const open = page.getByRole('button', { name: '打开系统维护', exact: true }).first();
+        await open.focus();
+        await page.keyboard.press('Enter');
+        const dialog = page.getByRole('dialog', { name: '系统维护' });
+        const info = dialog.getByRole('button', { name: '查看删除班级说明' });
+        const disabled = dialog.getByRole('button', { name: '删除班级', exact: true });
+        const tooltip = dialog.getByRole('tooltip').filter({ hasText: '班级删除映射未配置' });
+        await info.waitFor();
+        assert.equal(await disabled.isDisabled(), true);
+        assert.equal(await tooltip.isVisible(), false);
+        const before = await readMaintenanceCalls(page);
+        await info.tap();
+        await tooltip.waitFor();
+        assert.deepEqual(await readMaintenanceCalls(page), before);
+        await dialog.getByRole('button', { name: '取消', exact: true }).focus();
+        await page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'detached' });
+        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开系统维护');
+    } finally { await page.close(); }
+});
+
+test('maintenance retry sends only the accounts that failed to sync', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const title = page.locator('h3').filter({ hasText: /^已绑定实训$/ });
+        const card = page.locator('.contest-card-shell').filter({ has: title });
+        const open = card.getByRole('button', { name: '打开系统维护' });
+        await open.click();
+        await card.getByRole('button', { name: '修复登录', exact: true }).click();
+        await page.waitForFunction(() => window.__notifications.some(item => item.message.includes('1 个待重试')));
+        const retry = card.getByRole('button', { name: '重试失败账号', exact: true });
+        if (!await retry.isVisible()) await open.click();
+        await retry.click();
+        await page.waitForFunction(() => window.__notifications.some(item => item.message.includes('账号同步完成')));
+        assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.url.endsWith('/repair')).map(call => call.body)), [
+            {}, { targets: [{ loginRole: 'student', studentIndex: 1 }] }
+        ]);
+    } finally { await page.close(); }
+});
+
+test('long press shows maintenance states with explanations on hover and makes no additional request', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const title = page.getByRole('heading', { name: 'Java 实训', exact: true });
+        const readyTitle = page.getByRole('heading', { name: '已绑定实训', exact: true });
+        const actionReasons = [
+            ['删除班级', '班级删除映射未配置'],
+            ['修复登录', '登录修复未绑定平台实例'],
+            ['初始化系统', '系统初始化未绑定平台实例']
+        ];
+        const remove = page.getByRole('button', { name: '删除班级', exact: true });
+        const cancel = page.getByRole('button', { name: '取消', exact: true });
+        await title.waitFor();
+        const beforePress = await readMaintenanceCalls(page);
+        await title.dispatchEvent('pointerdown');
+        await remove.waitFor();
+        await title.dispatchEvent('pointerup');
+        const maintenanceHeading = page.getByText('系统维护', { exact: true });
+        for (const [, reason] of actionReasons) {
+            assert.equal(await page.getByText(reason, { exact: true }).isVisible(), false);
+        }
+        for (const [name, reason] of actionReasons) {
+            const action = page.getByRole('button', { name, exact: true });
+            const tooltip = page.getByRole('tooltip').filter({ hasText: reason });
+            assert.equal(await action.isDisabled(), true);
+            assert.match(await action.getAttribute('class'), /\bbg-slate-200\b/);
+            assert.equal(await action.evaluate(button => document.getElementById(button.getAttribute('aria-describedby'))?.textContent), reason);
+            await action.locator('..').hover();
+            await tooltip.waitFor();
+            assert.equal(await tooltip.textContent(), reason);
+            assert.equal(await page.getByRole('tooltip').count(), 1);
+            await maintenanceHeading.hover();
+            await tooltip.waitFor({ state: 'hidden' });
+            await action.evaluate(button => button.click());
+        }
+        const removeTrigger = remove.locator('..');
+        const removeTooltip = page.getByRole('tooltip').filter({ hasText: actionReasons[0][1] });
+        assert.equal(await removeTrigger.getAttribute('tabindex'), '0');
+        await removeTrigger.focus();
+        await removeTooltip.waitFor();
+        await page.keyboard.press('Escape');
+        await removeTooltip.waitFor({ state: 'hidden' });
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        await removeTooltip.waitFor();
+        await page.keyboard.press('Tab');
+        await removeTooltip.waitFor({ state: 'hidden' });
+        assert.deepEqual(await readMaintenanceCalls(page), beforePress);
+        assert.deepEqual(await page.evaluate(() => window.__notifications), []);
+
+        await cancel.click();
+        await remove.waitFor({ state: 'detached' });
+        await readyTitle.dispatchEvent('pointerdown');
+        await remove.waitFor();
+        await readyTitle.dispatchEvent('pointerup');
+        for (const [name, reason] of actionReasons) {
+            assert.equal(await page.getByRole('button', { name, exact: true }).isEnabled(), true);
+            assert.equal(await page.getByText(reason, { exact: true }).isVisible(), false);
+        }
+        const readiness = page.getByText(/Java\s*账号已同步/);
+        assert.equal(await readiness.isVisible(), false);
+        await page.getByRole('button', { name: '修复登录', exact: true }).hover();
+        await readiness.waitFor();
+        await maintenanceHeading.hover();
+        await readiness.waitFor({ state: 'hidden' });
+        assert.deepEqual(await readMaintenanceCalls(page), beforePress);
+        await remove.click();
+        await page.getByText('班级已从平台删除', { exact: true }).waitFor();
+        assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.method === 'POST')), [
+            { method: 'POST', url: '/sso/class/remove', body: { competitionId: 73 } }
+        ]);
+    } finally { await page.close(); }
+});
+
+test('saving the card binding updates maintenance on the normal catalog refresh', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const title = page.getByRole('heading', { name: '已绑定实训', exact: true });
+        const card = page.locator('.contest-card').filter({ has: title });
+        await title.waitFor();
+        await page.getByRole('button', { name: '编辑', exact: true }).first().click();
+        await card.getByRole('button', { name: '', exact: true }).first().click();
+        const editor = page.getByRole('dialog');
+        const mapping = editor.getByRole('checkbox', { name: /Java 班级删除映射/ });
+        assert.equal(await mapping.isChecked(), true);
+        await mapping.uncheck();
+        await editor.getByRole('button', { name: '保存', exact: true }).click();
+        await editor.waitFor({ state: 'detached' });
+        await page.waitForFunction(() => window.__calls.filter(call => call.url === '/competitions').length === 2);
+        await page.getByRole('button', { name: '完成', exact: true }).first().click();
+        const callsAfterSave = await readMaintenanceCalls(page);
+        assert.equal(callsAfterSave.find(call => call.method === 'PUT' && call.url === '/competitions/73').body.classDeleteMapping.enabled, false);
+
+        await title.dispatchEvent('pointerdown');
+        const remove = page.getByRole('button', { name: '删除班级', exact: true });
+        await remove.waitFor();
+        await title.dispatchEvent('pointerup');
+        assert.equal(await remove.isDisabled(), true);
+        const explanation = page.getByText('班级删除映射未配置', { exact: true });
+        assert.equal(await explanation.isVisible(), false);
+        await remove.locator('..').hover();
+        await explanation.waitFor();
+        assert.equal(await page.getByRole('button', { name: '修复登录', exact: true }).isEnabled(), true);
+        assert.equal(await page.getByRole('button', { name: '初始化系统', exact: true }).isEnabled(), true);
+        assert.deepEqual(await readMaintenanceCalls(page), callsAfterSave);
+    } finally { await page.close(); }
+});
+
+test('long-pressing a direct card shows disabled deletion without starting an SSO request', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const title = page.getByRole('heading', { name: '直达实训', exact: true });
+        const remove = page.getByRole('button', { name: '删除班级', exact: true });
+        await title.waitFor();
+        const beforePress = await readMaintenanceCalls(page);
+        await title.dispatchEvent('pointerdown');
+        await remove.waitFor();
+        await title.dispatchEvent('pointerup');
+        assert.equal(await remove.isDisabled(), true);
+        const explanation = page.getByText('直接跳转不支持删除班级', { exact: true });
+        assert.equal(await explanation.isVisible(), false);
+        await remove.locator('..').hover();
+        await explanation.waitFor();
+        assert.equal(await page.getByRole('button', { name: '修复登录', exact: true }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: '初始化系统', exact: true }).count(), 0);
+        assert.deepEqual(await readMaintenanceCalls(page), beforePress);
+        assert.deepEqual(await page.evaluate(() => window.__notifications), []);
+    } finally { await page.close(); }
+});
+
 test('applying a returned profile does not restart application bootstrap or fetch protected SSO settings', async () => {
     const page = await browser.newPage();
     try {
@@ -155,6 +471,120 @@ test('applying a returned profile does not restart application bootstrap or fetc
         }
         assert.equal(after.filter(url => url === '/sso-config').length, 0);
         assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('authUser')).avatarDataUrl), null);
+    } finally { await page.close(); }
+});
+
+test('a provider return checks only its agent task after auth and catalog load and removes only its callback parameter', async () => {
+    const page = await browser.newPage();
+    try {
+        const nextUrl = `${origin}/?mode=agent-modules&deferCatalog=1&deferAuth=success&agentTaskId=42&source=return#tasks`;
+        const cleanUrl = `${origin}/?mode=agent-modules&deferCatalog=1&deferAuth=success&source=return#tasks`;
+        await page.goto(nextUrl);
+        await page.waitForFunction(() => typeof window.__releaseAuth === 'function');
+        assert.equal(await page.evaluate(() => window.__calls.some(call => call.url === '/paas-v2/result')), false);
+        assert.equal(page.url(), nextUrl);
+        await page.evaluate(() => window.__releaseAuth());
+        await page.waitForFunction(() => typeof window.__releaseCatalog === 'function');
+        assert.equal(await page.evaluate(() => window.__calls.some(call => call.url === '/paas-v2/result')), false);
+        assert.equal(page.url(), nextUrl);
+        await page.evaluate(() => window.__releaseCatalog());
+        const returnedTask = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '甲类指标解读' }) });
+        await returnedTask.getByRole('button', { name: '得分详情', exact: true }).waitFor();
+        assert.match(await returnedTask.getByRole('status').textContent(), /86\.5\s*分/);
+        await page.waitForURL(cleanUrl);
+        assert.deepEqual(await page.evaluate(() => {
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('visibilitychange'));
+            return window.__calls.filter(call => call.url === '/paas-v2/result');
+        }), [{ method: 'POST', url: '/paas-v2/result', body: { competitionId: 42 } }]);
+
+        await page.reload();
+        await page.waitForFunction(() => typeof window.__releaseAuth === 'function');
+        await page.evaluate(() => window.__releaseAuth());
+        await page.waitForFunction(() => typeof window.__releaseCatalog === 'function');
+        await page.evaluate(() => window.__releaseCatalog());
+        await returnedTask.getByRole('heading', { name: '甲类指标解读' }).waitFor();
+        assert.equal(await page.evaluate(() => window.__calls.some(call => call.url === '/paas-v2/result')), false);
+    } finally { await page.close(); }
+});
+
+test('an agent return follows up while scoring, then stops at the final result', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.clock.install();
+        await page.goto(`${origin}/?mode=agent-modules&deferCatalog=1&agentTaskId=42`);
+        await page.waitForFunction(() => typeof window.__releaseCatalog === 'function');
+        await page.evaluate(() => {
+            window.__agentResult = { status: 'scoring', score: null };
+            window.__releaseCatalog();
+        });
+        const task = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '甲类指标解读' }) });
+        await task.getByRole('status').filter({ hasText: '评分中' }).waitFor();
+        await page.evaluate(() => { window.__agentResult = { status: 'completed', score: 91 }; });
+        await page.clock.fastForward(3100);
+        await task.getByRole('button', { name: '得分详情', exact: true }).waitFor();
+        assert.match(await task.getByRole('status').textContent(), /91\s*分/);
+        await page.clock.fastForward(90_000);
+        assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.url === '/paas-v2/result').map(call => call.body.competitionId)), [42, 42]);
+    } finally { await page.close(); }
+});
+
+test('reset cancels the next score check scheduled after an agent return', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.clock.install();
+        await page.goto(`${origin}/?mode=agent-modules&deferCatalog=1&agentTaskId=42`);
+        await page.waitForFunction(() => typeof window.__releaseCatalog === 'function');
+        await page.evaluate(() => {
+            window.__agentResult = { status: 'scoring', score: null };
+            window.__releaseCatalog();
+        });
+        const task = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '甲类指标解读' }) });
+        await task.getByRole('status').filter({ hasText: '评分中' }).waitFor();
+        await task.getByRole('button', { name: '重置任务', exact: true }).click();
+        await page.waitForFunction(() => window.__calls.some(call => call.url === '/paas-v2/reset'));
+        // The reset awaits a catalog reload. Complete it using the normal fixture path.
+        await page.evaluate(() => window.__releaseCatalog());
+        await page.clock.fastForward(90_000);
+        assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.url === '/paas-v2/result').map(call => call.body.competitionId)), [42]);
+    } finally { await page.close(); }
+});
+
+test('a return parameter for an unavailable or non-agent card does not trigger a score lookup', async () => {
+    const page = await browser.newPage();
+    try {
+        const cleanUrl = `${origin}/?mode=agent-modules#tasks`;
+        const invalidIds = [[99999], [90], ['42x'], [42, 51]];
+        for (const taskIds of invalidIds) {
+            const params = new URLSearchParams({ mode: 'agent-modules' });
+            taskIds.forEach(taskId => params.append('agentTaskId', taskId));
+            await page.goto(`${origin}/?${params}#tasks`);
+            await page.waitForURL(cleanUrl);
+            await page.getByRole('heading', { name: '甲类指标解读' }).waitFor();
+            assert.equal(await page.evaluate(() => window.__calls.some(call => call.url === '/paas-v2/result')), false);
+        }
+    } finally { await page.close(); }
+});
+
+test('a provider return waits through a fresh login and looks up the returned task', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        const nextUrl = `${origin}/?mode=agent-modules&signedOut=1&deferCatalog=1&agentTaskId=42`;
+        const cleanUrl = `${origin}/?mode=agent-modules&signedOut=1&deferCatalog=1`;
+        await page.goto(nextUrl);
+        await page.locator('#login-username').fill('fixture-user');
+        assert.equal(page.url(), nextUrl);
+        assert.equal(await page.evaluate(() => window.__calls.some(call => call.url === '/paas-v2/result')), false);
+        await page.locator('#login-password').fill('fixture-password');
+        await page.getByRole('button', { name: '登录', exact: true }).click();
+        await page.waitForFunction(() => typeof window.__releaseCatalog === 'function');
+        assert.equal(page.url(), nextUrl);
+        await page.evaluate(() => window.__releaseCatalog());
+        const returnedTask = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '甲类指标解读' }) });
+        await returnedTask.getByRole('button', { name: '得分详情', exact: true }).waitFor();
+        await page.waitForURL(cleanUrl);
+        assert.deepEqual(await page.evaluate(() => window.__calls
+            .filter(call => call.url === '/paas-v2/result').map(call => call.body)), [{ competitionId: 42 }]);
     } finally { await page.close(); }
 });
 

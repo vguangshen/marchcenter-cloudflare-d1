@@ -5,6 +5,38 @@ import { createProductionHarness } from './helpers/productionHarness.mjs';
 
 const success = data => ({ code: '10000', data });
 
+test('presentation edits preserve entry and score, and rebinding expires both', async () => {
+    const harness = await createProductionHarness();
+    try {
+        const url = 'https://example.invalid/result-task';
+        const configId = await harness.seedConfig({ method: 'paasV2', jumpBaseUrl: url });
+        const data = { title: 'Example task', url, ssoMethod: 'paasV2', paasV2SoftwareUnique: 'fixture', paasV2PlugFlag: 'original-task' };
+        const created = await harness.api('/api/competitions', { body: data });
+        assert.equal(created.status, 200, created.text);
+        const id = created.data.id;
+        const update = values => harness.api(`/api/competitions/${id}`, { method: 'PUT', body: { ...data, ...values } });
+        const current = async () => (await harness.api('/api/competitions')).data.find(card => card.id === id);
+        await harness.run("UPDATE competitions SET paas_v2_answer_type = '2' WHERE id = ?", id);
+        assert.equal((await harness.api(`/api/competitions/${id}/complete`, { body: {} })).status, 200);
+        await harness.run(`INSERT INTO user_agent_task_results (user_id, competition_id, sso_config_id, target_url,
+            task_id, answer_type, software_unique, status, score) VALUES (1, ?, ?, ?, ?, '1', ?, 'completed', 88)`,
+        id, configId, url, data.paasV2PlugFlag, data.paasV2SoftwareUnique);
+        assert.deepEqual((await current()).agentResult, { status: 'completed', score: 88 });
+        const edited = await update({ title: 'New title', description: 'Task introduction' });
+        assert.equal(edited.status, 200, edited.text);
+        assert.equal(edited.data.has_executed, 1);
+        assert.deepEqual((await current()).agentResult, { status: 'completed', score: 88 });
+        const rebound = await update({ paasV2PlugFlag: 'new-task' });
+        assert.equal(rebound.status, 200, rebound.text);
+        assert.equal(rebound.data.has_executed, 0);
+        assert.equal((await current()).agentResult, null);
+        assert.equal((await update({})).status, 200);
+        const restoredBinding = await current();
+        assert.equal(restoredBinding.has_executed, 0);
+        assert.equal(restoredBinding.agentResult, null);
+    } finally { await harness.dispose(); }
+});
+
 test('agent task scores refresh, persist per user and clear after reset', async () => {
     const harness = await createProductionHarness({ officialTokenCacheScope: 'isolate' });
     try {
@@ -31,11 +63,12 @@ test('agent task scores refresh, persist per user and clear after reset', async 
         await harness.run('INSERT INTO user_access_policies (user_id, configured) VALUES (?, 1)', other.id);
         const otherHeaders = { Authorization: `Bearer ${await harness.issueToken(other)}` };
         const query = (headers = {}) => harness.api('/api/paas-v2/result', { body: { competitionId }, headers });
-        const listResult = async (headers = {}) => {
+        const listCard = async (headers = {}) => {
             const response = await harness.api('/api/competitions', { headers });
             assert.equal(response.status, 200, response.text);
-            return response.data.find(card => card.id === competitionId).agentResult;
+            return response.data.find(card => card.id === competitionId);
         };
+        const listResult = async (headers = {}) => (await listCard(headers)).agentResult;
 
         const denied = await query(otherHeaders);
         assert.equal(denied.status, 403);
@@ -60,6 +93,22 @@ test('agent task scores refresh, persist per user and clear after reset', async 
         assert.equal(launch.data.postForm.action, jumpBaseUrl);
         assert.equal(harness.platform.state.requests[0].path, '/agent-results/GetTokenInfo');
 
+        await harness.run(
+            `INSERT INTO user_agent_task_results (user_id, competition_id, sso_config_id, target_url,
+                task_id, answer_type, software_unique, status)
+             SELECT id, ?, ?, ?, ?, ?, ?, 'in_progress' FROM users WHERE id <> ?`,
+            competitionId, configId, jumpBaseUrl, config.plugFlag, config.answerType, config.softwareUnique, other.id
+        );
+        const beforeEntry = await listCard();
+        assert.equal(beforeEntry.has_executed, 0);
+        assert.deepEqual(beforeEntry.agentResult, { status: 'in_progress', score: null });
+        const markEntered = () => harness.api(`/api/competitions/${competitionId}/complete`, { body: {} });
+        const entered = await markEntered();
+        assert.equal(entered.status, 200, entered.text);
+        const afterEntry = await listCard();
+        assert.equal(afterEntry.has_executed, 1);
+        assert.equal(afterEntry.agentResult, null);
+
         const pending = await query();
         assert.equal(pending.status, 200, pending.text);
         assert.match(pending.response.headers.get('cache-control') || '', /no-store/);
@@ -69,6 +118,8 @@ test('agent task scores refresh, persist per user and clear after reset', async 
 
         const completed = await query();
         assert.deepEqual(completed.data, { status: 'completed', score: 81.75 });
+        assert.deepEqual(await listResult(), completed.data);
+        assert.equal((await markEntered()).status, 200);
         assert.deepEqual(await listResult(), completed.data);
         const failure = await query();
         assert.equal(failure.status, 502);
@@ -85,7 +136,9 @@ test('agent task scores refresh, persist per user and clear after reset', async 
         assert.deepEqual(await listResult(), zero.data);
         const reset = await resetTask();
         assert.equal(reset.status, 200, reset.text);
-        assert.equal(await listResult(), null);
+        const afterReset = await listCard();
+        assert.equal(afterReset.has_executed, 0);
+        assert.equal(afterReset.agentResult, null);
         assert.deepEqual(
             harness.platform.state.requests.map(request => request.operationName),
             ['GetTokenInfo', 'GetTaskState', 'GetTaskState', 'GetTrainingScore', 'GetTaskState',

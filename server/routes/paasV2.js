@@ -10,8 +10,10 @@ import { mapCardAddressToOfficialConfig, validateOfficialTransportAddress } from
 import { mapMarchCenterToOfficialParameters, selectOfficialBaseUrl } from '../utils/officialCompat/officialJumpConfig.js';
 import { createOfficialSafeFetch } from '../utils/officialCompat/safeTransport.js';
 import { createPaasV2Adapter, PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
-import { deletePlatformAndTasks, findPlatform, listPlatforms, normalizePlatformInput, parseSavedCatalog } from '../utils/paasV2Platforms.js';
+import { deletePlatformAndTasks, findPlatform, listPlatforms, normalizePlatformInput, parseSavedCatalog, platformKey } from '../utils/paasV2Platforms.js';
+import { parseCatalogPayload, toTaskRows } from '../utils/paasV2Catalog.js';
 import { MAX_COVER_BYTES, readLimitedCover, waitForCoverOperation } from '../utils/coverDownload.js';
+import { createRequestDeadline as deadlineSignal } from '../utils/requestDeadline.js';
 
 const router = express.Router();
 
@@ -31,18 +33,6 @@ const MAX_COVER_BATCH_SIZE = 100;
 const COVER_BATCH_TIMEOUT_MS = 90000;
 const TRANSIENT_COVER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const CACHED_COVER_PATH = /^\/api\/paas-v2\/covers\/[a-f0-9]{32}\.(?:png|jpe?g|webp|gif|avif)$/i;
-
-function deadlineSignal(timeoutMs, externalSignal) {
-    const controller = new AbortController();
-    const abort = () => controller.abort(externalSignal?.reason);
-    if (externalSignal?.aborted) abort();
-    else externalSignal?.addEventListener('abort', abort, { once: true });
-    const timer = setTimeout(() => controller.abort(new DOMException('请求超时', 'TimeoutError')), timeoutMs);
-    return {
-        signal: controller.signal,
-        dispose() { clearTimeout(timer); externalSignal?.removeEventListener('abort', abort); }
-    };
-}
 
 function coverEnhancementTimeout() {
     const configured = Number(getEnv('DAYU_COVER_TIMEOUT_MS', 5000));
@@ -308,32 +298,6 @@ function matchCover(title, plugName, coverMap) {
     return '';
 }
 
-function toTaskRows(data) {
-    const taskJson = Array.isArray(data.taskJson) ? data.taskJson : [];
-    const plugMngJson = Array.isArray(data.plugMngJson) ? data.plugMngJson : [];
-    const taskEnterInfoJson = Array.isArray(data.taskEnterInfoJson) ? data.taskEnterInfoJson : [];
-    const plugByName = new Map(plugMngJson.map(item => [String(item.plugFlag), item]));
-    const taskByPlugFlag = new Map(taskJson.map(item => [String(item.plugId || item.plugFlag), item]));
-    const appByPlugFlag = new Map(taskEnterInfoJson.map(item => [String(item.plugFlag), item]));
-    const keys = [...new Set([...taskByPlugFlag.keys(), ...plugByName.keys(), ...appByPlugFlag.keys()])];
-    return keys.map(plugFlag => {
-        const plug = plugByName.get(plugFlag) || {};
-        const task = taskByPlugFlag.get(plugFlag) || {};
-        const app = appByPlugFlag.get(plugFlag) || {};
-        return {
-            plugFlag,
-            title: task.taskTitle || plug.plugName || plugFlag,
-            plugName: plug.plugName || '',
-            answerType: PAAS_V2_ANSWER_TYPE,
-            trainType: app.trainType ?? null,
-            appType: app.appType ?? null,
-            trainPath: app.trainPath || '',
-            trainJumpPath: app.trainJumpPath || '',
-            moduleId: task.taskModuleId || plug.taskModuleId || null
-        };
-    }).sort((left, right) => String(left.title).localeCompare(String(right.title), 'zh-CN'));
-}
-
 router.get('/platforms', authMiddleware, async (_req, res) => {
     try { return res.json(await listPlatforms()); }
     catch (error) { return res.status(500).json({ error: error.message || '智能体软件列表读取失败' }); }
@@ -408,20 +372,28 @@ router.get('/options', authMiddleware, adminOnly, async (_req, res) => {
     catch (error) { return res.status(500).json({ error: error.message || '软件平台读取失败' }); }
 });
 
-async function fetchPlatformCatalog(softwareUnique, externalSignal) {
+async function fetchPlatformTaskRows(softwareUnique, externalSignal) {
     const catalogDeadline = deadlineSignal(20000, externalSignal);
     let payload;
     try {
         const response = await fetch(SYNC_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `token=${encodeURIComponent(softwareUnique)}`, redirect: 'manual', signal: catalogDeadline.signal });
         if (!response.ok) throw new Error(`任务目录请求失败：HTTP ${response.status}`);
-        try { payload = JSON.parse(await response.text()); } catch { throw new Error('任务目录返回格式无效'); }
+        try {
+            payload = parseCatalogPayload(await response.text());
+        } catch { throw new Error('任务目录返回格式无效'); }
     } finally { catalogDeadline.dispose(); }
     if (String(payload.code) !== '0') throw new Error(payload.msg || '任务目录返回异常');
     if (!payload.data) throw Object.assign(new Error('未找到该 softwareUnique 对应的软件任务目录'), { notFound: true });
+    return toTaskRows(payload.data);
+}
+
+async function fetchPlatformCatalog(softwareUnique, externalSignal) {
+    const tasks = await fetchPlatformTaskRows(softwareUnique, externalSignal);
+    if (!tasks.length) return tasks;
     const enhancementDeadline = deadlineSignal(coverEnhancementTimeout(), externalSignal);
     try {
         const coverIndex = await fetchDayuCoverMap(enhancementDeadline.signal);
-        return await runWithConcurrency(toTaskRows(payload.data), 4, async task => {
+        return await runWithConcurrency(tasks, 4, async task => {
             const hit = coverIndex.byId.get(String(task.plugFlag));
             let cover = hit?.cover || matchCover(task.title, task.plugName, coverIndex.byName);
             let introduce = hit?.introduce || matchIntroduce(task.title, task.plugName, coverIndex.byName);
@@ -442,23 +414,148 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
         if (!platform) return res.status(404).json({ error: '请先保存这个软件平台' });
         const [[saved]] = await pool.query('SELECT tasks_json, updated_at FROM paas_v2_catalogs WHERE platform_id = ? LIMIT 1', [platform.id]);
         const data = { softwareUnique: platform.software_unique, platformCode: platform.code, platformName: platform.name };
-        const savedTasks = saved ? parseSavedCatalog(saved.tasks_json).map(task => ({ ...task, answerType: PAAS_V2_ANSWER_TYPE })) : null;
-        if (saved && req.query.force !== '1') return res.json({ ...data, tasks: savedTasks, source: 'database', syncedAt: saved.updated_at });
+        if (saved && req.query.force !== '1') {
+            return res.json({ ...data, ...publicCatalog(parseSavedCatalog(saved.tasks_json)), source: 'database', syncedAt: saved.updated_at });
+        }
         try {
-            const tasks = await fetchPlatformCatalog(platform.software_unique, req.raw.signal);
-            await pool.batch([
-                ['INSERT INTO paas_v2_catalogs (platform_id, tasks_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(platform_id) DO UPDATE SET tasks_json = excluded.tasks_json, updated_at = CURRENT_TIMESTAMP', [platform.id, JSON.stringify(tasks)]],
-                ["UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP WHERE id = ?", [platform.id]]
-            ]);
-            return res.json({ ...data, tasks, source: 'remote' });
+            const sourceTasks = await fetchPlatformCatalog(platform.software_unique, req.raw.signal);
+            const [cards] = await pool.query(`SELECT paas_v2_plug_flag AS plugFlag FROM competitions
+                WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE`, [platform.software_unique]);
+            const importedFlags = new Set(cards.map(card => platformKey(card.plugFlag)));
+            const { tasks } = await saveCatalogUpdate(platform, previous => {
+                if (!sourceTasks.length && previous.length) throw new Error('云端返回空目录，已保留现有任务');
+                return { tasks: mergeCatalogSnapshot(previous, sourceTasks, importedFlags) };
+            }, { markSynced: true });
+            return res.json({ ...data, ...publicCatalog(tasks), source: 'remote' });
         } catch (error) {
-            await pool.query('UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ?', [error.notFound ? 'not_found' : 'error', platform.id]);
-            if (saved) return res.json({ ...data, tasks: savedTasks, source: 'database-fallback', syncedAt: saved.updated_at, refreshError: error.message || '任务目录获取失败' });
-            return res.status(502).json({ error: error.message || '任务目录获取失败' });
+            if (error.status === 409) return res.status(409).json({ error: error.message });
+            const [, latest] = await pool.batch([
+                ['UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ? AND software_unique = ?',
+                    [error.notFound ? 'not_found' : 'error', platform.id, platform.software_unique]],
+                [`SELECT c.tasks_json, c.updated_at FROM paas_v2_catalogs c JOIN paas_v2_platforms p ON p.id = c.platform_id
+                    WHERE p.id = ? AND p.software_unique = ?`, [platform.id, platform.software_unique]]
+            ]);
+            const fallback = latest.rows[0];
+            const message = error.message || '任务目录获取失败';
+            if (fallback) return res.json({ ...data, ...publicCatalog(parseSavedCatalog(fallback.tasks_json)), source: 'database-fallback', syncedAt: fallback.updated_at, refreshError: message });
+            return res.status(502).json({ error: message });
         }
     } catch (error) {
         console.error('[paas-v2-catalog]', error.message);
         return res.status(500).json({ error: error.message || '任务目录获取失败' });
+    }
+});
+
+const catalogModuleFields = ['moduleId', 'moduleTitle', 'moduleOrder', 'taskOrder'];
+const hasCatalogModuleTitle = task => typeof task?.moduleTitle === 'string' && task.moduleTitle.trim() !== '';
+
+function publicCatalog(snapshot) {
+    const tasks = snapshot.filter(task => task?.missingFromSource !== true)
+        .map(task => ({ ...task, answerType: PAAS_V2_ANSWER_TYPE }));
+    return { tasks, missingTaskCount: snapshot.length - tasks.length };
+}
+
+function mergeCatalogSnapshot(savedTasks, sourceTasks, importedFlags) {
+    const savedByFlag = new Map(savedTasks.map(task => [platformKey(task?.plugFlag), task]));
+    const previousModules = new Map();
+    for (const task of savedTasks) {
+        if (!task?.moduleId || !hasCatalogModuleTitle(task)) continue;
+        if (!task.missingFromSource || !previousModules.has(task.moduleId)) previousModules.set(task.moduleId, task);
+    }
+    const preserveModule = (task, previous) => {
+        if (hasCatalogModuleTitle(task)) return task;
+        const module = hasCatalogModuleTitle(previous) ? previous : previousModules.get(previous?.moduleId);
+        if (!module) return task;
+        return {
+            ...task, moduleId: module.moduleId, moduleTitle: module.moduleTitle,
+            moduleOrder: module.moduleOrder, taskOrder: previous?.taskOrder ?? task.taskOrder
+        };
+    };
+    const tasks = sourceTasks.map(task => {
+        const flag = platformKey(task.plugFlag);
+        const previous = savedByFlag.get(flag);
+        savedByFlag.delete(flag);
+        return preserveModule(task, previous);
+    });
+    for (const [flag, task] of savedByFlag) {
+        if (flag && importedFlags.has(flag)) tasks.push({ ...preserveModule(task, task), missingFromSource: true });
+    }
+    return tasks;
+}
+
+function mergeCatalogModules(savedTasks, sourceByFlag) {
+    const existingFlags = new Set();
+    let updated = 0;
+    const tasks = savedTasks.map(task => {
+        const flag = platformKey(task?.plugFlag);
+        existingFlags.add(flag);
+        const source = sourceByFlag.get(flag);
+        if (!source || catalogModuleFields.every(field => task[field] === source[field])) return task;
+        updated += 1;
+        return {
+            ...task, moduleId: source.moduleId, moduleTitle: source.moduleTitle,
+            moduleOrder: source.moduleOrder, taskOrder: source.taskOrder
+        };
+    });
+    for (const [flag, task] of sourceByFlag) {
+        if (existingFlags.has(flag)) continue;
+        tasks.push(task);
+        updated += 1;
+    }
+    return { tasks, updated };
+}
+
+async function saveCatalogUpdate(platform, update, { markSynced = false } = {}) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const [[saved]] = await pool.query('SELECT tasks_json FROM paas_v2_catalogs WHERE platform_id = ?', [platform.id]);
+        const merged = update(parseSavedCatalog(saved?.tasks_json));
+        if (merged.updated === 0) return merged;
+        const data = JSON.stringify(merged.tasks);
+        const write = saved
+            ? [`UPDATE paas_v2_catalogs SET tasks_json = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE platform_id = ? AND tasks_json = ? AND EXISTS (
+                    SELECT 1 FROM paas_v2_platforms WHERE id = ? AND software_unique = ?
+                )`, [data, platform.id, saved.tasks_json, platform.id, platform.software_unique]]
+            : [`INSERT INTO paas_v2_catalogs (platform_id, tasks_json)
+                SELECT id, ? FROM paas_v2_platforms WHERE id = ? AND software_unique = ?
+                ON CONFLICT(platform_id) DO NOTHING`, [data, platform.id, platform.software_unique]];
+        const [result] = await pool.batch(markSynced ? [write, [
+            `UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND software_unique = ? AND changes() > 0`, [platform.id, platform.software_unique]
+        ]] : [write]);
+        if (result.affectedRows) return merged;
+    }
+    throw Object.assign(new Error('目录正在更新，请稍后重试'), { status: 409 });
+}
+
+router.post('/catalog/modules/refresh', authMiddleware, adminOnly, async (req, res) => {
+    const softwareUnique = asSoftwareUnique(req.body?.softwareUnique);
+    if (!isValidSoftwareUnique(softwareUnique)) return res.status(400).json({ error: 'softwareUnique 格式无效' });
+    try {
+        const platform = await findPlatform(softwareUnique);
+        if (!platform) return res.status(404).json({ error: '请先保存这个软件平台' });
+        let sourceTasks;
+        try {
+            sourceTasks = await fetchPlatformTaskRows(platform.software_unique, req.raw.signal);
+        } catch (error) {
+            return res.status(error.notFound ? 404 : 502).json({ error: '云端任务目录读取失败，已保留现有分类' });
+        }
+        const sourceByFlag = new Map(sourceTasks.filter(hasCatalogModuleTitle)
+            .map(task => [platformKey(task.plugFlag), task]));
+        const { tasks, updated } = await saveCatalogUpdate(platform, previous => mergeCatalogModules(previous, sourceByFlag));
+        const namedFlags = new Set(tasks.filter(hasCatalogModuleTitle).map(task => platformKey(task.plugFlag)));
+        const sourceFlags = new Set(sourceTasks.map(task => platformKey(task.plugFlag)));
+        const [cards] = await pool.query(`SELECT paas_v2_plug_flag AS plugFlag FROM competitions
+            WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE`, [platform.software_unique]);
+        return res.json({
+            softwareUnique: platform.software_unique, updated, classified: namedFlags.size, total: tasks.length,
+            sourceClassified: sourceByFlag.size, cardTotal: cards.length,
+            classifiedCards: cards.filter(card => namedFlags.has(platformKey(card.plugFlag))).length,
+            missingCards: cards.filter(card => !sourceFlags.has(platformKey(card.plugFlag))).length
+        });
+    } catch (error) {
+        console.error('[paas-v2-catalog-modules]', error.code || error.name);
+        return res.status(error.status || 500).json({ error: error.status === 409 ? error.message : '任务分类保存失败' });
     }
 });
 
@@ -523,16 +620,24 @@ async function withPaasV2Task(req, action) {
     }, { leaseMs: 90000 });
 }
 
+const currentPaasV2Binding = `SELECT 1 FROM competitions WHERE id = ? AND sso_method = 'paasV2'
+    AND sso_config_id IS ? AND url IS ? AND NULLIF(paas_v2_plug_flag, '') IS ?
+    AND NULLIF(paas_v2_software_unique, '') IS ?`;
+
+function paasV2BindingValues(card) {
+    return [card.id, card.ssoConfigId, card.url, card.plugFlag || null, card.softwareUnique || null];
+}
+
 router.post('/result', authMiddleware, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
         const result = await withPaasV2Task(req, async ({ adapter, parameters, context, card }) => {
             const result = await adapter.getTaskResult(parameters, context);
-            await pool.query(
+            const [saved] = await pool.query(
                 `INSERT INTO user_agent_task_results
                     (user_id, competition_id, sso_config_id, target_url, task_id,
                      answer_type, software_unique, status, score)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (${currentPaasV2Binding})
                  ON CONFLICT(user_id, competition_id) DO UPDATE SET
                     sso_config_id = excluded.sso_config_id,
                     target_url = excluded.target_url,
@@ -542,8 +647,9 @@ router.post('/result', authMiddleware, async (req, res) => {
                     status = excluded.status,
                     score = excluded.score`,
                 [req.user.id, card.id, card.ssoConfigId, card.url, card.plugFlag,
-                    PAAS_V2_ANSWER_TYPE, card.softwareUnique, result.status, result.score]
+                    PAAS_V2_ANSWER_TYPE, card.softwareUnique, result.status, result.score, ...paasV2BindingValues(card)]
             );
+            if (!saved.affectedRows) throw Object.assign(new Error('任务绑定已更新，请刷新任务列表'), { status: 409 });
             return result;
         });
         return res.json(result);
@@ -558,11 +664,15 @@ router.post('/reset', authMiddleware, async (req, res) => {
     try {
         await withPaasV2Task(req, async ({ adapter, parameters, card }) => {
             await adapter.resetTaskData(parameters);
-            const binding = [req.user.id, card.id];
-            await pool.batch([
-                ['DELETE FROM user_workflow_status WHERE user_id = ? AND competition_id = ?', binding],
-                ['DELETE FROM user_agent_task_results WHERE user_id = ? AND competition_id = ?', binding]
+            const values = paasV2BindingValues(card);
+            const [current] = await pool.batch([
+                [`SELECT EXISTS (${currentPaasV2Binding}) AS matches`, values],
+                ...['user_workflow_status', 'user_agent_task_results'].map(table => [
+                    `DELETE FROM ${table} WHERE user_id = ? AND competition_id = ? AND EXISTS (${currentPaasV2Binding})`,
+                    [req.user.id, card.id, ...values]
+                ])
             ]);
+            if (!current.rows[0].matches) throw Object.assign(new Error('任务绑定已更新，请刷新任务列表'), { status: 409 });
         });
         return res.json({ success: true });
     } catch (error) {

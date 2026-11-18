@@ -2,12 +2,13 @@ import pool from '../config/db.js';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function withD1Lock(name, action, { waitMs = 5000, leaseMs = 30000 } = {}) {
+export async function withD1Lock(name, action, { waitMs = 5000, leaseMs = 30000, signal } = {}) {
     const key = String(name).slice(0, 191);
     const owner = crypto.randomUUID();
     const deadline = Date.now() + waitMs;
 
     while (Date.now() <= deadline) {
+        signal?.throwIfAborted();
         const now = Date.now();
         // 单条条件 UPSERT：空 key 或已过期 key 才能写入新 owner，
         // 并用 RETURNING 判定唯一胜者，避免每轮轮询三次查询。
@@ -23,6 +24,7 @@ export async function withD1Lock(name, action, { waitMs = 5000, leaseMs = 30000 
         );
         if (rows.length === 1 && rows[0].owner === owner) {
             try {
+                signal?.throwIfAborted();
                 return await action();
             } finally {
                 await pool.query('DELETE FROM d1_locks WHERE name = ? AND owner = ?', [key, owner]).catch(() => {});
@@ -31,6 +33,7 @@ export async function withD1Lock(name, action, { waitMs = 5000, leaseMs = 30000 
         await sleep(100);
     }
 
+    signal?.throwIfAborted();
     const error = new Error('当前操作正在处理中，请稍后重试');
     error.status = 409;
     throw error;

@@ -80,14 +80,3 @@ export async function assertCompetitionAccess(user, competitionId) {
         throw error;
     }
 }
-
-export async function filterCompetitionsForUser(user, competitions) {
-    if (!user) return [];
-    if ([ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(normalizeRole(user.role))) return competitions;
-    const access = await getUserAccess(user.id);
-    if (!access.configured) return [];
-    return competitions.filter(item => {
-        const id = Number(item.id);
-        return access.permissions.includes(id);
-    }).map(item => ({ ...item, _overrideTime: access.timeRules[String(item.id)] || null }));
-}

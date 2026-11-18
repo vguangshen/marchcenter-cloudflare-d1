@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Save, Bot, RefreshCw, CheckSquare, Square, Inbox, Loader2, Plus, Edit2, Trash2, Ellipsis, Cloud, Eraser } from 'lucide-react';
+import { X, Save, Bot, RefreshCw, CheckSquare, Square, Inbox, Loader2, Plus, Edit2, Trash2, Ellipsis, Cloud, Eraser, Layers3 } from 'lucide-react';
 import { GLASS_INPUT } from '../../constants/config';
 import { api } from '../../utils/api';
 import { confirmAction, notify } from '../../utils/uiFeedback';
@@ -37,7 +37,7 @@ function PlatformCard({ item, active, menuOpen, status, disabled, onSelect, onTo
     </div>;
 }
 
-const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, platforms = DEFAULT_AGENT_PLATFORMS, initialData = null, initialSoftwareUnique = '', initialPlatformSoftwareUnique = '', ssoConfigs = EMPTY_ITEMS, existingLinks = EMPTY_ITEMS }) => {
+const TaskAppModal = ({ isOpen, onClose, onSave, onCatalogRefreshed, onPlatformsChange = () => {}, platforms = DEFAULT_AGENT_PLATFORMS, initialData = null, initialSoftwareUnique = '', initialPlatformSoftwareUnique = '', ssoConfigs = EMPTY_ITEMS, existingLinks = EMPTY_ITEMS }) => {
     const paasConfig = useMemo(() => {
         const row = ssoConfigs.find(item => parseSsoConfig(item).method === 'paasV2');
         return row ? parseSsoConfig(row) : {};
@@ -51,7 +51,9 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
     const [selectedKeys, setSelectedKeys] = useState(() => new Set());
     const [catalogLoading, setCatalogLoading] = useState(false);
     const [catalogError, setCatalogError] = useState('');
+    const [missingTaskCount, setMissingTaskCount] = useState(0);
     const [catalogFallback, setCatalogFallback] = useState(false);
+    const [moduleSync, setModuleSync] = useState(null);
     const [importing, setImporting] = useState(false);
     const [saving, setSaving] = useState(false);
     const [importProgress, setImportProgress] = useState(null);
@@ -67,7 +69,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
     const catalogPlatform = useMemo(() => allPlatforms.find(item => samePlatform(item.softwareUnique, softwareUnique)), [allPlatforms, softwareUnique]);
     const [formData, setFormData] = useState({});
     const operationRef = useRef(false);
-    const busy = importing || saving || platformSaving;
+    const busy = importing || saving || platformSaving || Boolean(moduleSync?.running);
     const closeMain = useCallback(() => { if (!busy && !operationRef.current) onClose(); }, [busy, onClose]);
     const closeManual = useCallback(() => { if (!platformSaving && !operationRef.current) setShowManual(false); }, [platformSaving]);
     const dialogRef = useModalAccessibility(isOpen && !showManual, closeMain);
@@ -77,6 +79,7 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
         catalogAbortRef.current?.abort();
         catalogAbortRef.current = null;
         setCatalogTasks([]); setSelectedKeys(new Set()); setCatalogLoading(false); setCatalogError(''); setCatalogFallback(false);
+        setMissingTaskCount(0);
     }, []);
 
     useEffect(() => {
@@ -100,11 +103,11 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
         setMenuSoftwareUnique(null); setShowManual(true);
     }, [allPlatforms, initialData?.id, initialPlatformSoftwareUnique, isOpen, resetCatalog]);
 
-    const loadCatalog = useCallback(async ({ force = false } = {}) => {
+    const loadCatalog = useCallback(async ({ force = false, preserveSelection = false } = {}) => {
         if (initialData?.id || !catalogPlatform) { resetCatalog(); return; }
         const requestId = ++catalogRequestRef.current;
         catalogAbortRef.current?.abort();
-        if (!force) { setCatalogTasks([]); setSelectedKeys(new Set()); }
+        if (!force && !preserveSelection) { setCatalogTasks([]); setSelectedKeys(new Set()); }
         setCatalogError(''); setCatalogFallback(false);
         const controller = new AbortController(); catalogAbortRef.current = controller; setCatalogLoading(true);
         try {
@@ -112,17 +115,20 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
             if (force) params.set('force', '1');
             const data = await api.get(`/paas-v2/catalog?${params}`, { fallback: '智能体任务目录读取失败', timeoutMs: 120_000, retry: 0, signal: controller.signal });
             if (catalogRequestRef.current !== requestId) return;
-            setCatalogTasks(Array.isArray(data.tasks) ? data.tasks : []); setSelectedKeys(new Set());
+            setCatalogTasks(Array.isArray(data.tasks) ? data.tasks : []);
+            setMissingTaskCount(Number(data.missingTaskCount) || 0);
+            if (!preserveSelection) setSelectedKeys(new Set());
             setCatalogFallback(data.source === 'database-fallback');
             setCatalogError(data.refreshError ? `刷新失败，已使用已保存目录：${data.refreshError}` : '');
+            if (data.source === 'remote') void onCatalogRefreshed?.({ animate: false });
         } catch (error) {
             if (catalogRequestRef.current !== requestId || error.name === 'AbortError') return;
-            if (!force) { setCatalogTasks([]); setSelectedKeys(new Set()); }
+            if (!force && !preserveSelection) { setCatalogTasks([]); setSelectedKeys(new Set()); }
             setCatalogFallback(false); setCatalogError(error.message || '智能体任务目录读取失败');
         } finally {
             if (catalogRequestRef.current === requestId) { setCatalogLoading(false); if (catalogAbortRef.current === controller) catalogAbortRef.current = null; }
         }
-    }, [initialData?.id, catalogPlatform, resetCatalog]);
+    }, [initialData?.id, catalogPlatform, onCatalogRefreshed, resetCatalog]);
     useEffect(() => { if (isOpen && !initialData?.id) loadCatalog(); return () => catalogAbortRef.current?.abort(); }, [isOpen, initialData?.id, loadCatalog]);
 
     const importedCounts = useMemo(() => {
@@ -136,6 +142,8 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
         return total > 0 ? (imported === 0 ? 'red' : imported >= total ? 'green' : 'yellow') : item.catalogSyncStatus === 'not_found' ? 'red' : imported > 0 || item.taskCount > 0 ? 'green' : 'red';
     };
     const availableTasks = catalogTasks.filter(task => !storedKeys.has(taskKey(softwareUnique, task.plugFlag)));
+    const platformsToSync = allPlatforms.filter(item => item.taskCount > 0 || item.catalogTaskCount > 0
+        || importedCounts.has(normalizePlatformKey(item.softwareUnique)));
     const selectedCount = availableTasks.filter(task => selectedKeys.has(task.plugFlag)).length;
     const allSelected = availableTasks.length > 0 && availableTasks.every(task => selectedKeys.has(task.plugFlag));
     const toggleTask = plugFlag => setSelectedKeys(current => { const next = new Set(current); if (next.has(plugFlag)) next.delete(plugFlag); else next.add(plugFlag); return next; });
@@ -143,6 +151,40 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
     const selectPlatform = value => { if (!samePlatform(value, softwareUnique)) resetCatalog(); setSoftwareUnique(value); setMenuSoftwareUnique(null); };
     const editPlatform = item => { setEditingSoftwareUnique(item.softwareUnique); setEditingBuiltin(item.builtin); setManualPlatform({ code: item.code, name: item.name, softwareUnique: item.softwareUnique, theme: normalizeAgentPlatformTheme(item.theme) }); setMenuSoftwareUnique(null); setShowManual(true); };
     const openManual = () => { setEditingSoftwareUnique(null); setEditingBuiltin(false); setManualPlatform({ code: '', name: '', softwareUnique: '', theme: DEFAULT_AGENT_PLATFORM_THEME }); setShowManual(true); };
+    const syncAllModules = async () => {
+        if (busy || operationRef.current || !platformsToSync.length) return;
+        operationRef.current = true;
+        const total = platformsToSync.length;
+        let done = 0;
+        let covered = 0;
+        const partial = [];
+        const failed = [];
+        try {
+            for (const platform of platformsToSync) {
+                setModuleSync({ running: true, done, total, current: platform.name });
+                try {
+                    const result = await api.post('/paas-v2/catalog/modules/refresh', { softwareUnique: platform.softwareUnique }, {
+                        fallback: '分类同步失败', timeoutMs: 30_000, retry: 0
+                    });
+                    covered += result.classifiedCards || 0;
+                    if (result.missingCards > 0 || !result.sourceClassified || result.classifiedCards < result.cardTotal) partial.push(platform.name);
+                } catch (error) {
+                    failed.push(platform.name);
+                    done += 1;
+                    if (error.status === 401) break;
+                    continue;
+                }
+                done += 1;
+            }
+            await onCatalogRefreshed?.({ animate: false });
+            await loadCatalog({ preserveSelection: true });
+        } catch (error) {
+            notify(error.message || '无法刷新任务列表', 'error');
+        } finally {
+            operationRef.current = false;
+            setModuleSync({ running: false, done, total, covered, partial, failed });
+        }
+    };
     const savePlatform = async () => {
         if (busy || operationRef.current) return;
         const data = { code: manualPlatform.code.trim(), name: manualPlatform.name.trim(), softwareUnique: manualPlatform.softwareUnique.trim(), theme: normalizeAgentPlatformTheme(manualPlatform.theme) };
@@ -222,7 +264,18 @@ const TaskAppModal = ({ isOpen, onClose, onSave, onPlatformsChange = () => {}, p
                         {[['category', '分类'], ['statusText', '状态文字']].map(([key, label]) => <label key={key} className="space-y-2"><span className="text-[10px] font-bold text-slate-500">{label}</span><input value={formData[key] || ''} onChange={event => update(key, event.target.value)} className={`${GLASS_INPUT} h-10 w-full px-3`} /></label>)}
                     </div> : <div className="mt-5"><div className="space-y-3"><div className="flex gap-2 overflow-x-auto pb-3 pt-1">{allPlatforms.map(item => <PlatformCard key={item.softwareUnique} item={item} active={samePlatform(softwareUnique, item.softwareUnique)} menuOpen={samePlatform(menuSoftwareUnique, item.softwareUnique)} disabled={busy} status={platformStatus(item)} onSelect={selected => selectPlatform(selected.softwareUnique)} onToggleMenu={selected => setMenuSoftwareUnique(current => samePlatform(current, selected.softwareUnique) ? null : selected.softwareUnique)} onEdit={editPlatform} onDelete={deletePlatform} />)}<button type="button" onClick={openManual} disabled={busy} aria-label="手动添加软件平台" className="grid min-h-[76px] w-[104px] shrink-0 place-items-center rounded-2xl border-2 border-dashed border-violet-200 bg-violet-50/40 text-violet-500"><span className="grid place-items-center gap-1"><Plus className="h-5 w-5" /><span className="text-[9px] font-bold">添加软件</span></span></button></div>
                         <div className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400"><Cloud className="h-3.5 w-3.5 text-emerald-500" />任务目录已保存到云端数据库 · 共 {catalogTasks.length} 个任务，已导入 {catalogTasks.length - availableTasks.length} 个，选中 {selectedCount} 个</span><button type="button" onClick={() => loadCatalog({ force: true })} disabled={catalogLoading || busy} className="flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${catalogLoading ? 'animate-spin' : ''}`} />刷新目录</button></div></div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={syncAllModules} disabled={busy || catalogLoading || !platformsToSync.length} className="mc-button mc-button--secondary mc-button--compact">
+                                {moduleSync?.running ? <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /> : <Layers3 aria-hidden="true" className="h-3.5 w-3.5" />}同步全部分类
+                            </button>
+                            {moduleSync && <div role="status" className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                                <p>{moduleSync.running ? `正在同步 ${moduleSync.done + 1}/${moduleSync.total} · ${moduleSync.current}` : `已检查 ${moduleSync.done}/${moduleSync.total} 个平台，${moduleSync.covered} 张任务卡已匹配分类`}</p>
+                                {!moduleSync.running && moduleSync.partial.length > 0 && <p>服务器分类不完整 · {moduleSync.partial.join('、')}</p>}
+                                {!moduleSync.running && moduleSync.failed.length > 0 && <p>同步失败 · {moduleSync.failed.join('、')}</p>}
+                            </div>}
+                        </div>
                         {catalogError && <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-bold ${catalogFallback ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'}`}>{catalogError}</p>}
+                        {missingTaskCount > 0 && <p role="status" className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">云端目录缺少 {missingTaskCount} 个已导入任务，已保留这些卡片的分类。</p>}
                         <div className="mt-4 max-h-[420px] overflow-y-auto rounded-2xl border border-slate-100"><div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-2"><button type="button" onClick={toggleAll} disabled={busy || catalogLoading || !availableTasks.length} className="flex items-center gap-2 text-[10px] font-bold text-violet-600 disabled:opacity-40">{allSelected ? <Eraser className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}{allSelected ? '清空选择' : '全选未导入'}</button><span className="text-[10px] text-slate-400">{catalogPlatform?.code || softwareUnique || '智能体'} 智能体 task_app 目录</span></div>
                             {catalogLoading ? <div className="flex h-48 items-center justify-center gap-2 text-xs font-bold text-slate-400"><Loader2 className="h-4 w-4 animate-spin text-violet-500" />正在读取任务目录…</div> : !catalogTasks.length ? <div className="flex h-48 flex-col items-center justify-center text-slate-400"><Inbox className="h-8 w-8" /><span className="mt-2 text-xs font-bold">没有可导入的任务</span></div> : <div className="grid gap-2 sm:grid-cols-2">{catalogTasks.map(task => { const already = storedKeys.has(taskKey(softwareUnique, task.plugFlag)); const checked = selectedKeys.has(task.plugFlag); return <button key={task.plugFlag} type="button" disabled={already || busy} aria-pressed={checked} onClick={() => toggleTask(task.plugFlag)} className={`group flex min-h-[76px] items-start gap-3 rounded-2xl border p-3 text-left transition ${already ? 'cursor-default border-emerald-100 bg-emerald-50/60 opacity-70' : checked ? 'border-violet-300 bg-violet-50 shadow-sm' : 'border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/40'}`}><span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${checked ? 'border-violet-500 bg-violet-500 text-white' : 'border-slate-300 bg-white'}`}>{checked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5 text-slate-400" />}</span><span className="min-w-0 flex-1"><b className="block truncate text-xs text-slate-800">{task.title}</b><small className="mt-1 block font-mono text-[9px] text-slate-400">plugFlag {task.plugFlag}</small><small className="mt-0.5 block text-[9px] text-slate-400">answerType {task.answerType}</small></span>{already && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[8px] font-black text-emerald-700">已导入</span>}</button>; })}</div>}
                         </div></div>}

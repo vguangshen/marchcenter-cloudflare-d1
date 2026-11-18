@@ -11,15 +11,20 @@ function serializeConfigs(configs) {
     });
 }
 
-export async function readAccountManagementConfigs() {
+export async function readAccountManagementConfigs({ tolerateMalformed = false } = {}) {
     const [[row]] = await pool.query(
         'SELECT config_value FROM system_configs WHERE config_key = ? LIMIT 1',
         [CONFIG_KEY]
     );
     if (!row) return [];
-    const raw = typeof row.config_value === 'string' ? JSON.parse(row.config_value || '{}') : row.config_value;
-    if (raw?.version !== 2 || !Array.isArray(raw.services)) return [];
-    return raw.services.map(item => normalizeAccountManagementConfig(decodeStoredConfig(item)));
+    try {
+        const raw = typeof row.config_value === 'string' ? JSON.parse(row.config_value || '{}') : row.config_value;
+        if (raw?.version !== 2 || !Array.isArray(raw.services)) return [];
+        return raw.services.map(item => normalizeAccountManagementConfig(decodeStoredConfig(item)));
+    } catch (error) {
+        if (tolerateMalformed) return [];
+        throw error;
+    }
 }
 
 export async function writeAccountManagementConfigs(configs) {
@@ -61,10 +66,13 @@ export async function deleteAccountManagementConfigAndUnbind(id, configs) {
     return Number(usage?.count || 0);
 }
 
-export async function readAccountManagementConfig(id = '') {
-    const configs = await readAccountManagementConfigs();
+export function selectAccountManagementConfig(configs, id = '') {
     if (id) return configs.find(item => item.id === id) || null;
     return configs.find(item => item.enabled) || configs[0] || null;
+}
+
+export async function readAccountManagementConfig(id = '') {
+    return selectAccountManagementConfig(await readAccountManagementConfigs(), id);
 }
 
 export async function writeAccountManagementConfig(config) {

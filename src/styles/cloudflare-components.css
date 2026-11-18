@@ -558,6 +558,26 @@
 .agent-task-module-title {
   color:var(--agent-theme-solid,#4f46e5)!important
 }
+.agent-task-category[aria-pressed="true"],.agent-task-category-heading {
+  background:var(--agent-theme-badge-bg,#ede9fe);
+  color:var(--agent-theme-badge-text,#6d28d9)
+}
+.agent-task-category[aria-pressed="true"] {
+  border-color:var(--agent-theme-border,#ddd6fe)
+}
+.agent-task-category[aria-pressed="true"]:hover:not(:disabled) {
+  background:var(--agent-theme-badge-bg,#ede9fe);
+  color:var(--agent-theme-badge-text,#6d28d9);
+  border-color:var(--agent-theme-solid,#7c3aed)
+}
+.dark .agent-task-category[aria-pressed="true"],.dark .agent-task-category-heading {
+  background:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 22%,#0f172a);
+  color:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 27%,#f8fafc)
+}
+.dark .agent-task-category[aria-pressed="true"]:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 32%,#0f172a);
+  color:#f8fafc
+}
 .agent-task-card {
   contain:layout paint;
   box-shadow:0 8px 22px -10px var(--agent-theme-solid,#5046e573);
@@ -596,6 +616,17 @@
 .agent-task-enter-button:hover:not(:disabled) {
   filter:brightness(1.08)
 }
+.agent-task-details-button {
+  border-color:var(--agent-theme-solid,#7c3aed);
+  background:var(--mc-color-surface);
+  color:var(--agent-theme-badge-text,#6d28d9)
+}
+.agent-task-details-button:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 10%,var(--mc-color-surface))
+}
+.dark .agent-task-details-button {
+  color:color-mix(in srgb,var(--agent-theme-solid,#7c3aed) 30%,#f8fafc)
+}
 .dark .agent-task-module {
   box-shadow:0 14px 40px -18px var(--agent-theme-solid,#5046e573), inset 0 1px 0 #ffffff0f;
   border-color:var(--agent-theme-border,#4c1d95b8)!important;
@@ -604,4 +635,13 @@
 .dark .agent-task-card {
   border-color:var(--agent-theme-border,#4c1d95b8)!important;
   background-color:#0f172a!important
+}
+.maintenance-touch-hint {
+  display:none;
+}
+
+@media (any-pointer:coarse) {
+  .maintenance-touch-hint {
+    display:grid;
+  }
 }

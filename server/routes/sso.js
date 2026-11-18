@@ -14,14 +14,18 @@ import {
 } from '../utils/officialCompat/officialJumpConfig.js';
 import { assertCompetitionAccess } from '../utils/accessControl.js';
 import { isSuperAdmin, normalizeRole, ROLES } from '../utils/roleAccess.js';
-import { decodeStoredConfig, decryptSecretValue, encryptSecretValue } from '../utils/configSecrets.js';
+import { decryptSecretValue, encryptSecretValue } from '../utils/configSecrets.js';
 import { withD1Lock } from '../utils/d1Lock.js';
 import { getEnv, getRuntime, waitUntil } from '../config/runtime.js';
+import { createRequestDeadline } from '../utils/requestDeadline.js';
+import { SSO_LAUNCH_TIMEOUT_MS, SSO_REPAIR_TIMEOUT_MS } from '../../src/constants/ssoTiming.js';
 import {
     isPlatformAccountReady, markPlatformAccountReady
 } from '../utils/platformAccountStatus.js';
-import { issueManualCredential, restoreOriginalPassword, deletePlatformClass as deleteManagedPlatformClass, isClassDeleteMappingReady } from '../utils/accountManagementApi.js';
+import { issueManualCredential, restoreOriginalPassword, deletePlatformClass as deleteManagedPlatformClass } from '../utils/accountManagementApi.js';
 import { readAccountManagementConfig } from '../utils/accountManagementStore.js';
+import { ACCOUNT_CAPABLE_METHODS, readJavaClassDeleteBinding } from '../utils/competitionMaintenance.js';
+import { defaultSsoAllowsHttp, parseSsoConfig, readDefaultSsoConfigs } from '../utils/ssoConfigurations.js';
 import {
     mapCardAddressToOfficialConfig,
     validateOfficialTransportAddress
@@ -46,14 +50,7 @@ const ALLOWED_METHODS = new Set([
     'java', 'net', 'marketing', 'commerce',
     'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement', 'direct', 'paasV2'
 ]);
-const ACCOUNT_CAPABLE_METHODS = new Set([
-    'java', 'net', 'marketing', 'commerce',
-    'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement'
-]);
-const CLASS_DELETE_METHODS = new Set([
-    'java', 'net', 'marketing', 'commerce',
-    'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement'
-]);
+const CLASS_DELETE_METHODS = ACCOUNT_CAPABLE_METHODS;
 
 // The Worker composition root may provide isolate-scoped token stores for
 // all requests.  Route/unit tests that do not run inside the Worker runtime
@@ -67,11 +64,16 @@ function officialDependencyOverrides() {
     }
 }
 
-async function withNamedLock(name, action) {
-    // 完整跳转最坏情况：SOAP 教师流程约 6 次远端操作 × 20s 超时 × 3 次
-    // 整方法重试 ≈ 360s。租期给足 6 分钟，避免慢平台执行期间锁提前过期
-    // 导致同一用户并发请求重复建号；并发请求仍会在 10s 内返回 409。
-    return withD1Lock(name, action, { waitMs: 10000, leaseMs: 6 * 60 * 1000 });
+async function withNamedLock(name, action, signal) {
+    return withD1Lock(name, action, { waitMs: 10000, leaseMs: 6 * 60 * 1000, signal });
+}
+
+function launchDeadline(req) {
+    const configured = Number(getEnv('SSO_LAUNCH_TIMEOUT_MS', SSO_LAUNCH_TIMEOUT_MS));
+    const timeoutMs = Number.isSafeInteger(configured) && configured > 0
+        ? Math.min(configured, SSO_LAUNCH_TIMEOUT_MS) : SSO_LAUNCH_TIMEOUT_MS;
+    const error = Object.assign(new Error('平台响应超时，请重试进入'), { status: 504, code: 'sso_timeout' });
+    return createRequestDeadline(timeoutMs, req.raw?.signal, error);
 }
 
 // Evaluator targets belong to one concrete competition platform. They must be
@@ -124,10 +126,17 @@ async function prepareExpertStudentTarget(target, competitionId, effectiveConfig
     return true;
 }
 
-function parseConfig(record) {
-    try {
-        return decodeStoredConfig(record.config_data || {});
-    } catch { return {}; }
+function buildAgentTaskReturnUrl(requestUrl, cardId, configuredReturnUrl) {
+    const dashboard = new URL('/', requestUrl);
+    if (typeof configuredReturnUrl === 'string' && URL.canParse(configuredReturnUrl, dashboard)) {
+        const configured = new URL(configuredReturnUrl, dashboard);
+        if (configured.origin === dashboard.origin && !configured.username && !configured.password
+            && ['/', '/index.html', '/dashboard'].includes(configured.pathname)) {
+            dashboard.search = configured.search;
+        }
+    }
+    dashboard.searchParams.set('agentTaskId', String(cardId));
+    return dashboard.href;
 }
 
 async function resolvePlatformConfig({ configId, method, classType }, context = {}) {
@@ -140,11 +149,8 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
             error.status = 400;
             throw error;
         }
-        const [rows] = await pool.query('SELECT * FROM sso_configs ORDER BY id DESC');
-        record = rows.find(row => {
-            const candidate = parseConfig(row);
-            return candidate.method === method && candidate.canaryOnly !== true;
-        }) || null;
+        const resolved = (await readDefaultSsoConfigs()).get(method);
+        record = resolved?.record || null;
         config = {
             className: '默认班级',
             teacherUserName: 'teacher',
@@ -157,12 +163,10 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
             studentPrefix: 'mcs',
             studentSuffix: '1',
             expertPrefix: 'mcpw',
-            ...(record ? parseConfig(record) : {}),
+            ...resolved?.config,
             method,
             ...(classType ? { classType: Number(classType) } : {}),
-            allowHttp: Boolean(record
-                ? parseConfig(record).allowHttp
-                : getEnv('ALLOW_HTTP_PLATFORMS') === 'true')
+            allowHttp: defaultSsoAllowsHttp(resolved?.config)
         };
     } else if (configId) {
         const [rows] = await pool.query('SELECT * FROM sso_configs WHERE id = ?', [configId]);
@@ -172,7 +176,7 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
             throw error;
         }
         record = rows[0];
-        config = { ...parseConfig(record), ...(classType ? { classType: Number(classType) } : {}) };
+        config = { ...parseSsoConfig(record), ...(classType ? { classType: Number(classType) } : {}) };
         if (method === 'paasV2' && config.method !== 'paasV2') {
             throw Object.assign(new Error('该智能体任务绑定了无效的免密配置'), { status: 409 });
         }
@@ -196,11 +200,12 @@ async function resolvePlatformConfig({ configId, method, classType }, context = 
     return { record, config, effectiveConfig };
 }
 
-async function executeSsoRequest(req, body = {}, { onStage } = {}) {
+async function executeSsoRequest(req, body = {}, { onStage, signal, forceAccountSync = false } = {}) {
     const { configId, method, competitionId, context = {}, dryRun = false } = body || {};
     const emittedStages = new Set();
     let dedupeStageCallbacks = false;
     const reportStage = async (stage, message = '') => {
+        signal?.throwIfAborted();
         if (dedupeStageCallbacks && emittedStages.has(stage)) return;
         emittedStages.add(stage);
         if (typeof onStage === 'function') await onStage(stage, message);
@@ -276,7 +281,7 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
                 req.user.id, competitionId, trustedContext.loginRole, 1
             );
         }
-        trustedContext.accountWasReady = accountWasReady;
+        trustedContext.accountWasReady = accountWasReady && !forceAccountSync;
         if (Number(card.manualCredentialEnabled) === 1 && card.restoreOriginalPasswordBeforeSso) {
             const [manualRows] = await pool.query(
                 `SELECT username FROM user_manual_teacher_credentials
@@ -293,6 +298,11 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
 
     const { config, effectiveConfig } = await resolvePlatformConfig(trustedConfig, trustedContext);
     if (trustedConfig.method === 'paasV2') {
+        if (restoreCard) {
+            const returnUrl = buildAgentTaskReturnUrl(req.url, restoreCard.id, effectiveConfig.returnUrl);
+            effectiveConfig.returnUrl = returnUrl;
+            trustedContext.returnUrl = returnUrl;
+        }
         for (const field of ['plugFlag', 'answerType', 'softwareUnique']) {
             if (trustedConfig[field] !== null && trustedConfig[field] !== undefined) {
                 effectiveConfig[field] = trustedConfig[field];
@@ -321,7 +331,15 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
         return { success: true, checks, accountWasReady };
     }
     let passwordRestored = false;
-    const executeJump = async () => {
+    const executeJump = async (locked = false) => {
+        signal?.throwIfAborted();
+        if (locked && !forceAccountSync) {
+            // An earlier request may have finished syncing while this request waited.
+            accountWasReady = await isPlatformAccountReady(
+                req.user.id, competitionId, trustedContext.loginRole, trustedContext.studentIndex || 1
+            );
+            trustedContext.accountWasReady = accountWasReady;
+        }
         if (
             competitionId
             && manualCredentialActive
@@ -357,7 +375,8 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
                     restoreCard.accountUsernameColumn,
                     restoreCard.accountPasswordColumn,
                     restoreCard.accountPasswordAlgorithm,
-                    restoreCard.restoreOriginalPasswordCiphertext || ''
+                    restoreCard.restoreOriginalPasswordCiphertext || '',
+                    { signal }
                 );
                 await pool.query(
                     `DELETE FROM user_manual_teacher_credentials
@@ -367,35 +386,39 @@ async function executeSsoRequest(req, body = {}, { onStage } = {}) {
                 passwordRestored = true;
             }
         }
-        return executePlatformJump(effectiveConfig, trustedContext, officialDependencyOverrides());
+        signal?.throwIfAborted();
+        const result = await executePlatformJump(effectiveConfig, trustedContext, {
+            ...officialDependencyOverrides(), official: { signal }
+        });
+        if (competitionId) {
+            const saved = await markPlatformAccountReady(
+                req.user.id, competitionId, trustedContext.loginRole, trustedContext.studentIndex || 1, restoreCard
+            );
+            if (!saved) throw Object.assign(new Error('竞赛入口已更新，请重新进入'), { status: 409 });
+        }
+        return result;
     };
-    const executed = competitionId && (!accountWasReady || manualCredentialActive)
+    const executed = competitionId && (forceAccountSync || !accountWasReady || manualCredentialActive)
         ? await withNamedLock(
             manualCredentialActive
                 ? `mc-sso-${req.user.id}-${competitionId}-password-restore`
                 : `mc-sso-${req.user.id}-${competitionId}-${trustedContext.loginRole}-${trustedContext.studentIndex || 1}`,
-            executeJump
+            () => executeJump(true),
+            signal
         )
         : await executeJump();
     const redirectUrl = typeof executed === 'string' ? executed : null;
     const postForm = executed && typeof executed === 'object' && executed.postForm ? executed.postForm : null;
-    if (competitionId) {
-        await markPlatformAccountReady(
-            req.user.id,
-            competitionId,
-            trustedContext.loginRole,
-            trustedContext.studentIndex || 1
-        );
-    }
     await reportStage('prepare_entry', '入口已准备完成');
     return { success: true, redirectUrl, postForm, adapter: effectiveConfig.serviceName, accountWasReady, passwordRestored };
 }
 
 router.post('/execute/stream', authMiddleware, async (req, res) => {
     const encoder = new TextEncoder();
+    const deadline = launchDeadline(req);
+    let closed = false;
     const stream = new ReadableStream({
         start(controller) {
-            let closed = false;
             const send = (event, data) => {
                 if (closed) return;
                 try {
@@ -405,12 +428,15 @@ router.post('/execute/stream', authMiddleware, async (req, res) => {
             (async () => {
                 try {
                     const result = await executeSsoRequest(req, req.body, {
+                        signal: deadline.signal,
                         onStage: (stage, message) => send('stage', { stage, message })
                     });
                     send('result', { data: result });
                 } catch (error) {
-                    send('error', { error: error.message || '免密登录执行失败', status: error.status || 500 });
+                    const failure = deadline.signal.aborted ? deadline.signal.reason : error;
+                    send('error', { error: failure?.message || '免密登录执行失败', status: failure?.status || 500, code: failure?.code });
                 } finally {
+                    deadline.dispose();
                     if (!closed) {
                         closed = true;
                         try { controller.close(); } catch { /* client disconnected */ }
@@ -418,7 +444,11 @@ router.post('/execute/stream', authMiddleware, async (req, res) => {
                 }
             })();
         },
-        cancel() {}
+        cancel(reason) {
+            closed = true;
+            deadline.cancel(reason);
+            deadline.dispose();
+        }
     });
     return res.stream(stream, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -429,11 +459,15 @@ router.post('/execute/stream', authMiddleware, async (req, res) => {
 
 router.post('/execute', authMiddleware, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
+    const deadline = launchDeadline(req);
     try {
-        return res.json(await executeSsoRequest(req, req.body));
+        return res.json(await executeSsoRequest(req, req.body, { signal: deadline.signal }));
     } catch (error) {
-        console.error('[SSO] 执行失败：', error.message);
-        return res.status(error.status || 500).json({ error: error.message || '免密登录执行失败' });
+        const failure = deadline.signal.aborted ? deadline.signal.reason : error;
+        console.error('[SSO] 执行失败：', failure?.message);
+        return res.status(failure?.status || 500).json({ error: failure?.message || '免密登录执行失败', code: failure?.code });
+    } finally {
+        deadline.dispose();
     }
 });
 
@@ -445,6 +479,8 @@ router.post('/account-readiness/:competitionId/repair', authMiddleware, async (r
     if (!Number.isInteger(competitionId) || competitionId < 1) {
         return res.status(400).json({ error: '竞赛卡片无效' });
     }
+    const timeoutError = Object.assign(new Error('账号同步超时，请继续修复剩余账号'), { status: 504 });
+    const deadline = createRequestDeadline(SSO_REPAIR_TIMEOUT_MS, req.raw?.signal, timeoutError);
     try {
         await assertCompetitionAccess(req.user, competitionId);
         const [cards] = await pool.query(
@@ -453,76 +489,64 @@ router.post('/account-readiness/:competitionId/repair', authMiddleware, async (r
         );
         const card = cards[0];
         if (!card) return res.status(404).json({ error: '竞赛卡片不存在' });
-        if (!['java', 'net', 'marketing', 'commerce', 'managementAccounting',
-            'crossBorderCommerce', 'enterpriseManagement'].includes(card.ssoMethod)) {
+        if (!ACCOUNT_CAPABLE_METHODS.has(card.ssoMethod)) {
             return res.status(409).json({ error: '当前平台不支持账号同步维护' });
         }
-        {
-            let result;
-            try {
-                result = await withNamedLock(
-                    `mc-login-repair-${req.user.id}-${competitionId}`,
-                    async () => {
-                    await pool.query(
-                        'DELETE FROM user_platform_account_status WHERE user_id = ? AND competition_id = ?',
-                        [req.user.id, competitionId]
-                    );
-                    await pool.query(
-                        'DELETE FROM user_competition_expert_student_bindings WHERE user_id = ? AND competition_id = ?',
-                        [req.user.id, competitionId]
-                    );
-                    const [studentAccounts] = await pool.query(
-                        `SELECT student_index AS studentIndex
-                         FROM user_competition_student_accounts
-                         WHERE user_id = ? AND competition_id = ? AND status = 'ready'
-                         ORDER BY student_index`,
-                        [req.user.id, competitionId]
-                    );
-                    const repaired = [];
-                    await executeSsoRequest(req, {
-                        competitionId,
-                        context: { loginRole: 'teacher' }
-                    });
-                    repaired.push({ loginRole: 'teacher', studentIndex: 1 });
-                    await executeSsoRequest(req, {
-                        competitionId,
-                        context: { loginRole: 'student', studentIndex: null }
-                    });
-                    repaired.push({ loginRole: 'student', studentIndex: 1 });
-                    for (const account of studentAccounts) {
-                        const studentIndex = Number(account.studentIndex);
-                        if (!Number.isInteger(studentIndex) || studentIndex < 2) continue;
-                        await executeSsoRequest(req, {
-                            competitionId,
-                            context: { loginRole: 'student', studentIndex }
-                        });
-                        repaired.push({ loginRole: 'student', studentIndex });
-                    }
-                        return repaired;
-                    }
-                );
-            } catch (error) {
-                await pool.query(
-                    'DELETE FROM user_platform_account_status WHERE user_id = ? AND competition_id = ?',
-                    [req.user.id, competitionId]
-                ).catch(() => {});
-                await pool.query(
-                    'DELETE FROM user_competition_expert_student_bindings WHERE user_id = ? AND competition_id = ?',
-                    [req.user.id, competitionId]
-                ).catch(() => {});
-                throw error;
+        const { repaired, failed } = await withNamedLock(`mc-login-repair-${req.user.id}-${competitionId}`, async () => {
+            const [accounts] = await pool.query(`SELECT student_index AS studentIndex
+                FROM user_competition_student_accounts
+                WHERE user_id = ? AND competition_id = ? AND status = 'ready' AND student_index >= 2
+                ORDER BY student_index`, [req.user.id, competitionId]);
+            const available = [
+                { loginRole: 'teacher', studentIndex: 1 },
+                { loginRole: 'student', studentIndex: 1 },
+                ...accounts.map(({ studentIndex }) => ({ loginRole: 'student', studentIndex }))
+            ];
+            const targetKey = ({ loginRole, studentIndex }) => `${loginRole}:${studentIndex}`;
+            const requested = req.body?.targets;
+            let targets = available;
+            if (requested !== undefined) {
+                if (!Array.isArray(requested) || !requested.length || requested.length > available.length
+                    || requested.some(target => !target || !['teacher', 'student'].includes(target.loginRole)
+                        || !Number.isSafeInteger(target.studentIndex))) {
+                    throw Object.assign(new Error('修复账号列表无效'), { status: 400 });
+                }
+                const keys = new Set(requested.map(targetKey));
+                targets = available.filter(target => keys.has(targetKey(target)));
+                if (targets.length !== requested.length) throw Object.assign(new Error('修复账号列表已变化，请重新打开维护面板'), { status: 400 });
             }
-            return res.json({
-                success: true,
-                mode: card.ssoMethod === 'java' ? 'java_repaired' : 'soap_repaired',
-                repaired: result
-            });
-        }
+            const repaired = [];
+            const failed = [];
+            for (const target of targets) {
+                try {
+                    await executeSsoRequest(req, { competitionId, context: target }, { forceAccountSync: true, signal: deadline.signal });
+                    if (target.loginRole === 'student') {
+                        await pool.query(`DELETE FROM user_competition_expert_student_bindings
+                            WHERE user_id = ? AND competition_id = ? AND student_index = ?`,
+                            [req.user.id, competitionId, target.studentIndex]);
+                    }
+                    repaired.push(target);
+                } catch (error) {
+                    req.raw?.signal?.throwIfAborted();
+                    const message = deadline.signal.aborted ? timeoutError.message : error.message || '账号同步失败';
+                    failed.push({ ...target, message });
+                }
+            }
+            return { repaired, failed };
+        }, deadline.signal);
+        return res.json({
+            success: failed.length === 0,
+            mode: card.ssoMethod === 'java' ? 'java_repaired' : 'soap_repaired',
+            repaired,
+            failed
+        });
     } catch (error) {
         const status = Number(error.statusCode || error.status) || 500;
         return res.status(status >= 400 && status < 600 ? status : 500).json({
             error: error.message || '重新校验准备失败'
         });
+    } finally {
+        deadline.dispose();
     }
 });
 
@@ -1205,17 +1229,9 @@ router.post('/class/remove', authMiddleware, async (req, res) => {
             // JAVA 平台改走账号管理 API 直删：open-API 删班在真实平台不可靠
             // （YX030505 markGroupDeleted 302、YT00123 checkClassName 按 uc_mode=5
             // 过滤导致班级不可见），直删数据库班级行绕过全部失效接口。
-            const mapping = card.classDeleteMapping ? JSON.parse(card.classDeleteMapping) : null;
-            if (!isClassDeleteMappingReady(mapping)) {
-                return res.status(409).json({ error: '当前未配置 Java 班级删除映射，请先在编辑卡片中开启并填写' });
-            }
-            const accountApiConfig = await readAccountManagementConfig(mapping.apiId);
-            if (!accountApiConfig) {
-                return res.status(409).json({ error: '该卡片映射绑定的账号管理 API 不存在或已删除' });
-            }
-            if (!accountApiConfig.enabled) {
-                return res.status(409).json({ error: '所选账号管理 API 已停用' });
-            }
+            const storedMapping = card.classDeleteMapping ? JSON.parse(card.classDeleteMapping) : null;
+            const { reason, mapping, accountApiConfig } = await readJavaClassDeleteBinding(storedMapping);
+            if (reason) return res.status(409).json({ error: reason });
             const result = await deleteManagedPlatformClass(accountApiConfig, {
                 system: card.ssoMethod,
                 platformUrl: card.url,

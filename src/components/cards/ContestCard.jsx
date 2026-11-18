@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useId } from 'react';
 import {
     Clock, Ban, Hourglass, CheckCircle2, Edit2, Trash2, Sparkles,
     CalendarX, Lock, UserPlus, RotateCcw, X,
     Trophy, Target, Zap, BookOpen, Cloud, GraduationCap, Gavel, UserRound, ExternalLink,
-    KeyRound, Copy, ChevronDown, Loader2
+    KeyRound, Copy, ChevronDown, Loader2, Wrench
 } from 'lucide-react';
 import { THEMES } from '../../constants/themes';
 import { SYSTEM_ICONS } from '../../constants/icons';
@@ -154,7 +154,8 @@ const ContestCard = ({
     link, isAdmin, userRole, onEdit, onDelete, onAiGuide, overrideTime, onOpen, createPanel, setCreatePanel, immersiveMode,
     isCardEditMode, categoryArrangeEnabled = false, studentAccounts = [], expertTargets = [], onCreateStudent, isCreatingStudent, onDeleteStudent, deletingStudentKey,
     openingCompetitionKeys = new Set(), onLaunchPrepared, onRequestManualCredential, onOpenAdminEntry, aiGuideAvailable = false,
-    onDeleteClass, onInitializeClass, onRepairAccountReadiness, onRestoreClass, onUnsupportedClassDelete, classActionKey = null
+    onDeleteClass, onInitializeClass, onRepairAccountReadiness, onRestoreClass, classActionKey = null,
+    repairFailureCount = 0
 }) => {
     const theme = THEMES[link.color || 'blue'] || THEMES.blue;
     const cardSurfaceMode = link.color === 'transparent' ? 'transparent' : link.color === 'white' ? 'white' : 'tinted';
@@ -172,6 +173,8 @@ const ContestCard = ({
     const [copiedField, setCopiedField] = useState('');
     const [deleteArmed, setDeleteArmed] = useState(false);
     const [pressProgress, setPressProgress] = useState(0);
+    const maintenanceId = useId();
+    const maintenanceTriggerRef = useRef(null);
     const manualTriggerRef = useRef(null);
     const manualPanelRef = useRef(null);
     const cardRootRef = useRef(null);
@@ -516,12 +519,8 @@ const ContestCard = ({
         'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement'
     ].includes(link.ssoMethod);
     const supportsExpertLogin = ['java', 'net'].includes(link.ssoMethod);
-    const supportsClassDelete = !isStudentUser && !isClassRemoved && !isLocked && [
-        'java', 'net', 'marketing', 'commerce',
-        'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement'
-    ].includes(link.ssoMethod);
-    const canAttemptClassDelete = supportsClassDelete
-        || (!isStudentUser && !isClassRemoved && !isLocked && link.ssoMethod === 'direct');
+    const canOpenMaintenance = !isStudentUser && !isClassRemoved && !isLocked
+        && (supportsStudentAccounts || link.ssoMethod === 'direct');
     // JAVA 平台长按删除进度条用蓝色，与 .NET/SOAP 的红色做区分。
     const isJavaDelete = link.ssoMethod === 'java';
     const deleteActionKey = `remove:${link.id}`;
@@ -532,10 +531,7 @@ const ContestCard = ({
     const isClassActionRunning = isDeletingClass || isInitializingClass || isRepairingAccount;
     const canInitializeClass = ['admin', 'super_admin'].includes(userRole)
         && link.ssoMethod === 'java';
-    const canRepairAccountReadiness = !isStudentUser && [
-        'java', 'net', 'marketing', 'commerce', 'managementAccounting',
-        'crossBorderCommerce', 'enterpriseManagement'
-    ].includes(link.ssoMethod);
+    const canRepairAccountReadiness = supportsStudentAccounts && Boolean(onRepairAccountReadiness);
     const hasReadyAccount = Boolean(link.teacherReady || link.studentReady
         || studentAccounts.some(account => Boolean(Number(account.platformReady))));
     const manualCredentialEnabled = link.manualCredentialEnabled === true
@@ -591,7 +587,7 @@ const ContestCard = ({
     };
 
     const startDeletePress = (event) => {
-        if (!canAttemptClassDelete || deleteArmed) return;
+        if (!canOpenMaintenance || deleteArmed) return;
         if (event.target.closest('button, a, input, select, textarea')) return;
         if (cardBodyRef.current) {
             setCardDimensions({
@@ -607,8 +603,7 @@ const ContestCard = ({
             if (progress >= 100) {
                 clearInterval(longPressTimerRef.current);
                 longPressTimerRef.current = null;
-                if (supportsClassDelete) setDeleteArmed(true);
-                else if (onUnsupportedClassDelete) onUnsupportedClassDelete(link);
+                setDeleteArmed(true);
             }
         }, 30);
     };
@@ -619,6 +614,11 @@ const ContestCard = ({
             longPressTimerRef.current = null;
         }
         setPressProgress(0);
+    };
+
+    const closeMaintenance = () => {
+        setDeleteArmed(false);
+        window.requestAnimationFrame(() => maintenanceTriggerRef.current?.focus());
     };
 
     const handleDeleteClassClick = (event) => {
@@ -962,23 +962,29 @@ const ContestCard = ({
                 {/* 删除模式确认层（纯净玻璃高斯模糊 + 警示微光 + 弹性缩放动画） */}
                 {deleteArmed && !isClassRemoved && (
                     <ClassActionOverlay
-                        running={isClassActionRunning || isRepairingAccount}
+                        id={maintenanceId}
+                        availability={link.maintenance}
+                        direct={link.ssoMethod === 'direct'}
+                        platformLabel={link.ssoMethod === 'java' ? 'Java ' : link.ssoMethod === 'net' ? '.NET ' : '平台'}
+                        running={isClassActionRunning}
+                        busy={Boolean(classActionKey)}
                         initializing={isInitializingClass}
                         deleting={isDeletingClass}
                         repairing={isRepairingAccount}
                         accountReady={hasReadyAccount}
-                        javaResync={link.ssoMethod === 'java'}
                         canInitialize={canInitializeClass}
                         canRepair={canRepairAccountReadiness}
+                        repairFailureCount={repairFailureCount}
                         onDelete={handleDeleteClassClick}
                         onInitialize={handleInitializeClassClick}
                         onRepair={handleRepairAccountClick}
-                        onCancel={() => setDeleteArmed(false)}
+                        onCancel={closeMaintenance}
                     />
                 )}
 
                 <div
                     className={`flex flex-col flex-grow p-5 transition-all duration-300 ${deleteArmed ? "filter blur-sm opacity-15 scale-95 pointer-events-none" : ""} ${isLocked && !isAdmin ? "pointer-events-none" : ""} ${isChristmas || isLunar || isHalloween || isMidAutumn || isDragonBoat || isYuanxiao || isQingming ? 'pt-8' : ''}`}
+                    inert={deleteArmed}
                     onPointerDown={startDeletePress}
                     onPointerUp={cancelDeletePress}
                     onPointerLeave={cancelDeletePress}
@@ -997,7 +1003,7 @@ const ContestCard = ({
                             {isChristmas && <div className="absolute top-0 left-0 w-full h-1 bg-white/60 blur-[1px]"></div>}
                             {renderIcon()}
                         </div>
-                        <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-1.5">
                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${theme.soft}
                                 ${isLunar ? '!bg-red-50 !text-red-700 !border-red-200' : ''}
                                 ${isHalloween ? '!bg-slate-800 !text-orange-400 !border-purple-800' : ''}
@@ -1009,6 +1015,14 @@ const ContestCard = ({
                             `}>
                                 {renderStatus()}
                             </span>
+                            {canOpenMaintenance && (
+                                <button type="button" ref={maintenanceTriggerRef} aria-label="打开系统维护" title="系统维护"
+                                    aria-expanded={deleteArmed} aria-controls={deleteArmed ? maintenanceId : undefined}
+                                    onClick={() => setDeleteArmed(true)}
+                                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200/70 bg-white/60 text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600 dark:border-slate-600/70 dark:bg-slate-800/80 dark:text-slate-200">
+                                    <Wrench aria-hidden="true" className="h-3.5 w-3.5" />
+                                </button>
+                            )}
                         </div>
                     </div>
 

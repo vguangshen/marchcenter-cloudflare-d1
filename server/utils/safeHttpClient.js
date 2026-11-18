@@ -1,4 +1,5 @@
 import { getEnv } from "../config/runtime.js";
+import { createRequestDeadline, waitForSignal } from './requestDeadline.js';
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -175,20 +176,6 @@ export function parseRawHttpResponse(input, maxResponseBytes = DEFAULT_MAX_RESPO
     };
 }
 
-async function withDeadline(promise, deadline) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new Error('远程平台请求超时');
-    let timer;
-    try {
-        return await Promise.race([
-            promise,
-            new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('远程平台请求超时')), remaining); })
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
 async function readFetchBody(response, maxResponseBytes) {
     const declaredLength = Number(response.headers.get('Content-Length') || 0);
     if (declaredLength > maxResponseBytes) throw new Error(`远程平台响应超过 ${maxResponseBytes} 字节限制`);
@@ -217,6 +204,7 @@ export async function rawHttpText(value, options = {}) {
     const url = assertSafeOutboundUrl(value, options);
     if (!isRawIpHttpUrl(url.toString())) throw new Error('Raw TCP transport only supports HTTP IP addresses');
     const { timeoutMs, maxResponseBytes } = requestLimits(options);
+    options.signal?.throwIfAborted();
     const { connect } = await import('cloudflare:sockets');
     const hostname = normalizedHostname(url.hostname);
     const port = Number(url.port || 80);
@@ -238,23 +226,25 @@ export async function rawHttpText(value, options = {}) {
     const head = `${method} ${path} HTTP/1.1\r\n${Object.entries(headers)
         .map(([name, content]) => `${name}: ${content}`).join('\r\n')}\r\n\r\n`;
     const requestBytes = concatBytes([new TextEncoder().encode(head), bodyBytes]);
-    const socket = connect({ hostname, port }, { allowHalfOpen: true });
     const chunks = [];
     let received = 0;
+    let socket;
     let reader;
     let writer;
-    const deadline = Date.now() + timeoutMs;
+    const deadline = createRequestDeadline(timeoutMs, options.signal, new Error('远程平台请求超时'));
 
     try {
-        await withDeadline(socket.opened, deadline);
+        deadline.signal.throwIfAborted();
+        socket = connect({ hostname, port }, { allowHalfOpen: true });
+        await waitForSignal(() => socket.opened, deadline.signal);
         writer = socket.writable.getWriter();
-        await withDeadline(writer.write(requestBytes), deadline);
+        await waitForSignal(() => writer.write(requestBytes), deadline.signal);
         writer.releaseLock();
         writer = null;
 
         reader = socket.readable.getReader();
         while (true) {
-            const { value: chunk, done } = await withDeadline(reader.read(), deadline);
+            const { value: chunk, done } = await waitForSignal(() => reader.read(), deadline.signal);
             if (done) break;
             if (chunk?.length) {
                 chunks.push(chunk);
@@ -276,9 +266,10 @@ export async function rawHttpText(value, options = {}) {
         reader = null;
         return parseRawHttpResponse(concatBytes(chunks), maxResponseBytes);
     } finally {
+        deadline.dispose();
         try { writer?.releaseLock(); } catch { /* writer may already be released */ }
         try { reader?.releaseLock(); } catch { /* reader may already be released */ }
-        try { await socket.close(); } catch { /* socket may already be closed by the peer */ }
+        try { await socket?.close(); } catch { /* socket may already be closed by the peer */ }
     }
 }
 
@@ -286,9 +277,9 @@ export async function safeHttpText(value, options = {}) {
     const url = assertSafeOutboundUrl(value, options);
     if (isRawIpHttpUrl(url.toString())) return rawHttpText(url.toString(), options);
     const { timeoutMs, maxResponseBytes } = requestLimits(options);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new Error('远程平台请求超时')), timeoutMs);
+    const deadline = createRequestDeadline(timeoutMs, options.signal, new Error('远程平台请求超时'));
     try {
+        deadline.signal.throwIfAborted();
         const response = await fetch(url, {
             method: options.method || 'GET',
             headers: options.headers,
@@ -297,7 +288,7 @@ export async function safeHttpText(value, options = {}) {
             // Keep redirects visible to callers so they can validate the status
             // instead of following an untrusted location automatically.
             redirect: 'manual',
-            signal: controller.signal
+            signal: deadline.signal
         });
         const data = await readFetchBody(response, maxResponseBytes);
         return {
@@ -308,9 +299,9 @@ export async function safeHttpText(value, options = {}) {
             ok: response.ok
         };
     } catch (error) {
-        if (controller.signal.aborted) throw new Error('远程平台请求超时');
+        deadline.signal.throwIfAborted();
         throw error;
     } finally {
-        clearTimeout(timer);
+        deadline.dispose();
     }
 }

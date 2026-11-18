@@ -48,6 +48,95 @@ function asUser(token) {
     };
 }
 
+async function listedMaintenance(competitionId) {
+    const response = await harness.api('/api/competitions');
+    assert.equal(response.status, 200);
+    return response.data.find(card => card.id === competitionId).maintenance;
+}
+
+test('competition list includes independent Java binding availability without contacting the platform', async () => {
+    const config = officialConfig('java');
+    const { configId, competitionId } = await routeConfig(config);
+    const secondId = await harness.seedCompetition({
+        configId, method: 'java', url: 'http://localhost:9289/DS50109', classType: 1
+    });
+    const unconfigured = await listedMaintenance(competitionId);
+    assert.match(unconfigured.delete, /未配置 Java 班级删除映射/);
+    assert.equal(unconfigured.repair, null);
+    assert.equal(unconfigured.initialize, null);
+
+    const mapping = {
+        enabled: true, apiId: 'maintenance-bridge', databaseName: 'training',
+        classTable: 'classes', classNameColumn: 'name', classIdColumn: 'id',
+        userTable: 'users', userClassColumn: 'class_id'
+    };
+    await harness.run('UPDATE competitions SET class_delete_mapping = ? WHERE id = ?', JSON.stringify(mapping), competitionId);
+    assert.match((await listedMaintenance(competitionId)).delete, /账号管理 API 不存在/);
+
+    const storedService = enabled => JSON.stringify({ version: 2, services: [{
+        id: mapping.apiId, enabled, endpointUrl: 'http://localhost:9001', signingSecret: 'maintenance-secret'
+    }] });
+    await harness.run('INSERT INTO system_configs (config_key, config_value) VALUES (?, ?)',
+        'account_management_api', storedService(false));
+    assert.match((await listedMaintenance(competitionId)).delete, /已停用/);
+
+    await harness.run('UPDATE system_configs SET config_value = ? WHERE config_key = ?',
+        JSON.stringify({ version: 2, services: [{ id: mapping.apiId, enabled: true }] }), 'account_management_api');
+    const incomplete = await listedMaintenance(competitionId);
+    assert.match(incomplete.delete, /账号管理 API 不存在/);
+    assert.equal(incomplete.repair, null);
+
+    await harness.run('UPDATE system_configs SET config_value = ? WHERE config_key = ?',
+        storedService(true), 'account_management_api');
+    const ready = await harness.api('/api/competitions');
+    assert.equal(ready.status, 200);
+    const enabled = ready.data.find(card => card.id === competitionId);
+    const second = ready.data.find(card => card.id === secondId);
+    assert.deepEqual(enabled.maintenance, { delete: null, repair: null, initialize: null });
+    assert.match(second.maintenance.delete, /未配置 Java 班级删除映射/);
+    assert.ok(!JSON.stringify(ready.data).includes('maintenance-secret'));
+
+    await harness.run('UPDATE competitions SET manual_credential_enabled = 1, restore_original_password_before_sso = 1 WHERE id = ?', competitionId);
+    await harness.run(
+        `INSERT INTO user_manual_teacher_credentials (user_id, competition_id, username, login_url, encrypted_password)
+         VALUES (1, ?, 'teacher', 'https://example.invalid', 'test-ciphertext')`, competitionId
+    );
+    const restorePending = await listedMaintenance(competitionId);
+    assert.match(restorePending.repair, /设备及数据库连接/);
+    assert.equal(restorePending.delete, null);
+    assert.equal(restorePending.initialize, null);
+
+    await harness.run('UPDATE sso_configs SET config_data = ? WHERE id = ?', JSON.stringify({ ...config, tokenPassword: '' }), configId);
+    const missingCredentials = await listedMaintenance(competitionId);
+    assert.equal(missingCredentials.delete, null);
+    assert.match(missingCredentials.repair, /免密接口凭据/);
+    assert.match(missingCredentials.initialize, /免密接口凭据/);
+    assert.equal(harness.platform.state.requests.length, 0);
+    assert.equal((await harness.rows('SELECT * FROM user_class_removals')).length, 0);
+});
+
+test('competition list permits SOAP class deletion without a Java mapping and respects roles and card access', async () => {
+    const { competitionId } = await routeConfig(officialConfig('net'));
+    const path = '/api/competitions';
+    const teacherToken = await seedRoleUser(38, 'maintenance-teacher', 'teacher');
+    const studentToken = await seedRoleUser(39, 'maintenance-student', 'student');
+    const unauthorized = await harness.api(path, asUser(teacherToken));
+    assert.equal(unauthorized.status, 200);
+    assert.equal(unauthorized.data.some(card => card.id === competitionId), false);
+    await grantAccess(38, competitionId);
+    await grantAccess(39, competitionId);
+
+    const teacher = await harness.api(path, asUser(teacherToken));
+    assert.equal(teacher.status, 200);
+    assert.deepEqual(teacher.data.find(card => card.id === competitionId).maintenance,
+        { delete: null, repair: null, initialize: '需要管理员或超级管理员权限' });
+    const student = await harness.api(path, asUser(studentToken));
+    assert.equal(student.status, 200);
+    assert.equal(student.data.find(card => card.id === competitionId).maintenance, undefined);
+    assert.equal((await harness.api(`/api/sso/maintenance/${competitionId}`)).status, 404);
+    assert.equal(harness.platform.state.requests.length, 0);
+});
+
 test('student cannot remove remote classes even with card access', async () => {
     const { competitionId } = await routeConfig(officialConfig('net'));
     const studentToken = await seedRoleUser(10, 'e2e-student', 'student');

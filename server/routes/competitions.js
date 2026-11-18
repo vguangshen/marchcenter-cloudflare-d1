@@ -1,12 +1,14 @@
 import express from '../compat/express.js';
 import pool from "../config/db.js";
 import { authMiddleware, adminOnly } from "../middleware/auth.js";
-import { assertCompetitionAccess, filterCompetitionsForUser } from "../utils/accessControl.js";
+import { assertCompetitionAccess } from "../utils/accessControl.js";
 import { decodeStoredConfig, decryptSecretValue, encryptSecretValue } from '../utils/configSecrets.js';
-import { isSuperAdmin } from '../utils/roleAccess.js';
+import { isSuperAdmin, normalizeRole, ROLES } from '../utils/roleAccess.js';
 import { validateOfficialCardAddress } from '../utils/officialCompat/cardAddress.js';
 import { PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { isClassDeleteMappingReady, normalizeClassDeleteMapping } from '../utils/accountManagementApi.js';
+import { attachAgentTaskModules } from '../utils/paasV2Platforms.js';
+import { attachCompetitionMaintenance } from '../utils/competitionMaintenance.js';
 
 const router = express.Router();
 
@@ -192,6 +194,8 @@ async function persistOfficialCardAddress(data) {
 router.get("/", authMiddleware, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
+        const userId = req.user.id;
+        const restricted = ![ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(normalizeRole(req.user.role));
         const query = `
                 SELECT
                     c.id, c.title, c.subtitle, c.url, c.category, c.status_text AS statusText,
@@ -244,29 +248,36 @@ router.get("/", authMiddleware, async (req, res) => {
                         SELECT 1 FROM user_class_removals ucr
                         WHERE ucr.user_id = ? AND ucr.competition_id = c.id
                     ) AS classRemoved
+                    ${restricted ? ', rules.user_id AS ruleUserId, rules.unlock_time AS ruleUnlockTime, rules.lock_time AS ruleLockTime' : ''}
                 FROM competitions c
+                ${restricted ? `JOIN user_permissions allowed ON allowed.user_id = ? AND allowed.competition_id = c.id
+                JOIN user_access_policies policy ON policy.user_id = allowed.user_id AND policy.configured <> 0
+                LEFT JOIN user_competition_time_rules rules ON rules.user_id = allowed.user_id AND rules.competition_id = c.id` : ''}
                 LEFT JOIN user_workflow_status uws
                        ON c.id = uws.competition_id AND uws.user_id = ?
                 LEFT JOIN user_agent_task_results result
                        ON c.sso_method = 'paasV2' AND result.user_id = ? AND result.competition_id = c.id
                       AND result.sso_config_id = c.sso_config_id AND result.target_url = c.url
-                      AND result.task_id IS c.paas_v2_plug_flag
-                      AND result.answer_type IS c.paas_v2_answer_type
-                      AND result.software_unique IS c.paas_v2_software_unique
+                      AND NULLIF(result.task_id, '') IS NULLIF(c.paas_v2_plug_flag, '')
+                      AND result.answer_type = ?
+                      AND NULLIF(result.software_unique, '') IS NULLIF(c.paas_v2_software_unique, '')
                 ORDER BY c.id DESC
             `;
         const [rows] = await pool.query(query, [
-            req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id
+            userId, userId, userId, userId, userId,
+            ...(restricted ? [userId] : []), userId, userId, PAAS_V2_ANSWER_TYPE
         ]);
-        const parsedRows = rows.map(({ agentResultStatus, agentResultScore, ...row }) => {
+        const visibleRows = rows.map(({ agentResultStatus, agentResultScore, ruleUserId, ruleUnlockTime, ruleLockTime, ...row }) => {
             const parsed = {
                 ...row,
                 classDeleteMapping: row.classDeleteMapping ? JSON.parse(row.classDeleteMapping) : null,
                 hasAdminEntryPassword: Boolean(row.adminEntryCredentials)
             };
             if (row.ssoMethod === 'paasV2') {
+                parsed.paasV2AnswerType = PAAS_V2_ANSWER_TYPE;
                 parsed.agentResult = agentResultStatus ? { status: agentResultStatus, score: agentResultScore } : null;
             }
+            if (restricted) parsed._overrideTime = ruleUserId == null ? null : { unlockTime: ruleUnlockTime, lockTime: ruleLockTime };
             if (isSuperAdmin(req.user) && row.adminEntryCredentials) {
                 parsed.adminEntryUsername = decodeAdminEntryCredentials(row.adminEntryCredentials).username;
             }
@@ -274,7 +285,10 @@ router.get("/", authMiddleware, async (req, res) => {
             if (!isSuperAdmin(req.user)) delete parsed.restoreOriginalPasswordCiphertext;
             return parsed;
         });
-        const visibleRows = await filterCompetitionsForUser(req.user, parsedRows);
+        await Promise.all([
+            attachAgentTaskModules(visibleRows),
+            attachCompetitionMaintenance(visibleRows, req.user)
+        ]);
         res.json(visibleRows);
     } catch (err) {
         console.error(err);
@@ -291,10 +305,13 @@ router.post("/:id/complete", authMiddleware, async (req, res) => {
         const userId = req.user.id;
         const competitionId = req.params.id;
 
-        await pool.query(
-            "INSERT IGNORE INTO user_workflow_status (user_id, competition_id) VALUES (?, ?)",
-            [userId, competitionId]
-        );
+        const binding = [userId, competitionId];
+        await pool.batch([
+            [`DELETE FROM user_agent_task_results
+                WHERE user_id = ? AND competition_id = ? AND status = 'in_progress'
+                  AND NOT EXISTS (SELECT 1 FROM user_workflow_status WHERE user_id = ? AND competition_id = ?)`, [...binding, ...binding]],
+            ['INSERT OR IGNORE INTO user_workflow_status (user_id, competition_id) VALUES (?, ?)', binding]
+        ]);
 
         res.json({ success: true });
     } catch (err) {
@@ -411,22 +428,40 @@ router.put("/:id", authMiddleware, adminOnly, async (req, res) => {
         const classType = ['java', 'net', 'marketing', 'commerce', 'managementAccounting',
             'crossBorderCommerce', 'enterpriseManagement'].includes(d.ssoMethod)
             && [1, 2, 3].includes(Number(d.classType)) ? Number(d.classType) : null;
-        const [result] = await pool.query(
-            `UPDATE competitions SET title=?, subtitle=?, url=?, category=?, status_text=?, description=?, color=?, custom_icon=?, logo_background=?, unlock_time=?, lock_time=?, custom_prompt=?, sso_config_id=?, sso_method=?, class_type=?, account_api_id=?, account_db_provider=?, account_db_name=?, account_table_name=?, account_username_column=?, account_password_column=?, account_password_algorithm=?, manual_credential_enabled=?, restore_original_password_before_sso=?, restore_original_password_ciphertext=?, admin_entry_enabled=?, admin_entry_credentials=?, class_delete_mapping=?, paas_v2_plug_flag=?, paas_v2_answer_type=?, paas_v2_software_unique=?, paas_v2_cover=? WHERE id=?`,
-            [
+        const id = req.params.id;
+        const ssoMethod = d.ssoMethod || null;
+        const plugFlag = d.paasV2PlugFlag || null;
+        const answerType = ssoMethod === 'paasV2' ? PAAS_V2_ANSWER_TYPE : d.paasV2AnswerType || null;
+        const softwareUnique = d.paasV2SoftwareUnique || null;
+        // Evaluate against the current binding inside the same batch as the edit.
+        const changedPlatform = 'url IS NOT ? OR sso_config_id IS NOT ? OR sso_method IS NOT ? OR class_type IS NOT ?';
+        const platformBinding = [d.url, effectiveSsoConfigId, ssoMethod, classType];
+        // All agent requests use the same answer mode, including cards saved with an older value.
+        const changedTask = `${changedPlatform} OR (sso_method = 'paasV2' AND (
+            NULLIF(paas_v2_plug_flag, '') IS NOT ? OR NULLIF(paas_v2_software_unique, '') IS NOT ?))`;
+        const taskBinding = [...platformBinding, plugFlag, softwareUnique];
+        const clearTaskState = ['user_workflow_status', 'user_agent_task_results'].map(table => [
+            `DELETE FROM ${table} WHERE competition_id = ? AND EXISTS (SELECT 1 FROM competitions WHERE id = ? AND (${changedTask}))`,
+            [id, id, ...taskBinding]
+        ]);
+        const [, , , updated, status] = await pool.batch([
+            ...clearTaskState,
+            [`DELETE FROM user_platform_account_status WHERE competition_id = ? AND EXISTS (
+                SELECT 1 FROM competitions WHERE id = ? AND (${changedPlatform}))`, [id, id, ...platformBinding]],
+            [`UPDATE competitions SET title=?, subtitle=?, url=?, category=?, status_text=?, description=?, color=?, custom_icon=?, logo_background=?, unlock_time=?, lock_time=?, custom_prompt=?, sso_config_id=?, sso_method=?, class_type=?, account_api_id=?, account_db_provider=?, account_db_name=?, account_table_name=?, account_username_column=?, account_password_column=?, account_password_algorithm=?, manual_credential_enabled=?, restore_original_password_before_sso=?, restore_original_password_ciphertext=?, admin_entry_enabled=?, admin_entry_credentials=?, class_delete_mapping=?, paas_v2_plug_flag=?, paas_v2_answer_type=?, paas_v2_software_unique=?, paas_v2_cover=? WHERE id=?`, [
                 d.title, d.subtitle, d.url, d.category, d.statusText, d.description, d.color, d.customIcon,
                 d.logoBackground || 'transparent',
                 times.unlockTime,
                 times.lockTime,
-                d.customPrompt, effectiveSsoConfigId, d.ssoMethod || null, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), d.paasV2PlugFlag || null, d.ssoMethod === 'paasV2' ? PAAS_V2_ANSWER_TYPE : d.paasV2AnswerType || null, d.paasV2SoftwareUnique || null, d.paasV2Cover || null,
-                req.params.id
-            ]
-        );
-        if (!result.affectedRows) return res.status(404).json({ error: '竞赛不存在' });
-        await pool.query('DELETE FROM user_workflow_status WHERE competition_id = ?', [req.params.id]);
+                d.customPrompt, effectiveSsoConfigId, ssoMethod, classType, accountDb.apiId, accountDb.provider, accountDb.name, accountDb.table, accountDb.usernameColumn, accountDb.passwordColumn, accountDb.passwordAlgorithm, accountDb.manualCredentialEnabled, accountDb.restoreOriginalPasswordBeforeSso, storedRestoreCiphertext, adminEntry.enabled, adminEntry.encrypted, classDeleteSelection(d), plugFlag, answerType, softwareUnique, d.paasV2Cover || null,
+                id
+            ]],
+            ['SELECT EXISTS (SELECT 1 FROM user_workflow_status WHERE competition_id = ? AND user_id = ?) AS has_executed', [id, req.user.id]]
+        ]);
+        if (!updated.affectedRows) return res.status(404).json({ error: '竞赛不存在' });
         res.json(publicCompetitionMutation(d, {
-            id: req.params.id,
-            has_executed: 0,
+            id,
+            has_executed: status.rows[0].has_executed,
             hasRestoreOriginalPasswordCiphertext: Boolean(storedRestoreCiphertext),
             hasAdminEntryPassword: adminEntry.hasPassword
         }));
