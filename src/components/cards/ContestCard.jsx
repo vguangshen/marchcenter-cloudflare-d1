@@ -1182,7 +1182,7 @@ const ContestCard = ({
                                                     {isExpertOpening ? '进入中' : '评委端'}
                                                 </button>
                                                 <div className={`w-[72px] pt-1.5 transition-all duration-200 ${teacherMenuOpen ? 'visible translate-y-0 opacity-100' : 'invisible -translate-y-1 opacity-0'}`}>
-                                                    <div className="flex flex-col gap-1">
+                                                    <div className="contest-card-role-menu-items flex flex-col gap-1">
                                                         {expertTargets.map(target => (
                                                             <button
                                                                 key={target.studentIndex || target.rosterIndex || target.accountName}
@@ -1190,7 +1190,7 @@ const ContestCard = ({
                                                                 title={`评审 ${target.displayName || target.accountName}`}
                                                                 onClick={(e) => handleRoleOpen(e, 'expert', target)}
                                                                 disabled={isExpertOpening}
-                                                                className="h-7 w-[72px] truncate rounded-xl border border-violet-200/80 bg-white/80 px-1 text-[9px] font-bold text-violet-700 shadow-lg backdrop-blur-md transition-all hover:border-violet-600 hover:bg-violet-600 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                                                                className="h-7 w-full truncate rounded-xl border border-violet-200/80 bg-white/80 px-1 text-[9px] font-bold text-violet-700 shadow-lg backdrop-blur-md transition-all hover:border-violet-600 hover:bg-violet-600 hover:text-white disabled:cursor-wait disabled:opacity-60"
                                                             >
                                                                 {target.displayName || target.accountName}
                                                             </button>
@@ -1248,14 +1248,14 @@ const ContestCard = ({
                                             </button>
                                         </div>
                                         {!isStudentUser && <div className={`absolute top-full right-0 pt-1.5 w-[72px] transition-all duration-200 ${studentMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-1'}`}>
-                                            <div className="flex flex-col gap-1">
+                                            <div className="contest-card-role-menu-items flex flex-col gap-1">
                                                 {studentAccounts.map(account => (
-                                                    <div key={account.studentIndex} className="relative group/student-account w-[72px] h-7">
+                                                    <div key={account.studentIndex} className="relative group/student-account w-full h-7">
                                                         <button
                                                             type="button"
                                                             title={`进入 ${account.accountName}`}
                                                             onClick={(e) => handleRoleOpen(e, 'student', account.studentIndex)}
-                                                            className="w-[72px] h-7 px-1 rounded-xl border border-emerald-200/80 bg-white/75 backdrop-blur-md text-[9px] font-bold text-emerald-700 shadow-lg hover:bg-emerald-600 hover:text-white transition-all truncate"
+                                                            className="w-full h-7 px-1 rounded-xl border border-emerald-200/80 bg-white/75 backdrop-blur-md text-[9px] font-bold text-emerald-700 shadow-lg hover:bg-emerald-600 hover:text-white transition-all truncate"
                                                         >
                                                             {account.accountName}
                                                         </button>
@@ -1277,7 +1277,7 @@ const ContestCard = ({
                                                     type="button"
                                                     onClick={handleCreateStudent}
                                                     disabled={isCreatingStudent}
-                                                    className="w-[72px] h-7 rounded-xl border border-dashed border-emerald-300 bg-white/60 backdrop-blur-md text-[10px] font-bold text-emerald-700 shadow-lg hover:bg-emerald-50 transition-all disabled:opacity-60 flex items-center justify-center gap-1"
+                                                    className="w-full h-7 rounded-xl border border-dashed border-emerald-300 bg-white/60 backdrop-blur-md text-[10px] font-bold text-emerald-700 shadow-lg hover:bg-emerald-50 transition-all disabled:opacity-60 flex items-center justify-center gap-1"
                                                 >
                                                     {isCreatingStudent ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
                                                     {isCreatingStudent ? '创建中' : '新增学生'}

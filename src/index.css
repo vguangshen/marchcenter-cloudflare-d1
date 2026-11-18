@@ -423,15 +423,19 @@ body {
     letter-spacing: .025em;
     color: rgb(71 85 105);
     opacity: var(--manual-login-label-opacity, 0);
-    transition: opacity var(--manual-login-label-transition, 0ms);
+    transition: opacity var(--manual-login-label-transition, 0ms), color 180ms ease;
 }
 
 .dark .manual-login-trigger__label {
     color: rgb(203 213 225);
 }
 
-.contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
-.contest-card-shell:focus-within:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
+.manual-login-trigger:is(:hover, :focus-visible) .manual-login-trigger__label {
+    color: inherit;
+}
+
+.contest-card-shell:hover .manual-login-trigger,
+.contest-card-shell:focus-within .manual-login-trigger,
 .manual-login-trigger--open {
     --manual-login-label-opacity: 1;
     --manual-login-label-transition: 140ms ease 120ms;
@@ -442,8 +446,8 @@ body {
     transform: translate(-50%, calc(100% - 3px));
 }
 
-.contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .manual-login-trigger::before,
-.contest-card-shell:focus-within:not(.contest-card-shell--role-actions-hover) .manual-login-trigger::before,
+.contest-card-shell:hover .manual-login-trigger::before,
+.contest-card-shell:focus-within .manual-login-trigger::before,
 .manual-login-trigger--open::before {
     opacity: 1;
 }
@@ -452,8 +456,8 @@ body {
     color: rgb(79 70 229) !important;
 }
 
-.dark .contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
-.dark .contest-card-shell:focus-within:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
+.dark .contest-card-shell:hover .manual-login-trigger,
+.dark .contest-card-shell:focus-within .manual-login-trigger,
 .dark .manual-login-trigger--open {
     border-color: transparent !important;
     background-color: transparent !important;
@@ -475,8 +479,7 @@ body {
     transform: translateY(-0.125rem) scale(1.1);
 }
 
-/* 入口按钮拥有独立的交互层。鼠标进入教师/学生/评委按钮时，卡片仍可
-   保持边框反馈，但不会把底部教师信息抽屉展开到按钮区域上。 */
+/* Keep role-menu layering independent from the bottom drawer. */
 .contest-card-role-actions {
     isolation: isolate;
 }
@@ -485,10 +488,10 @@ body {
     z-index: 60;
 }
 
-.contest-card-shell--role-actions-hover .manual-login-trigger {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+/* Fit account choices and their side controls beside the centered drawer. */
+.contest-card-shell:has(.manual-login-trigger) .contest-card-role-menu-items {
+    width: clamp(3.25rem, calc(50vw - 6.75rem), 4.5rem);
+    translate: 1.75rem;
 }
 
 /* === 统一轻提示与确认弹窗 === */
