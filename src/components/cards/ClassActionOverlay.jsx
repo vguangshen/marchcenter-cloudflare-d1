@@ -90,7 +90,7 @@ export default function ClassActionOverlay({
             onKeyDown={event => {
                 if (event.key === 'Escape' && !running) {
                     event.stopPropagation();
-                    onCancel();
+                    onCancel(true);
                 }
             }}
             className="glass-motion-surface absolute inset-0 z-30 overflow-visible rounded-3xl border border-red-200/50 bg-white/92 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 dark:border-red-900/30 dark:bg-slate-900/92">
@@ -115,7 +115,7 @@ export default function ClassActionOverlay({
                             <MaintenanceButton icon={RotateCcw} label="初始化系统" hint={reason('initialize')} alignRight={!canRepair} {...tooltipProps('initialize')}
                                 disabled={busy || actions?.initialize !== null} tone="from-orange-500 to-amber-500 shadow-orange-500/30" onClick={onInitialize} />
                         )}
-                        <button type="button" ref={cancelRef} onClick={onCancel} className="min-h-9 rounded-xl border border-slate-200/60 bg-slate-100 px-3 text-[11px] font-black text-slate-600 transition-all hover:bg-slate-200 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+                        <button type="button" ref={cancelRef} onClick={event => onCancel(event.detail === 0)} className="min-h-9 rounded-xl border border-slate-200/60 bg-slate-100 px-3 text-[11px] font-black text-slate-600 transition-all hover:bg-slate-200 active:scale-95 focus-visible:outline-none focus-visible:text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:focus-visible:text-indigo-300">
                             取消
                         </button>
                     </div>

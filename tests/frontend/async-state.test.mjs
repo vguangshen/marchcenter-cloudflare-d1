@@ -312,6 +312,7 @@ test('maintenance requires a hold and shows disabled action help on touch', asyn
         }
         const info = dialog.getByRole('button', { name: '查看删除班级说明' });
         const disabled = dialog.getByRole('button', { name: '删除班级', exact: true });
+        const cancel = dialog.getByRole('button', { name: '取消', exact: true });
         const tooltip = dialog.getByRole('tooltip').filter({ hasText: '班级删除映射未配置' });
         await info.waitFor();
         assert.equal(await disabled.isDisabled(), true);
@@ -320,10 +321,11 @@ test('maintenance requires a hold and shows disabled action help on touch', asyn
         await info.tap();
         await tooltip.waitFor();
         assert.deepEqual(await readMaintenanceCalls(page), before);
-        await dialog.getByRole('button', { name: '取消', exact: true }).focus();
-        await page.keyboard.press('Escape');
+
+        await cancel.tap();
         await dialog.waitFor({ state: 'detached' });
-        await page.waitForFunction(() => document.activeElement?.textContent.trim() === 'Java 实训');
+        await page.clock.runFor(50);
+        assert.equal(await title.evaluate(element => document.activeElement === element), false);
 
         await title.press('Enter');
         assert.equal(await dialog.count(), 0);
@@ -332,6 +334,9 @@ test('maintenance requires a hold and shows disabled action help on touch', asyn
         assert.equal(await dialog.count(), 0);
         await page.keyboard.up('Space');
         await dialog.waitFor();
+        await cancel.press('Escape');
+        await dialog.waitFor({ state: 'detached' });
+        await page.waitForFunction(() => document.activeElement?.textContent.trim() === 'Java 实训');
         assert.deepEqual(await readMaintenanceCalls(page), before);
     } finally { await page.close(); }
 });
@@ -414,6 +419,8 @@ test('long press shows maintenance states with explanations on hover and makes n
 
         await cancel.click();
         await remove.waitFor({ state: 'detached' });
+        await page.clock.runFor(50);
+        assert.equal(await title.evaluate(element => document.activeElement === element), false);
         await holdCardForMaintenance(page, readyTitle);
         await remove.waitFor();
         for (const [name, reason] of actionReasons) {

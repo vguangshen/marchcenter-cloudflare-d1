@@ -652,9 +652,11 @@ const ContestCard = ({
         if (heldLongEnough && canOpenMaintenance && !deleteArmed) setDeleteArmed(true);
     };
 
-    const closeMaintenance = () => {
+    const closeMaintenance = (restoreTitleFocus) => {
         setDeleteArmed(false);
-        window.requestAnimationFrame(() => cardTitleRef.current?.focus());
+        if (restoreTitleFocus) {
+            window.requestAnimationFrame(() => cardTitleRef.current?.focus({ preventScroll: true }));
+        }
     };
 
     const handleDeleteClassClick = (event) => {
@@ -1061,7 +1063,7 @@ const ContestCard = ({
                             onKeyDown={canOpenMaintenance ? handleMaintenanceKeyDown : undefined}
                             onKeyUp={canOpenMaintenance ? handleMaintenanceKeyUp : undefined}
                             onBlur={cancelMaintenanceHold}
-                            className={`contest-card-title mb-1 line-clamp-2 text-base font-black leading-5 transition-colors duration-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-600
+                            className={`contest-card-title mb-1 line-clamp-2 text-base font-black leading-5 transition-colors duration-300 focus-visible:outline-none
                             ${isChristmas ? 'text-red-700 group-hover:text-indigo-600' : ''}
                             ${isLunar ? 'text-transparent bg-clip-text bg-gradient-to-r from-red-800 to-orange-600 group-hover:from-red-600 group-hover:to-orange-500' : ''}
                             ${isHalloween ? 'text-orange-400 group-hover:text-purple-400' : ''}
