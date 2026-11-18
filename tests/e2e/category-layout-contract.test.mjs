@@ -60,7 +60,8 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     assert.match(styles, /\.manual-login-trigger::before[\s\S]*opacity:\s*0/);
     assert.match(styles, /\.manual-login-trigger--open::before[\s\S]*opacity:\s*1/);
     assert.match(styles, /\.manual-login-trigger[\s\S]*transform:\s*translate\(-50%,\s*\.6rem\)/);
-    assert.match(styles, /\.contest-card-shell:hover:not\(\.contest-card-shell--role-actions-hover\) \.manual-login-trigger[\s\S]*transform:\s*translate\(-50%,\s*calc\(100%\s*\+\s*1px\)\)/);
+    assert.match(styles, /\.contest-card-shell:hover:not\(\.contest-card-shell--role-actions-hover\) \.manual-login-trigger[\s\S]*transform:\s*translate\(-50%,\s*calc\(100%\s*-\s*3px\)\)/);
+    assert.match(styles, /\.manual-login-trigger::before \{[^}]*inset:\s*var\(--manual-login-frame-inset\) 0 0;[^}]*border-radius:\s*\.625rem/);
     assert.match(styles, /\.manual-login-trigger \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\)/);
     assert.match(styles, /\.manual-login-trigger--open \{[^}]*--manual-login-label-opacity:\s*1;[^}]*width:\s*9rem/);
     assert.match(styles, /\.contest-card-shell--role-actions-hover \.contest-card-role-actions[\s\S]*z-index:\s*60/);

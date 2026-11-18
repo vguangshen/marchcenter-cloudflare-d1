@@ -365,6 +365,7 @@ body {
 }
 
 .manual-login-trigger {
+    --manual-login-frame-inset: .375rem;
     position: relative;
     opacity: 1;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -387,7 +388,6 @@ body {
         height 300ms cubic-bezier(0.22, 1, 0.36, 1),
         padding 300ms cubic-bezier(0.22, 1, 0.36, 1),
         transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
-        border-radius 300ms ease,
         box-shadow 300ms ease,
         background-color 180ms ease,
         color 180ms ease;
@@ -397,14 +397,14 @@ body {
     content: "";
     position: absolute;
     z-index: 0;
-    inset: 0;
+    inset: var(--manual-login-frame-inset) 0 0;
     pointer-events: none;
     opacity: 0;
-    border: 1px solid rgba(255, 255, 255, .7);
-    border-radius: 0 0 .85rem .85rem;
-    background: rgba(255, 255, 255, .94);
-    box-shadow: 0 10px 22px rgba(15, 23, 42, .14);
-    transition: opacity 180ms ease;
+    border: 1px solid rgba(148, 163, 184, .4);
+    border-radius: .625rem;
+    background: rgba(248, 250, 252, .96);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, .16);
+    transition: opacity 180ms ease, border-color 180ms ease;
 }
 
 .manual-login-trigger__arrow {
@@ -436,11 +436,10 @@ body {
     --manual-login-label-opacity: 1;
     --manual-login-label-transition: 140ms ease 120ms;
     width: 9rem;
-    height: 1.75rem;
-    padding-inline: 0;
-    /* The expanded tongue starts exactly at the card edge. */
-    transform: translate(-50%, calc(100% + 1px));
-    border-radius: 0 0 .85rem .85rem;
+    height: 2rem;
+    padding-block-start: var(--manual-login-frame-inset);
+    /* Keep the hit area connected to the card across the visible gap. */
+    transform: translate(-50%, calc(100% - 3px));
 }
 
 .contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .manual-login-trigger::before,
@@ -464,7 +463,11 @@ body {
 .dark .manual-login-trigger::before {
     border-color: rgba(71, 85, 105, .8);
     background: rgba(15, 23, 42, .95);
-    box-shadow: 0 10px 22px rgba(2, 6, 23, .35);
+    box-shadow: 0 6px 16px rgba(2, 6, 23, .35);
+}
+
+.manual-login-trigger:is(:hover, :focus-visible, [aria-expanded="true"])::before {
+    border-color: rgba(129, 140, 248, .7);
 }
 
 .contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .contest-card-logo,
