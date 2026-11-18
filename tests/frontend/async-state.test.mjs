@@ -276,14 +276,40 @@ const readMaintenanceCalls = page => page.evaluate(() => window.__calls.filter(c
     call.url === '/competitions' || call.url.startsWith('/sso') || call.method !== 'GET'
 ));
 
-test('maintenance has a keyboard entry and touch explanation for disabled actions', async () => {
-    const page = await browser.newPage({ hasTouch: true, reducedMotion: 'reduce' });
+async function holdCardForMaintenance(page, title) {
+    // The fixture does not load the styles that position the hold progress overlay.
+    await page.mouse.move(0, 0);
+    await title.dispatchEvent('pointerdown', {
+        pointerType: 'mouse', pointerId: 99, button: 0, isPrimary: true
+    });
+    await page.getByRole('dialog', { name: '系统维护' }).waitFor({ timeout: 5000 });
+}
+
+test('maintenance requires a hold and shows disabled action help on touch', async () => {
+    const page = await browser.newPage({ hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
     try {
+        await page.clock.install();
         await page.goto(`${origin}/?mode=maintenance`);
-        const open = page.getByRole('button', { name: '打开系统维护', exact: true }).first();
-        await open.focus();
-        await page.keyboard.press('Enter');
+        const title = page.getByRole('heading', { name: 'Java 实训', exact: true });
         const dialog = page.getByRole('dialog', { name: '系统维护' });
+        await title.waitFor();
+        assert.equal(await page.getByRole('button', { name: /打开系统维护/ }).count(), 0);
+
+        await title.tap();
+        await page.clock.runFor(700);
+        assert.equal(await dialog.count(), 0);
+
+        const box = await title.boundingBox();
+        const touch = await page.context().newCDPSession(page);
+        await touch.send('Input.dispatchTouchEvent', {
+            type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }]
+        });
+        try {
+            await page.clock.runFor(700);
+            await dialog.waitFor();
+        } finally {
+            await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        }
         const info = dialog.getByRole('button', { name: '查看删除班级说明' });
         const disabled = dialog.getByRole('button', { name: '删除班级', exact: true });
         const tooltip = dialog.getByRole('tooltip').filter({ hasText: '班级删除映射未配置' });
@@ -297,7 +323,16 @@ test('maintenance has a keyboard entry and touch explanation for disabled action
         await dialog.getByRole('button', { name: '取消', exact: true }).focus();
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });
-        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '打开系统维护');
+        await page.waitForFunction(() => document.activeElement?.textContent.trim() === 'Java 实训');
+
+        await title.press('Enter');
+        assert.equal(await dialog.count(), 0);
+        await page.keyboard.down('Space');
+        await page.clock.runFor(700);
+        assert.equal(await dialog.count(), 0);
+        await page.keyboard.up('Space');
+        await dialog.waitFor();
+        assert.deepEqual(await readMaintenanceCalls(page), before);
     } finally { await page.close(); }
 });
 
@@ -307,12 +342,11 @@ test('maintenance retry sends only the accounts that failed to sync', async () =
         await page.goto(`${origin}/?mode=maintenance`);
         const title = page.locator('h3').filter({ hasText: /^已绑定实训$/ });
         const card = page.locator('.contest-card-shell').filter({ has: title });
-        const open = card.getByRole('button', { name: '打开系统维护' });
-        await open.click();
+        await holdCardForMaintenance(page, title);
         await card.getByRole('button', { name: '修复登录', exact: true }).click();
         await page.waitForFunction(() => window.__notifications.some(item => item.message.includes('1 个待重试')));
         const retry = card.getByRole('button', { name: '重试失败账号', exact: true });
-        if (!await retry.isVisible()) await open.click();
+        if (!await retry.isVisible()) await holdCardForMaintenance(page, title);
         await retry.click();
         await page.waitForFunction(() => window.__notifications.some(item => item.message.includes('账号同步完成')));
         assert.deepEqual(await page.evaluate(() => window.__calls.filter(call => call.url.endsWith('/repair')).map(call => call.body)), [
@@ -324,6 +358,7 @@ test('maintenance retry sends only the accounts that failed to sync', async () =
 test('long press shows maintenance states with explanations on hover and makes no additional request', async () => {
     const page = await browser.newPage({ reducedMotion: 'reduce' });
     try {
+        await page.clock.install();
         await page.goto(`${origin}/?mode=maintenance`);
         const title = page.getByRole('heading', { name: 'Java 实训', exact: true });
         const readyTitle = page.getByRole('heading', { name: '已绑定实训', exact: true });
@@ -336,9 +371,11 @@ test('long press shows maintenance states with explanations on hover and makes n
         const cancel = page.getByRole('button', { name: '取消', exact: true });
         await title.waitFor();
         const beforePress = await readMaintenanceCalls(page);
-        await title.dispatchEvent('pointerdown');
+        await title.click();
+        await page.clock.runFor(700);
+        assert.equal(await page.getByRole('dialog', { name: '系统维护' }).count(), 0);
+        await holdCardForMaintenance(page, title);
         await remove.waitFor();
-        await title.dispatchEvent('pointerup');
         const maintenanceHeading = page.getByText('系统维护', { exact: true });
         for (const [, reason] of actionReasons) {
             assert.equal(await page.getByText(reason, { exact: true }).isVisible(), false);
@@ -360,7 +397,10 @@ test('long press shows maintenance states with explanations on hover and makes n
         const removeTrigger = remove.locator('..');
         const removeTooltip = page.getByRole('tooltip').filter({ hasText: actionReasons[0][1] });
         assert.equal(await removeTrigger.getAttribute('tabindex'), '0');
-        await removeTrigger.focus();
+        await cancel.focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Shift+Tab');
+        assert.equal(await removeTrigger.evaluate(element => element === document.activeElement), true);
         await removeTooltip.waitFor();
         await page.keyboard.press('Escape');
         await removeTooltip.waitFor({ state: 'hidden' });
@@ -374,9 +414,8 @@ test('long press shows maintenance states with explanations on hover and makes n
 
         await cancel.click();
         await remove.waitFor({ state: 'detached' });
-        await readyTitle.dispatchEvent('pointerdown');
+        await holdCardForMaintenance(page, readyTitle);
         await remove.waitFor();
-        await readyTitle.dispatchEvent('pointerup');
         for (const [name, reason] of actionReasons) {
             assert.equal(await page.getByRole('button', { name, exact: true }).isEnabled(), true);
             assert.equal(await page.getByText(reason, { exact: true }).isVisible(), false);
@@ -416,10 +455,9 @@ test('saving the card binding updates maintenance on the normal catalog refresh'
         const callsAfterSave = await readMaintenanceCalls(page);
         assert.equal(callsAfterSave.find(call => call.method === 'PUT' && call.url === '/competitions/73').body.classDeleteMapping.enabled, false);
 
-        await title.dispatchEvent('pointerdown');
+        await holdCardForMaintenance(page, title);
         const remove = page.getByRole('button', { name: '删除班级', exact: true });
         await remove.waitFor();
-        await title.dispatchEvent('pointerup');
         assert.equal(await remove.isDisabled(), true);
         const explanation = page.getByText('班级删除映射未配置', { exact: true });
         assert.equal(await explanation.isVisible(), false);
@@ -439,9 +477,8 @@ test('long-pressing a direct card shows disabled deletion without starting an SS
         const remove = page.getByRole('button', { name: '删除班级', exact: true });
         await title.waitFor();
         const beforePress = await readMaintenanceCalls(page);
-        await title.dispatchEvent('pointerdown');
+        await holdCardForMaintenance(page, title);
         await remove.waitFor();
-        await title.dispatchEvent('pointerup');
         assert.equal(await remove.isDisabled(), true);
         const explanation = page.getByText('直接跳转不支持删除班级', { exact: true });
         assert.equal(await explanation.isVisible(), false);

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useId } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import {
     Clock, Ban, Hourglass, CheckCircle2, Edit2, Trash2, Sparkles,
     CalendarX, Lock, UserPlus, RotateCcw, X,
     Trophy, Target, Zap, BookOpen, Cloud, GraduationCap, Gavel, UserRound, ExternalLink,
-    KeyRound, Copy, ChevronDown, Loader2, Wrench
+    KeyRound, Copy, ChevronDown, Loader2
 } from 'lucide-react';
 import { THEMES } from '../../constants/themes';
 import { SYSTEM_ICONS } from '../../constants/icons';
@@ -16,6 +16,8 @@ const MANUAL_PANEL_TOP_OFFSET = 36;
 const MANUAL_PANEL_FALLBACK_HEIGHT = 112;
 const SIDE_PANEL_ROW_OFFSET = 270;
 const MANUAL_COLUMN_TRANSITION_MS = 500;
+const MAINTENANCE_HOLD_MS = 650;
+const MAINTENANCE_MOVE_LIMIT = 10;
 const manualColumnSettleTimers = new WeakMap();
 
 const getManualPanelOffset = (card) => {
@@ -173,12 +175,11 @@ const ContestCard = ({
     const [copiedField, setCopiedField] = useState('');
     const [deleteArmed, setDeleteArmed] = useState(false);
     const [pressProgress, setPressProgress] = useState(0);
-    const maintenanceId = useId();
-    const maintenanceTriggerRef = useRef(null);
+    const cardTitleRef = useRef(null);
     const manualTriggerRef = useRef(null);
     const manualPanelRef = useRef(null);
     const cardRootRef = useRef(null);
-    const longPressTimerRef = useRef(null);
+    const maintenanceHoldRef = useRef(null);
     const roleMenuPressRef = useRef(createRoleMenuPress(loginRole => {
         setTouchRoleMenu(loginRole);
         setRoleActionsHover(true);
@@ -320,9 +321,7 @@ const ContestCard = ({
 
     useEffect(() => {
         return () => {
-            if (longPressTimerRef.current) {
-                clearInterval(longPressTimerRef.current);
-            }
+            clearInterval(maintenanceHoldRef.current?.timer);
             if (copyFeedbackTimerRef.current) {
                 clearTimeout(copyFeedbackTimerRef.current);
             }
@@ -586,39 +585,76 @@ const ContestCard = ({
         return <><CheckCircle2 className="w-3 h-3 mr-1" /> {link.statusText || "长期开放"}</>;
     };
 
-    const startDeletePress = (event) => {
-        if (!canOpenMaintenance || deleteArmed) return;
-        if (event.target.closest('button, a, input, select, textarea')) return;
+    const startMaintenanceHold = (input) => {
+        if (!canOpenMaintenance || deleteArmed || maintenanceHoldRef.current) return;
         if (cardBodyRef.current) {
             setCardDimensions({
                 width: cardBodyRef.current.offsetWidth || 280,
                 height: cardBodyRef.current.offsetHeight || 230
             });
         }
-        const started = Date.now();
+        const hold = { ...input, startedAt: Date.now(), timer: null };
+        maintenanceHoldRef.current = hold;
         setPressProgress(0);
-        longPressTimerRef.current = setInterval(() => {
-            const progress = Math.min(100, ((Date.now() - started) / 650) * 100);
+        hold.timer = setInterval(() => {
+            const progress = Math.min(100, ((Date.now() - hold.startedAt) / MAINTENANCE_HOLD_MS) * 100);
             setPressProgress(progress);
-            if (progress >= 100) {
-                clearInterval(longPressTimerRef.current);
-                longPressTimerRef.current = null;
+            if (progress < 100) return;
+            clearInterval(hold.timer);
+            if (hold.pointerId != null) {
+                maintenanceHoldRef.current = null;
+                setPressProgress(0);
                 setDeleteArmed(true);
             }
         }, 30);
     };
 
-    const cancelDeletePress = () => {
-        if (longPressTimerRef.current) {
-            clearInterval(longPressTimerRef.current);
-            longPressTimerRef.current = null;
-        }
+    const cancelMaintenanceHold = () => {
+        const hold = maintenanceHoldRef.current;
+        if (!hold) return;
+        clearInterval(hold.timer);
+        maintenanceHoldRef.current = null;
         setPressProgress(0);
+    };
+
+    const startMaintenancePointerHold = (event) => {
+        if (event.button !== 0 || !event.isPrimary) return;
+        if (event.target.closest('button, a, input, select, textarea')) return;
+        startMaintenanceHold({ pointerId: event.pointerId, x: event.clientX, y: event.clientY });
+    };
+
+    const cancelMaintenancePointerHold = (event) => {
+        if (maintenanceHoldRef.current?.pointerId === event.pointerId) cancelMaintenanceHold();
+    };
+
+    const trackMaintenancePointerHold = (event) => {
+        const hold = maintenanceHoldRef.current;
+        if (hold?.pointerId === event.pointerId
+            && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > MAINTENANCE_MOVE_LIMIT) {
+            cancelMaintenanceHold();
+        }
+    };
+
+    const handleMaintenanceKeyDown = (event) => {
+        if (event.key === 'Escape') cancelMaintenanceHold();
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        if (!event.repeat) startMaintenanceHold({ key: event.key });
+    };
+
+    const handleMaintenanceKeyUp = (event) => {
+        const hold = maintenanceHoldRef.current;
+        if (hold?.key !== event.key) return;
+        event.preventDefault();
+        const heldLongEnough = Date.now() - hold.startedAt >= MAINTENANCE_HOLD_MS;
+        cancelMaintenanceHold();
+        // Open after key release so its repeats never reach the maintenance actions.
+        if (heldLongEnough && canOpenMaintenance && !deleteArmed) setDeleteArmed(true);
     };
 
     const closeMaintenance = () => {
         setDeleteArmed(false);
-        window.requestAnimationFrame(() => maintenanceTriggerRef.current?.focus());
+        window.requestAnimationFrame(() => cardTitleRef.current?.focus());
     };
 
     const handleDeleteClassClick = (event) => {
@@ -962,7 +998,6 @@ const ContestCard = ({
                 {/* 删除模式确认层（纯净玻璃高斯模糊 + 警示微光 + 弹性缩放动画） */}
                 {deleteArmed && !isClassRemoved && (
                     <ClassActionOverlay
-                        id={maintenanceId}
                         availability={link.maintenance}
                         direct={link.ssoMethod === 'direct'}
                         platformLabel={link.ssoMethod === 'java' ? 'Java ' : link.ssoMethod === 'net' ? '.NET ' : '平台'}
@@ -985,10 +1020,12 @@ const ContestCard = ({
                 <div
                     className={`flex flex-col flex-grow p-5 transition-all duration-300 ${deleteArmed ? "filter blur-sm opacity-15 scale-95 pointer-events-none" : ""} ${isLocked && !isAdmin ? "pointer-events-none" : ""} ${isChristmas || isLunar || isHalloween || isMidAutumn || isDragonBoat || isYuanxiao || isQingming ? 'pt-8' : ''}`}
                     inert={deleteArmed}
-                    onPointerDown={startDeletePress}
-                    onPointerUp={cancelDeletePress}
-                    onPointerLeave={cancelDeletePress}
-                    onPointerCancel={cancelDeletePress}
+                    onPointerDown={startMaintenancePointerHold}
+                    onPointerMove={trackMaintenancePointerHold}
+                    onPointerUp={cancelMaintenancePointerHold}
+                    onPointerLeave={cancelMaintenancePointerHold}
+                    onPointerCancel={cancelMaintenancePointerHold}
+                    onDragStart={cancelMaintenanceHold}
                 >
                     <div className={`flex items-start justify-between mb-4 relative z-10 transition-opacity duration-500 ${isClassRemoved ? 'opacity-40 grayscale-[0.4]' : ''}`}>
                         <div className={`contest-card-logo relative w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
@@ -1015,19 +1052,16 @@ const ContestCard = ({
                             `}>
                                 {renderStatus()}
                             </span>
-                            {canOpenMaintenance && (
-                                <button type="button" ref={maintenanceTriggerRef} aria-label="打开系统维护" title="系统维护"
-                                    aria-expanded={deleteArmed} aria-controls={deleteArmed ? maintenanceId : undefined}
-                                    onClick={() => setDeleteArmed(true)}
-                                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200/70 bg-white/60 text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-2 focus-visible:outline-indigo-600 dark:border-slate-600/70 dark:bg-slate-800/80 dark:text-slate-200">
-                                    <Wrench aria-hidden="true" className="h-3.5 w-3.5" />
-                                </button>
-                            )}
                         </div>
                     </div>
 
                     <div className={`relative z-10 h-[60px] flex-none overflow-hidden transition-opacity duration-500 ${isClassRemoved ? 'opacity-40 grayscale-[0.4]' : ''}`}>
-                        <h3 className={`contest-card-title mb-1 line-clamp-2 text-base font-black leading-5 transition-colors duration-300
+                        <h3 ref={cardTitleRef} tabIndex={canOpenMaintenance ? 0 : undefined}
+                            aria-description={canOpenMaintenance ? '按住空格或回车打开系统维护' : undefined}
+                            onKeyDown={canOpenMaintenance ? handleMaintenanceKeyDown : undefined}
+                            onKeyUp={canOpenMaintenance ? handleMaintenanceKeyUp : undefined}
+                            onBlur={cancelMaintenanceHold}
+                            className={`contest-card-title mb-1 line-clamp-2 text-base font-black leading-5 transition-colors duration-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-600
                             ${isChristmas ? 'text-red-700 group-hover:text-indigo-600' : ''}
                             ${isLunar ? 'text-transparent bg-clip-text bg-gradient-to-r from-red-800 to-orange-600 group-hover:from-red-600 group-hover:to-orange-500' : ''}
                             ${isHalloween ? 'text-orange-400 group-hover:text-purple-400' : ''}

@@ -49,7 +49,6 @@ function MaintenanceButton({ icon: Icon, label, hint, disabled, tone, alignRight
 }
 
 export default function ClassActionOverlay({
-    id,
     availability,
     platformLabel,
     direct,
@@ -87,7 +86,7 @@ export default function ClassActionOverlay({
     });
 
     return (
-        <div id={id} ref={dialogRef} tabIndex={-1} role="dialog" aria-label="系统维护" aria-busy={running}
+        <div ref={dialogRef} tabIndex={-1} role="dialog" aria-label="系统维护" aria-busy={running}
             onKeyDown={event => {
                 if (event.key === 'Escape' && !running) {
                     event.stopPropagation();
