@@ -1298,11 +1298,13 @@ const ContestCard = ({
                             type="button"
                             onClick={handleToggleManualPanel}
                             title="提取系统地址、教师账号和长期密码"
-                            aria-label="提取教师账号信息"
+                            aria-label="手动提取账号链接"
                             aria-expanded={manualPanelOpen}
-                            className={`manual-login-trigger group/manual-login pointer-events-auto absolute left-1/2 bottom-0 flex items-center justify-center gap-1.5 border px-4 text-[10px] font-black shadow-lg backdrop-blur-md transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${manualPanelOpen ? 'manual-login-trigger--open border-indigo-300 bg-indigo-600 text-white shadow-indigo-500/25' : 'border-white/70 bg-white/90 text-indigo-600 shadow-slate-900/10 dark:border-slate-600/80 dark:bg-slate-800/95 dark:text-indigo-300'}`}
+                            className={`manual-login-trigger group/manual-login pointer-events-auto absolute left-1/2 bottom-0 grid items-center justify-items-center border px-4 text-[10px] font-black shadow-lg backdrop-blur-md transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${manualPanelOpen ? 'manual-login-trigger--open border-indigo-300 bg-indigo-600 text-white shadow-indigo-500/25' : 'border-white/70 bg-white/90 text-indigo-600 shadow-slate-900/10 dark:border-slate-600/80 dark:bg-slate-800/95 dark:text-indigo-300'}`}
                         >
-                            <ChevronDown className={`manual-login-trigger__arrow h-3.5 w-3.5 transition-transform duration-300 ${manualPanelOpen ? 'rotate-180' : ''}`} />
+                            <span className="manual-login-trigger__label">手动提取</span>
+                            <ChevronDown aria-hidden="true" className={`manual-login-trigger__arrow h-3.5 w-3.5 transition-transform duration-300 ${manualPanelOpen ? 'rotate-180' : ''}`} />
+                            <span className="manual-login-trigger__label">账号链接</span>
                         </button>
                 </div>
                 </>

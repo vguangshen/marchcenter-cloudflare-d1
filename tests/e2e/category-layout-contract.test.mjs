@@ -38,7 +38,7 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     assert.match(contestCard, /contest-card-shell--role-actions-hover/);
     assert.match(contestCard, /setRoleActionsHover\(true\)/);
     assert.match(contestCard, /setRoleActionsHover\(false\)/);
-    assert.match(contestCard, /aria-label="提取教师账号信息"/);
+    assert.match(contestCard, /aria-label="手动提取账号链接"/);
     assert.match(contestCard, /manual-login-trigger-host pointer-events-none absolute inset-x-0 bottom-0/);
     assert.match(contestCard, /manual-login-panel-enter glass-motion-surface absolute left-0 top-\[calc\(100%\+2\.25rem\)\] z-40 w-full/);
     const shellClasses = contestCard.match(/className=\{`(contest-card-shell[\s\S]*?)`\}/)?.[1];
@@ -49,7 +49,7 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     ], 'both role menus stay above adjacent cards without changing the manual drawer hover entrance');
     assert.doesNotMatch(elevationCondition, /\bmanualPanelOpen\b/);
     assert.match(contestCard, /new window\.ResizeObserver/);
-    assert.doesNotMatch(contestCard, /manual-login-trigger__label/);
+    assert.match(contestCard, /manual-login-trigger__label">手动提取<\/span>\s*<ChevronDown[^>]*\/>\s*<span className="manual-login-trigger__label">账号链接<\/span>/);
     assert.doesNotMatch(contestCard, /manual-login-trigger__key/);
     assert.doesNotMatch(contestCard, /max-h-56 overflow-y-auto/);
     assert.doesNotMatch(contestCard, /group-hover\/card:opacity-100/);
@@ -61,7 +61,8 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     assert.match(styles, /\.manual-login-trigger--open::before[\s\S]*opacity:\s*1/);
     assert.match(styles, /\.manual-login-trigger[\s\S]*transform:\s*translate\(-50%,\s*\.6rem\)/);
     assert.match(styles, /\.contest-card-shell:hover:not\(\.contest-card-shell--role-actions-hover\) \.manual-login-trigger[\s\S]*transform:\s*translate\(-50%,\s*calc\(100%\s*\+\s*1px\)\)/);
-    assert.match(styles, /\.contest-card-shell:hover:not\(\.contest-card-shell--role-actions-hover\) \.manual-login-trigger[\s\S]*width:\s*3\.5rem/);
+    assert.match(styles, /\.manual-login-trigger \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\)/);
+    assert.match(styles, /\.manual-login-trigger--open \{[^}]*--manual-login-label-opacity:\s*1;[^}]*width:\s*9rem/);
     assert.match(styles, /\.contest-card-shell--role-actions-hover \.contest-card-role-actions[\s\S]*z-index:\s*60/);
     assert.match(styles, /\.contest-card-shell--role-actions-hover \.manual-login-trigger[\s\S]*opacity:\s*0[\s\S]*visibility:\s*hidden[\s\S]*pointer-events:\s*none/);
     assert.match(styles, /\.contest-card-shell:not\(\.contest-card-shell--role-actions-hover\) \.contest-card-glass:hover/);

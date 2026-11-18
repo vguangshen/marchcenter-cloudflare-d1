@@ -367,6 +367,8 @@ body {
 .manual-login-trigger {
     position: relative;
     opacity: 1;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: .375rem;
     width: 1.75rem;
     height: 1.25rem;
     padding-inline: 0;
@@ -410,10 +412,30 @@ body {
     z-index: 1;
 }
 
+.manual-login-trigger__label {
+    z-index: 1;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: .6875rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: .025em;
+    color: rgb(71 85 105);
+    opacity: var(--manual-login-label-opacity, 0);
+    transition: opacity var(--manual-login-label-transition, 0ms);
+}
+
+.dark .manual-login-trigger__label {
+    color: rgb(203 213 225);
+}
+
 .contest-card-shell:hover:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
 .contest-card-shell:focus-within:not(.contest-card-shell--role-actions-hover) .manual-login-trigger,
 .manual-login-trigger--open {
-    width: 3.5rem;
+    --manual-login-label-opacity: 1;
+    --manual-login-label-transition: 140ms ease 120ms;
+    width: 9rem;
     height: 1.75rem;
     padding-inline: 0;
     /* The expanded tongue starts exactly at the card edge. */
