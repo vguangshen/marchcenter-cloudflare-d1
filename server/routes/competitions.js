@@ -7,7 +7,7 @@ import { isSuperAdmin, normalizeRole, ROLES } from '../utils/roleAccess.js';
 import { validateOfficialCardAddress } from '../utils/officialCompat/cardAddress.js';
 import { PAAS_V2_ANSWER_TYPE } from '../utils/officialCompat/paasV2/paasV2Adapter.js';
 import { isClassDeleteMappingReady, normalizeClassDeleteMapping } from '../utils/accountManagementApi.js';
-import { attachAgentTaskModules } from '../utils/paasV2Platforms.js';
+import { attachAgentTaskModules, competitionDependentTables } from '../utils/paasV2Platforms.js';
 import { attachCompetitionMaintenance } from '../utils/competitionMaintenance.js';
 
 const router = express.Router();
@@ -497,24 +497,17 @@ router.delete("/:id", authMiddleware, adminOnly, async (req, res) => {
 router.post("/batch-delete", authMiddleware, adminOnly, async (req, res) => {
     try {
         const ids = Array.isArray(req.body?.ids)
-            ? req.body.ids.map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0)
+            ? [...new Set(req.body.ids.map(Number).filter(value => Number.isSafeInteger(value) && value > 0))]
             : [];
         if (!ids.length) return res.status(400).json({ error: '请提供需要删除的卡片编号' });
-        const placeholders = ids.map(() => '?').join(',');
-        const statements = [
-            "user_competition_student_accounts",
-            "user_manual_teacher_credentials",
-            "user_competition_expert_student_bindings",
-            "user_competition_expert_accounts",
-            "user_class_removals",
-            "user_workflow_status",
-            "user_platform_account_status",
-            "user_permissions",
-            "user_competition_time_rules"
-        ].map(table => `DELETE FROM ${table} WHERE competition_id IN (${placeholders})`);
-        statements.push(`DELETE FROM competitions WHERE id IN (${placeholders})`);
-        await pool.batch(statements.map(sql => [sql, ids]));
-        res.json({ success: true, deleted: ids.length });
+        const params = [JSON.stringify(ids)];
+        const selected = 'IN (SELECT value FROM json_each(?))';
+        const results = await pool.batch([
+            ...competitionDependentTables.map(table => [`DELETE FROM ${table} WHERE competition_id ${selected}`, params]),
+            [`DELETE FROM competitions WHERE id ${selected}`, params],
+            ['SELECT changes() AS deleted']
+        ]);
+        res.json({ success: true, deleted: results.at(-1).rows[0].deleted });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

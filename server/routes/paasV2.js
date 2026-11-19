@@ -321,12 +321,31 @@ router.put('/platforms/:softwareUnique', authMiddleware, adminOnly, async (req, 
         if (stored.builtin && platform.softwareUnique !== stored.software_unique) return res.status(400).json({ error: '内置平台的 softwareUnique 不可修改' });
         const conflict = await findPlatform(platform.softwareUnique);
         if (conflict && conflict.id !== stored.id) return res.status(409).json({ error: '该 softwareUnique 已存在' });
-        await pool.batch([
-            ['UPDATE paas_v2_platforms SET software_unique = ?, code = ?, name = ?, theme = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                [platform.softwareUnique, platform.code, platform.name, platform.theme, stored.id]],
-            ["UPDATE competitions SET paas_v2_software_unique = ?, category = ? WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE",
-                [platform.softwareUnique, platform.name, stored.software_unique]]
+        const scope = [stored.id, stored.catalog_generation];
+        const identityChanged = platform.softwareUnique !== stored.software_unique;
+        const statements = [[
+            `UPDATE competitions SET paas_v2_software_unique = ?, category = ?
+             WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE
+               AND EXISTS (SELECT 1 FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?)`,
+            [platform.softwareUnique, platform.name, stored.software_unique, ...scope]
+        ]];
+        if (identityChanged) statements.push([
+            `DELETE FROM paas_v2_catalogs WHERE platform_id IN
+                (SELECT id FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?)`,
+            scope
         ]);
+        statements.push([
+            `UPDATE paas_v2_platforms SET software_unique = ?, code = ?, name = ?, theme = ?,
+                catalog_generation = catalog_generation + ?,
+                catalog_sync_status = CASE WHEN ? THEN 'never' ELSE catalog_sync_status END,
+                catalog_synced_at = CASE WHEN ? THEN NULL ELSE catalog_synced_at END,
+                updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND catalog_generation = ?`,
+            [platform.softwareUnique, platform.code, platform.name, platform.theme,
+                identityChanged, identityChanged, identityChanged, ...scope]
+        ]);
+        const results = await pool.batch(statements);
+        if (!results.at(-1).affectedRows) return res.status(409).json({ error: '平台已变更，请刷新后重试' });
         return res.json({ ...platform, id: stored.id, builtin: Boolean(stored.builtin) });
     } catch (error) { return res.status(error.status || (error.code === 'ER_DUP_ENTRY' ? 409 : 500)).json({ error: error.message || '软件平台更新失败' }); }
 });
@@ -335,7 +354,9 @@ router.delete('/platforms/:softwareUnique', authMiddleware, adminOnly, async (re
     try {
         const platform = await findPlatform(req.params.softwareUnique);
         if (!platform) return res.status(404).json({ error: '软件平台不存在' });
-        await deletePlatformAndTasks(platform);
+        if (!await deletePlatformAndTasks(platform)) {
+            return res.status(409).json({ error: '平台已变更，请刷新后重试' });
+        }
         return res.json({ success: true });
     } catch (error) { return res.status(500).json({ error: error.message || '软件平台删除失败' }); }
 });
@@ -412,9 +433,15 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
     try {
         const platform = await findPlatform(softwareUnique);
         if (!platform) return res.status(404).json({ error: '请先保存这个软件平台' });
-        const [[saved]] = await pool.query('SELECT tasks_json, updated_at FROM paas_v2_catalogs WHERE platform_id = ? LIMIT 1', [platform.id]);
+        const scope = [platform.id, platform.catalog_generation];
+        const [[saved]] = await pool.query(
+            `SELECT c.tasks_json, c.updated_at, p.catalog_synced_at
+             FROM paas_v2_catalogs c JOIN paas_v2_platforms p ON p.id = c.platform_id
+             WHERE p.id = ? AND p.catalog_generation = ?`, scope
+        );
         const data = { softwareUnique: platform.software_unique, platformCode: platform.code, platformName: platform.name };
-        if (saved && req.query.force !== '1') {
+        // A classification refresh can save module names before a complete catalog exists.
+        if (saved?.catalog_synced_at && req.query.force !== '1') {
             return res.json({ ...data, ...publicCatalog(parseSavedCatalog(saved.tasks_json)), source: 'database', syncedAt: saved.updated_at });
         }
         try {
@@ -429,12 +456,13 @@ router.get('/catalog', authMiddleware, adminOnly, async (req, res) => {
             return res.json({ ...data, ...publicCatalog(tasks), source: 'remote' });
         } catch (error) {
             if (error.status === 409) return res.status(409).json({ error: error.message });
-            const [, latest] = await pool.batch([
-                ['UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ? AND software_unique = ?',
-                    [error.notFound ? 'not_found' : 'error', platform.id, platform.software_unique]],
+            const [updated, latest] = await pool.batch([
+                ['UPDATE paas_v2_platforms SET catalog_sync_status = ? WHERE id = ? AND catalog_generation = ?',
+                    [error.notFound ? 'not_found' : 'error', ...scope]],
                 [`SELECT c.tasks_json, c.updated_at FROM paas_v2_catalogs c JOIN paas_v2_platforms p ON p.id = c.platform_id
-                    WHERE p.id = ? AND p.software_unique = ?`, [platform.id, platform.software_unique]]
+                    WHERE p.id = ? AND p.catalog_generation = ? AND p.catalog_synced_at IS NOT NULL`, scope]
             ]);
+            if (!updated.affectedRows) return res.status(409).json({ error: '平台已变更，请刷新后重试' });
             const fallback = latest.rows[0];
             const message = error.message || '任务目录获取失败';
             if (fallback) return res.json({ ...data, ...publicCatalog(parseSavedCatalog(fallback.tasks_json)), source: 'database-fallback', syncedAt: fallback.updated_at, refreshError: message });
@@ -506,22 +534,28 @@ function mergeCatalogModules(savedTasks, sourceByFlag) {
 }
 
 async function saveCatalogUpdate(platform, update, { markSynced = false } = {}) {
+    const scope = [platform.id, platform.catalog_generation];
     for (let attempt = 0; attempt < 2; attempt += 1) {
-        const [[saved]] = await pool.query('SELECT tasks_json FROM paas_v2_catalogs WHERE platform_id = ?', [platform.id]);
-        const merged = update(parseSavedCatalog(saved?.tasks_json));
+        const [[saved]] = await pool.query(
+            `SELECT c.tasks_json FROM paas_v2_platforms p
+             LEFT JOIN paas_v2_catalogs c ON c.platform_id = p.id
+             WHERE p.id = ? AND p.catalog_generation = ?`, scope
+        );
+        if (!saved) throw Object.assign(new Error('平台已变更，请刷新后重试'), { status: 409 });
+        const merged = update(parseSavedCatalog(saved.tasks_json));
         if (merged.updated === 0) return merged;
         const data = JSON.stringify(merged.tasks);
-        const write = saved
+        const write = saved.tasks_json !== null
             ? [`UPDATE paas_v2_catalogs SET tasks_json = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE platform_id = ? AND tasks_json = ? AND EXISTS (
-                    SELECT 1 FROM paas_v2_platforms WHERE id = ? AND software_unique = ?
-                )`, [data, platform.id, saved.tasks_json, platform.id, platform.software_unique]]
+                    SELECT 1 FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?
+                )`, [data, platform.id, saved.tasks_json, ...scope]]
             : [`INSERT INTO paas_v2_catalogs (platform_id, tasks_json)
-                SELECT id, ? FROM paas_v2_platforms WHERE id = ? AND software_unique = ?
-                ON CONFLICT(platform_id) DO NOTHING`, [data, platform.id, platform.software_unique]];
+                SELECT id, ? FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?
+                ON CONFLICT(platform_id) DO NOTHING`, [data, ...scope]];
         const [result] = await pool.batch(markSynced ? [write, [
             `UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND software_unique = ? AND changes() > 0`, [platform.id, platform.software_unique]
+             WHERE id = ? AND catalog_generation = ? AND changes() > 0`, scope
         ]] : [write]);
         if (result.affectedRows) return merged;
     }

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { isDeepStrictEqual } from 'node:util';
 import express from '../compat/express.js';
 import { authMiddleware, adminOnly } from '../middleware/auth.js';
 import { publicConfig } from '../utils/configSecrets.js';
@@ -11,7 +12,7 @@ import {
 } from '../utils/accountManagementApi.js';
 import {
     deleteAccountManagementConfigAndUnbind,
-    readAccountManagementConfig, readAccountManagementConfigs, writeAccountManagementConfigs
+    readAccountManagementConfig, readAccountManagementConfigs, updateAccountManagementConfig
 } from '../utils/accountManagementStore.js';
 
 const router = express.Router();
@@ -94,11 +95,10 @@ router.get('/services', authMiddleware, adminOnly, async (_req, res) => {
 
 router.post('/services', authMiddleware, adminOnly, async (req, res) => {
     try {
-        const services = await readAccountManagementConfigs();
         const config = normalizeAccountManagementConfig({ ...req.body, id: crypto.randomUUID() });
-        await writeAccountManagementConfigs([...services, config]);
+        await updateAccountManagementConfig(config.id, () => config, { create: true });
         res.status(201).json({ success: true, config: publicService(config) });
-    } catch (error) { res.status(400).json({ error: error.message || '新增账号管理 API 失败' }); }
+    } catch (error) { res.status(error.status || 400).json({ error: error.message || '新增账号管理 API 失败' }); }
 });
 
 router.post('/services/:id/database-config/test', authMiddleware, adminOnly, async (req, res) => {
@@ -117,22 +117,15 @@ router.post('/services/:id/database-config/test', authMiddleware, adminOnly, asy
 
 router.put('/services/:id/database-config', authMiddleware, adminOnly, async (req, res) => {
     try {
-        const services = await readAccountManagementConfigs();
-        const index = services.findIndex(item => item.id === req.params.id);
-        if (index < 0) return res.status(404).json({ error: '账号管理 API 不存在' });
-        const config = services[index];
-        const connections = mergeDatabasePasswords(config.databaseConnections, req.body?.connections);
-        const version = Math.max(Number(config.databaseConfigVersion) || 0, Math.floor(Date.now() / 1000)) + 1;
-        services[index] = normalizeAccountManagementConfig({
-            ...config,
-            databaseConnections: connections,
+        const config = await updateAccountManagementConfig(req.params.id, previous => normalizeAccountManagementConfig({
+            ...previous,
+            databaseConnections: mergeDatabasePasswords(previous.databaseConnections, req.body?.connections),
             databaseConfigEnvelope: null,
-            databaseConfigVersion: version,
+            databaseConfigVersion: Math.max(previous.databaseConfigVersion, Math.floor(Date.now() / 1000)) + 1,
             databaseConfigAppliedAt: new Date().toISOString(),
             databaseConfigLastError: ''
-        });
-        await writeAccountManagementConfigs(services);
-        res.json({ success: true, config: publicService(services[index]) });
+        }));
+        res.json({ success: true, config: publicService(config) });
     } catch (error) {
         res.status(Number(error.statusCode || error.status) || 400).json({ error: error.message || '数据库连接信息保存失败', requestId: error.requestId || null });
     }
@@ -140,40 +133,39 @@ router.put('/services/:id/database-config', authMiddleware, adminOnly, async (re
 
 router.put('/services/:id', authMiddleware, adminOnly, async (req, res) => {
     try {
-        const services = await readAccountManagementConfigs();
-        const index = services.findIndex(item => item.id === req.params.id);
-        if (index < 0) return res.status(404).json({ error: '账号管理 API 不存在' });
-        const config = normalizeAccountManagementConfig({ ...mergeSecrets(services[index], req.body || {}), id: services[index].id });
-        services[index] = config;
-        await writeAccountManagementConfigs(services);
+        const config = await updateAccountManagementConfig(req.params.id, previous =>
+            normalizeAccountManagementConfig({ ...mergeSecrets(previous, req.body || {}), id: previous.id }));
         res.json({ success: true, config: publicService(config) });
-    } catch (error) { res.status(400).json({ error: error.message || '保存账号管理 API 配置失败' }); }
+    } catch (error) { res.status(error.status || 400).json({ error: error.message || '保存账号管理 API 配置失败' }); }
 });
 
 router.delete('/services/:id', authMiddleware, adminOnly, async (req, res) => {
     try {
-        const services = await readAccountManagementConfigs();
-        const next = services.filter(item => item.id !== req.params.id);
-        if (next.length === services.length) return res.status(404).json({ error: '账号管理 API 不存在' });
-        const unboundCompetitionCount = await deleteAccountManagementConfigAndUnbind(req.params.id, next);
+        const unboundCompetitionCount = await deleteAccountManagementConfigAndUnbind(req.params.id);
         res.json({ success: true, unboundCompetitionCount });
-    } catch (error) { res.status(500).json({ error: error.message || '删除账号管理 API 失败' }); }
+    } catch (error) { res.status(error.status || 500).json({ error: error.message || '删除账号管理 API 失败' }); }
 });
 
 router.post('/services/:id/test', authMiddleware, adminOnly, async (req, res) => {
     const startedAt = Date.now();
-    let services = [];
-    let index = -1;
+    let previous;
     let config;
     let device;
+    const saveTest = metadata => updateAccountManagementConfig(req.params.id, current => {
+        if (!isDeepStrictEqual(current, previous)) {
+            throw Object.assign(new Error('检测期间服务配置已更新，请重新检测'), { status: 409 });
+        }
+        return normalizeAccountManagementConfig({
+            ...config, ...device, ...metadata, enabled: current.enabled,
+            lastTestAt: new Date().toISOString()
+        });
+    });
     try {
-        services = await readAccountManagementConfigs();
-        index = services.findIndex(item => item.id === req.params.id);
-        if (index < 0) return res.status(404).json({ error: '账号管理 API 不存在' });
-        config = normalizeAccountManagementConfig({ ...mergeSecrets(services[index], req.body || {}), id: services[index].id, enabled: true }, { requireEndpoint: true });
+        previous = await requiredService(req.params.id, { allowDisabled: true });
+        config = normalizeAccountManagementConfig({ ...mergeSecrets(previous, req.body || {}), id: previous.id, enabled: true }, { requireEndpoint: true });
         device = await getDeviceInformation(config);
         const result = await testAccountManagementApi(config);
-        const connections = mergeDatabasePasswords(services[index].databaseConnections, req.body?.connections);
+        const connections = mergeDatabasePasswords(previous.databaseConnections, req.body?.connections);
         const enabledProviders = [
             ...(connections.sqlServer?.Enabled ? ['sqlServer'] : []),
             ...(connections.mySql?.Enabled ? ['mySql'] : [])
@@ -181,24 +173,19 @@ router.post('/services/:id/test', authMiddleware, adminOnly, async (req, res) =>
         const databaseTest = enabledProviders.length
             ? await testDeviceDatabaseConfig({ ...config, ...device, enabled: true }, connections)
             : null;
-        const identityChanged = Boolean(services[index].deviceId && services[index].deviceId !== device.deviceId);
-        services[index] = normalizeAccountManagementConfig({
-            ...config,
-            ...device,
-            enabled: services[index].enabled,
+        const identityChanged = Boolean(previous.deviceId && previous.deviceId !== device.deviceId);
+        await saveTest({
             ...(identityChanged ? {
                 databaseConfigEnvelope: null,
                 databaseConfigVersion: 0,
                 databaseConfigAppliedAt: null,
                 databaseConfigLastError: ''
             } : {}),
-            lastTestAt: new Date().toISOString(),
             lastTestOk: true,
             lastLatencyMs: result.latencyMs,
             lastStatusCode: result.statusCode,
             lastError: ''
         });
-        await writeAccountManagementConfigs(services);
         res.json({
             ...result,
             deviceReady: true,
@@ -207,11 +194,17 @@ router.post('/services/:id/test', authMiddleware, adminOnly, async (req, res) =>
             checkedProviders: enabledProviders
         });
     } catch (error) {
-        if (config && index >= 0) {
-            services[index] = normalizeAccountManagementConfig({ ...config, ...(device || {}), enabled: services[index].enabled, lastTestAt: new Date().toISOString(), lastTestOk: false, lastLatencyMs: error.latencyMs ?? (Date.now() - startedAt), lastStatusCode: error.statusCode ?? null, lastError: error.message || '连接失败' });
-            try { await writeAccountManagementConfigs(services); } catch {}
+        if (config && !error.status) {
+            try {
+                await saveTest({
+                    lastTestOk: false, lastLatencyMs: error.latencyMs ?? (Date.now() - startedAt),
+                    lastStatusCode: error.statusCode ?? null, lastError: error.message || '连接失败'
+                });
+            } catch (saveError) {
+                if (saveError.status) return res.status(saveError.status).json({ success: false, error: saveError.message });
+            }
         }
-        res.status(503).json({ success: false, error: error.message || '账号管理 API 连接失败' });
+        res.status(error.status || 503).json({ success: false, error: error.message || '账号管理 API 连接失败' });
     }
 });
 

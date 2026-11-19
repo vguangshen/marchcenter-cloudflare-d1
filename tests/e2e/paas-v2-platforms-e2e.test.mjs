@@ -46,6 +46,7 @@ test('catalog returns saved cloud data and uses that data when a forced refresh 
     const [platform] = await harness.rows("SELECT id FROM paas_v2_platforms WHERE software_unique = 'scyxcjrh'");
     const tasks = [{ plugFlag: 'saved-task', title: '已保存任务', answerType: '1,2,3,4' }];
     await harness.run('INSERT INTO paas_v2_catalogs (platform_id, tasks_json) VALUES (?, ?)', platform.id, JSON.stringify(tasks));
+    await harness.run("UPDATE paas_v2_platforms SET catalog_sync_status = 'ok', catalog_synced_at = CURRENT_TIMESTAMP WHERE id = ?", platform.id);
     const cached = await harness.api('/api/paas-v2/catalog?softwareUnique=SCYXCJRH');
     assert.equal(cached.status, 200);
     assert.equal(cached.data.source, 'database');
@@ -56,6 +57,61 @@ test('catalog returns saved cloud data and uses that data when a forced refresh 
     assert.equal(fallback.data.source, 'database-fallback');
     assert.deepEqual(fallback.data.tasks, expectedTasks);
     assert.ok(fallback.data.refreshError);
+});
+
+test('a custom identifier change invalidates the catalog and discards older in-flight refreshes', async () => {
+    const original = 'catalog-original';
+    const renamed = 'catalog-renamed';
+    const entered = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    const fixture = task => Response.json({ code: 0, data: { taskJson: [{ plugId: task, taskTitle: task }] } });
+    let heldRequest;
+    const create = await harness.api('/api/paas-v2/platforms', { body: { softwareUnique: original, code: 'CAT', name: 'Original name' } });
+    assert.equal(create.status, 201, create.text);
+    let originalReads = 0;
+    const send = harness.platform.fetch;
+    harness.platform.fetch = async request => {
+        if (new URL(request.url).hostname !== 'paas.itmc.org.cn') return send(request);
+        const identifier = new URLSearchParams(await request.text()).get('token');
+        if (identifier === renamed) return fixture('renamed-task');
+        assert.equal(identifier, original);
+        originalReads++;
+        if (originalReads === 2) {
+            entered.resolve();
+            await release.promise;
+            return fixture('outdated-task');
+        }
+        return fixture(originalReads === 1 ? 'original-task' : 'refetched-task');
+    };
+    const read = (identifier, force = false) => harness.api(`/api/paas-v2/catalog?softwareUnique=${identifier}${force ? '&force=1' : ''}`);
+    const update = (before, softwareUnique) => harness.api(`/api/paas-v2/platforms/${before}`, {
+        method: 'PUT', body: { softwareUnique, code: 'CAT', name: 'Updated name' }
+    });
+    try {
+        assert.deepEqual((await read(original)).data.tasks.map(task => task.plugFlag), ['original-task']);
+        assert.equal((await update(original, original)).status, 200);
+        assert.equal((await read(original)).data.source, 'database');
+
+        heldRequest = read(original, true);
+        await Promise.race([entered.promise, heldRequest.then(result => assert.fail(result.text))]);
+        assert.equal((await update(original, renamed)).status, 200);
+        const changed = await read(renamed);
+        assert.equal(changed.data.source, 'remote');
+        assert.deepEqual(changed.data.tasks.map(task => task.plugFlag), ['renamed-task']);
+        assert.equal((await update(renamed, original)).status, 200);
+
+        release.resolve();
+        assert.equal((await heldRequest).status, 409);
+        const [platform] = await harness.rows('SELECT catalog_sync_status, catalog_synced_at FROM paas_v2_platforms WHERE id = ?', create.data.id);
+        assert.deepEqual(platform, { catalog_sync_status: 'never', catalog_synced_at: null });
+        const fresh = await read(original);
+        assert.equal(fresh.data.source, 'remote');
+        assert.deepEqual(fresh.data.tasks.map(task => task.plugFlag), ['refetched-task']);
+    } finally {
+        release.resolve();
+        await heldRequest?.catch(() => {});
+        harness.platform.fetch = send;
+    }
 });
 
 test('batch import fixes the answer type, is idempotent, and rejects invalid input before writing', async () => {
@@ -91,6 +147,7 @@ test('platform metadata counts catalogs in SQL and indexed task counts keep case
         assert.equal(result.status, 200, result.text);
         assert.equal(result.data.find(row => row.id === platform.id).catalogTaskCount, count);
     }
-    const plan = await harness.rows("EXPLAIN QUERY PLAN SELECT id FROM competitions WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE AND paas_v2_plug_flag = ?", 'SCYXCJRH', 'task-1');
-    assert.ok(plan.some(row => row.detail.includes('idx_competitions_paas_v2_platform_task')));
+    const plan = await harness.rows("EXPLAIN QUERY PLAN SELECT id FROM competitions WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE AND paas_v2_plug_flag = ? COLLATE NOCASE", 'SCYXCJRH', 'task-1');
+    assert.ok(plan.some(row => row.detail.includes('idx_competitions_paas_v2_platform_task')
+        && row.detail.includes('paas_v2_software_unique=? AND paas_v2_plug_flag=?')), JSON.stringify(plan));
 });

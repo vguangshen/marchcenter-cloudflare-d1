@@ -40,6 +40,10 @@ test('readiness depends on the current D1 schema while liveness remains availabl
     assert.equal(available.status, 200);
     assert.equal(available.headers.get('Cache-Control'), 'no-store');
     assert.deepEqual(await available.json(), { ready: true });
+    await unconfigured.run('ALTER TABLE paas_v2_platforms DROP COLUMN catalog_generation');
+    assert.equal((await read()).status, 503);
+    await unconfigured.run('ALTER TABLE paas_v2_platforms ADD COLUMN catalog_generation INTEGER NOT NULL DEFAULT 0');
+    assert.equal((await read()).status, 200);
     await unconfigured.run('DROP TABLE user_agent_task_results');
     const unavailable = await read();
     assert.equal(unavailable.status, 503);

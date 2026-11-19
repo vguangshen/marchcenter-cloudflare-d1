@@ -157,13 +157,12 @@ const ContestCard = ({
     isCardEditMode, categoryArrangeEnabled = false, studentAccounts = [], expertTargets = [], onCreateStudent, isCreatingStudent, onDeleteStudent, deletingStudentKey,
     openingCompetitionKeys = new Set(), onLaunchPrepared, onRequestManualCredential, onOpenAdminEntry, aiGuideAvailable = false,
     onDeleteClass, onInitializeClass, onRepairAccountReadiness, onRestoreClass, classActionKey = null,
-    repairFailureCount = 0
+    repairFailureCount = 0, now
 }) => {
     const theme = THEMES[link.color || 'blue'] || THEMES.blue;
     const cardSurfaceMode = link.color === 'transparent' ? 'transparent' : link.color === 'white' ? 'white' : 'tinted';
     const logoTheme = THEMES[link.logoBackground] || null;
     const hasWhiteLogoBackground = link.logoBackground === 'white';
-    const [now, setNow] = useState(new Date());
     const [studentMenuOpen, setStudentMenuOpen] = useState(false);
     const [teacherMenuOpen, setTeacherMenuOpen] = useState(false);
     const [touchRoleMenu, setTouchRoleMenu] = useState(null);
@@ -188,8 +187,6 @@ const ContestCard = ({
     }));
     const copyFeedbackTimerRef = useRef(null);
     const deleteStageRef = useRef('idle'); // 'idle' | 'initiating' | 'in_progress'
-    const cardBodyRef = useRef(null);
-    const [cardDimensions, setCardDimensions] = useState({ width: 280, height: 230 });
     const isStudentUser = userRole === 'student' || userRole === 'user';
     const isClassRemoved = link.classRemoved === true || Number(link.classRemoved) === 1;
     const isTeacherOpening = openingCompetitionKeys.has(`${link.id}:teacher:`);
@@ -308,39 +305,12 @@ const ContestCard = ({
     const isQingming = immersiveMode === 'qingming';
 
     useEffect(() => {
-        const updateNow = () => setNow(new Date());
-        const timer = setInterval(() => {
-            if (document.visibilityState === 'visible') updateNow();
-        }, 30000);
-        document.addEventListener('visibilitychange', updateNow);
-        return () => {
-            clearInterval(timer);
-            document.removeEventListener('visibilitychange', updateNow);
-        };
-    }, []);
-
-    useEffect(() => {
         return () => {
             clearInterval(maintenanceHoldRef.current?.timer);
             if (copyFeedbackTimerRef.current) {
                 clearTimeout(copyFeedbackTimerRef.current);
             }
         };
-    }, []);
-
-    // 自适应监控卡片真实的渲染物理宽高（避免由于 flex 容器拉伸/缩短引发的 hardcoded 像素溢出或裁剪问题）
-    useEffect(() => {
-        const updateDimensions = () => {
-            if (cardBodyRef.current) {
-                setCardDimensions({
-                    width: cardBodyRef.current.offsetWidth || 280,
-                    height: cardBodyRef.current.offsetHeight || 230
-                });
-            }
-        };
-        updateDimensions();
-        window.addEventListener('resize', updateDimensions);
-        return () => window.removeEventListener('resize', updateDimensions);
     }, []);
 
     // 删除操作完成后自动关闭确认层（成功 → 虚影；失败 → 恢复原样），彻底避免 React 状态同步间隙引发的过早复位弹窗
@@ -552,7 +522,7 @@ const ContestCard = ({
     const formatTime = (date) => {
         if (!date) return "";
         const timeStr = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-        return date.toDateString() === now.toDateString() ? `今天 ${timeStr}` : `${date.getMonth() + 1}月${date.getDate()}日`;
+        return date.toDateString() === new Date(now).toDateString() ? `今天 ${timeStr}` : `${date.getMonth() + 1}月${date.getDate()}日`;
     };
 
     const renderIcon = () => {
@@ -587,12 +557,6 @@ const ContestCard = ({
 
     const startMaintenanceHold = (input) => {
         if (!canOpenMaintenance || deleteArmed || maintenanceHoldRef.current) return;
-        if (cardBodyRef.current) {
-            setCardDimensions({
-                width: cardBodyRef.current.offsetWidth || 280,
-                height: cardBodyRef.current.offsetHeight || 230
-            });
-        }
         const hold = { ...input, startedAt: Date.now(), timer: null };
         maintenanceHoldRef.current = hold;
         setPressProgress(0);
@@ -722,11 +686,8 @@ const ContestCard = ({
     const shift = outerGap + strokeWidth / 2; // 2 + 1.75 = 3.75px
     const rectX = svgPad - shift;
     const rectY = svgPad - shift;
-    const rectW = (cardDimensions.width || 280) + 2 * shift;
-    const rectH = (cardDimensions.height || 230) + 2 * shift;
+    const rectSize = `calc(100% - ${rectX * 2}px)`;
     const rectRadius = 24 + shift; // 同心膨胀的外置圆角 27.75px (完美匹配卡片 rounded-3xl 的 24px 弧度)
-    const perimeter = 2 * ((rectW - 2 * rectRadius) + (rectH - 2 * rectRadius)) + 2 * Math.PI * rectRadius;
-    const strokeLength = (perimeter * pressProgress) / 100;
 
     return (
         <>
@@ -737,7 +698,6 @@ const ContestCard = ({
 
             {/* ① 卡片主体 */}
             <div
-                ref={cardBodyRef}
                 style={{ '--contest-theme-rgb': theme.rgb }}
                 className={`
                     contest-card relative group flex flex-col h-full rounded-3xl
@@ -950,8 +910,8 @@ const ContestCard = ({
                         <rect
                             x={rectX}
                             y={rectY}
-                            width={rectW}
-                            height={rectH}
+                            width={rectSize}
+                            height={rectSize}
                             rx={rectRadius}
                             ry={rectRadius}
                             fill="none"
@@ -965,14 +925,15 @@ const ContestCard = ({
                         <rect
                             x={rectX}
                             y={rectY}
-                            width={rectW}
-                            height={rectH}
+                            width={rectSize}
+                            height={rectSize}
                             rx={rectRadius}
                             ry={rectRadius}
                             fill="none"
                             stroke={`url(#outerOrbitGrad-${link.id})`}
                             strokeWidth={strokeWidth}
-                            strokeDasharray={`${strokeLength} ${perimeter}`}
+                            pathLength="100"
+                            strokeDasharray={`${pressProgress} 100`}
                             strokeDashoffset="0"
                             strokeLinecap="round"
                             filter={`url(#neonGlow-${link.id})`}
@@ -982,14 +943,15 @@ const ContestCard = ({
                         <rect
                             x={rectX}
                             y={rectY}
-                            width={rectW}
-                            height={rectH}
+                            width={rectSize}
+                            height={rectSize}
                             rx={rectRadius}
                             ry={rectRadius}
                             fill="none"
                             stroke={isJavaDelete ? '#e0f2fe' : '#ffe6f0'}
                             strokeWidth="1.2"
-                            strokeDasharray={`${strokeLength} ${perimeter}`}
+                            pathLength="100"
+                            strokeDasharray={`${pressProgress} 100`}
                             strokeDashoffset="0"
                             strokeLinecap="round"
                             className="opacity-95"

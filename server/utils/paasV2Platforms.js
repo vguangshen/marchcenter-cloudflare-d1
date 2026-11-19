@@ -134,9 +134,19 @@ export const competitionDependentTables = Object.freeze([
 ]);
 
 export async function deletePlatformAndTasks(platform) {
-    const taskQuery = "SELECT id FROM competitions WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE";
-    const statements = competitionDependentTables.map(table => [`DELETE FROM ${table} WHERE competition_id IN (${taskQuery})`, [platform.software_unique]]);
-    statements.push(["DELETE FROM competitions WHERE sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE", [platform.software_unique]],
-        ['DELETE FROM paas_v2_catalogs WHERE platform_id = ?', [platform.id]], ['DELETE FROM paas_v2_platforms WHERE id = ?', [platform.id]]);
-    await pool.batch(statements);
+    const scope = [platform.id, platform.catalog_generation];
+    const platformQuery = 'SELECT id FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?';
+    const taskFilter = `sso_method = 'paasV2' AND paas_v2_software_unique = ? COLLATE NOCASE
+        AND EXISTS (${platformQuery})`;
+    const params = [platform.software_unique, ...scope];
+    const statements = competitionDependentTables.map(table => [
+        `DELETE FROM ${table} WHERE competition_id IN (SELECT id FROM competitions WHERE ${taskFilter})`, params
+    ]);
+    statements.push(
+        [`DELETE FROM competitions WHERE ${taskFilter}`, params],
+        [`DELETE FROM paas_v2_catalogs WHERE platform_id IN (${platformQuery})`, scope],
+        ['DELETE FROM paas_v2_platforms WHERE id = ? AND catalog_generation = ?', scope]
+    );
+    const results = await pool.batch(statements);
+    return results.at(-1).affectedRows > 0;
 }

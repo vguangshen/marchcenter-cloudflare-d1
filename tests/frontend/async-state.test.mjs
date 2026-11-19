@@ -514,7 +514,7 @@ test('applying a returned profile does not restart application bootstrap or fetc
             assert.equal(after.filter(item => item === url).length, before.filter(item => item === url).length, `${url} should not reload for an avatar change`);
         }
         assert.equal(after.filter(url => url === '/sso-config').length, 0);
-        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('authUser')).avatarDataUrl), null);
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('authUser')).user.avatarDataUrl), null);
     } finally { await page.close(); }
 });
 
@@ -651,5 +651,115 @@ test('a delayed 401 for the previous account cannot log out the replacement sess
         await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-unauthorized', { detail: { token: 'replacement-token' } })));
         await page.getByText('anonymous', { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), null);
+    } finally { await page.close(); }
+});
+
+test('switching accounts and signing out synchronizes already-open tabs', async () => {
+    const context = await browser.newContext();
+    try {
+        const original = await context.newPage();
+        const other = await context.newPage();
+        const fixtureUrl = `${origin}/?mode=auth&signedOut=1`;
+        await original.goto(fixtureUrl);
+        await other.goto(fixtureUrl);
+        await original.getByText('anonymous', { exact: true }).waitFor();
+        await other.getByText('anonymous', { exact: true }).waitFor();
+        await original.evaluate(() => window.__session.handleLoginSuccess(
+            window.__profileUser, 'fixture-token', { animate: false }
+        ));
+        await other.getByText('fixture-user', { exact: true }).waitFor();
+        await other.waitForFunction(() => window.__session.authStatus === 'authenticated');
+        await other.evaluate(() => window.__session.handleLoginSuccess(
+            { id: 8, username: 'replacement-user', role: 'student' }, 'replacement-token', { animate: false }
+        ));
+        await original.getByText('replacement-user', { exact: true }).waitFor();
+        await original.waitForFunction(() => window.__session.authStatus === 'authenticated');
+        assert.equal(await original.evaluate(() => window.__calls.filter(call => call.url === '/auth/me').length), 1);
+        await other.evaluate(() => window.__session.handleLogout());
+        await original.getByText('anonymous', { exact: true }).waitFor();
+        assert.equal(await original.evaluate(() => window.__session.token), null);
+    } finally { await context.close(); }
+});
+
+test('offline startup only restores a profile that belongs to the active login', async () => {
+    const user = { id: 7, username: 'cached-user', role: 'student' };
+    const payload = Buffer.from(JSON.stringify({ id: 7, role: 'student' })).toString('base64url');
+    const token = `header.${payload}.fixture`;
+    for (const [cached, expectedUser] of [
+        [{ token, user }, 'cached-user'],
+        [{ token: 'previous-login', user }, 'anonymous'],
+        [user, 'cached-user'],
+        [{ ...user, id: 8 }, 'anonymous']
+    ]) {
+        const page = await browser.newPage();
+        try {
+            await page.addInitScript(({ token, cached }) => {
+                localStorage.setItem('authToken', token);
+                localStorage.setItem('authUser', JSON.stringify(cached));
+            }, { token, cached });
+            await page.goto(`${origin}/?mode=auth&signedOut=1&authOffline=1`);
+            await page.waitForFunction(() => window.__notifications?.length === 1);
+            assert.equal(await page.getByTestId('session-user').textContent(), expectedUser);
+        } finally { await page.close(); }
+    }
+});
+
+test('sending a page of gifts produces one distinct, compact gift per recipient', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        await page.getByRole('button', { name: '系统工具' }).waitFor();
+        await page.evaluate(() => {
+            const previous = window.__testApi;
+            window.__testApi = (method, url, ...args) => url.startsWith('/users?')
+                ? Array.from({ length: 50 }, (_, index) => ({ id: index + 1, username: `student-${index + 1}`, role: 'student' }))
+                : previous(method, url, ...args);
+        });
+        await page.getByRole('button', { name: '系统工具' }).click();
+        await page.getByRole('button', { name: '赠送礼物' }).click();
+        await page.getByRole('button', { name: 'student-50', exact: true }).waitFor();
+        await page.getByPlaceholder(/礼物名称/).fill('Fixture gift');
+        await page.getByPlaceholder(/请输入跳转链接/).fill('https://fixture.example/help');
+        await page.getByRole('button', { name: '全选', exact: true }).click();
+        await page.getByRole('button', { name: '发送礼物', exact: true }).click();
+        const gifts = await page.evaluate(() => window.__calls.find(call => call.url === '/content/gifts').body);
+        assert.equal(new Set(gifts.map(gift => gift.id)).size, 50);
+        assert.equal(new Set(gifts.map(gift => gift.targetUserId)).size, 50);
+        assert.ok(gifts.every(gift => /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(gift.id) && !('targetUsers' in gift)));
+    } finally { await page.close(); }
+});
+
+test('80 competition cards share the dashboard clock and skip idle dimension reads', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        await page.clock.install();
+        await page.addInitScript(() => {
+            window.__cardDimensionsRead = 0;
+            for (const property of ['offsetWidth', 'offsetHeight']) {
+                const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, property);
+                Object.defineProperty(HTMLElement.prototype, property, {
+                    ...descriptor,
+                    get() {
+                        if (this.classList.contains('contest-card')) window.__cardDimensionsRead++;
+                        return descriptor.get.call(this);
+                    }
+                });
+            }
+            const interval = window.setInterval.bind(window);
+            window.__halfMinuteTimers = 0;
+            window.setInterval = (callback, delay, ...args) => {
+                if (delay === 30_000) window.__halfMinuteTimers++;
+                return interval(callback, delay, ...args);
+            };
+        });
+        await page.goto(`${origin}/?mode=app&timedCards=1`);
+        await page.getByRole('heading', { name: 'Fixture card 80', exact: true }).waitFor();
+        const timedCard = page.locator('.contest-card').filter({ has: page.getByRole('heading', { name: 'Fixture card 1', exact: true }) });
+        await timedCard.getByText(/开启/).waitFor();
+        await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+        assert.equal(await page.evaluate(() => window.__cardDimensionsRead), 0);
+        assert.equal(await page.evaluate(() => window.__halfMinuteTimers), 1);
+        await page.clock.fastForward(31_000);
+        await timedCard.getByText('长期开放', { exact: true }).waitFor();
     } finally { await page.close(); }
 });

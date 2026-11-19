@@ -2,6 +2,39 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createProductionHarness } from './helpers/productionHarness.mjs';
 
+test('module-only sync before the first full catalog read still fetches all upstream tasks', async () => {
+    const harness = await createProductionHarness({ bindings: { DAYU_COVER_USERNAME: '', DAYU_COVER_PASSWORD: '' } });
+    try {
+        let sourceReads = 0;
+        harness.platform.fetch = async request => {
+            assert.equal(new URL(request.url).hostname, 'paas.itmc.org.cn');
+            sourceReads++;
+            return Response.json({ code: 0, data: {
+                taskModuleJson: [{ id: 1, moduleTitle: '官方分类' }],
+                taskJson: [
+                    { plugId: 'grouped', taskTitle: '分类内任务', taskModuleId: 1 },
+                    { plugId: 'ungrouped', taskTitle: '无分类任务' }
+                ]
+            } });
+        };
+        const softwareUnique = 'dzswcjrh';
+        const refresh = await harness.api('/api/paas-v2/catalog/modules/refresh', { body: { softwareUnique } });
+        assert.equal(refresh.status, 200, refresh.text);
+        assert.equal(sourceReads, 1);
+        const url = `/api/paas-v2/catalog?softwareUnique=${softwareUnique}`;
+        const full = await harness.api(url);
+        assert.equal(full.status, 200, full.text);
+        assert.equal(full.data.source, 'remote');
+        assert.equal(sourceReads, 2);
+        assert.deepEqual(full.data.tasks.map(task => task.plugFlag).sort(), ['grouped', 'ungrouped']);
+        const cached = await harness.api(url);
+        assert.equal(cached.status, 200, cached.text);
+        assert.equal(cached.data.source, 'database');
+        assert.deepEqual(cached.data.tasks, full.data.tasks);
+        assert.equal(sourceReads, 2);
+    } finally { await harness.dispose(); }
+});
+
 test('catalog module refresh backfills registered platforms without replacing cards or cover data', async () => {
     const harness = await createProductionHarness({ bindings: { DAYU_COVER_USERNAME: 'fixture-user', DAYU_COVER_PASSWORD: 'fixture-password' } });
     try {

@@ -1,4 +1,5 @@
 import express from '../server/compat/express.js';
+import { allowedOrigins } from '../server/config/allowedOrigins.js';
 import { getEnv, runWithRuntime } from '../server/config/runtime.js';
 import pool from '../server/config/db.js';
 import { createOfficialTokenStore, PAAS_V2_TOKEN_TTL_MS } from '../server/utils/officialCompat/tokenStore.js';
@@ -50,7 +51,8 @@ app.get('/api/ready', async (_req, res) => {
     res.setHeader('CDN-Cache-Control', 'no-store');
     try {
         await pool.query(`SELECT EXISTS (SELECT 1 FROM users),
-            EXISTS (SELECT 1 FROM competitions), EXISTS (SELECT 1 FROM user_agent_task_results)`);
+            EXISTS (SELECT 1 FROM competitions), EXISTS (SELECT 1 FROM user_agent_task_results),
+            EXISTS (SELECT catalog_generation FROM paas_v2_platforms)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });
@@ -61,11 +63,6 @@ app.get('/api/version', (_req, res) => {
     res.setHeader('CDN-Cache-Control', 'no-store');
     return res.json({ commit: getEnv('APP_COMMIT_SHA') || null });
 });
-
-function allowedOrigins(env) {
-    return new Set(String(env.CORS_ORIGINS || 'https://marchcenter.top,http://localhost:5173,http://127.0.0.1:5173')
-        .split(',').map(value => value.trim()).filter(Boolean));
-}
 
 function withSecurityHeaders(response, request, env) {
     const headers = new Headers(response.headers);

@@ -89,6 +89,7 @@ window.__testApi = async (method, url, body, requestToken) => {
         return { covers: Object.fromEntries(body.urls.map(url => [url, `/cached/${url.split('/').at(-1)}`])) };
     }
     if (method === 'POST' && url === '/competitions/batch-paas-v2') return { created: body.tasks.length };
+    if (url === '/auth/me' && scenario.has('authOffline')) throw new Error('Fixture offline');
     if (url === '/auth/me' && scenario.get('deferAuth') === '1') return new Promise((resolve, reject) => {
         window.__releaseAuth = () => {
             window.dispatchEvent(new CustomEvent('fixture-unauthorized', { detail: { token: requestToken } }));
@@ -99,13 +100,20 @@ window.__testApi = async (method, url, body, requestToken) => {
     if (url === '/auth/me' && scenario.get('deferAuth') === 'success') {
         await new Promise(resolve => { window.__releaseAuth = resolve; });
     }
-    if (url === '/auth/me') return { user: window.__profileUser };
+    if (url === '/auth/me') return { user: requestToken === 'replacement-token'
+        ? { id: 8, username: 'replacement-user', role: 'student' } : window.__profileUser };
     if (mode === 'maintenance' && method === 'GET' && url === '/sso-config') {
         return [{ id: 'fixture-java', configData: { method: 'java' } }];
     }
     if (mode === 'maintenance' && method === 'PUT' && url === '/competitions/73') {
         configuredJavaCard = { ...configuredJavaCard, ...body };
         return { success: true };
+    }
+    if (url === '/competitions' && scenario.has('timedCards')) {
+        const opensAt = new Date(Date.now() + 20_000).toISOString();
+        return Array.from({ length: 80 }, (_, index) => ({
+            id: index + 1, title: `Fixture card ${index + 1}`, unlockTime: index === 0 ? opensAt : null
+        }));
     }
     if (url === '/competitions' && mode === 'maintenance') return [
         { id: 71, title: 'Java 实训', url: 'https://fixture.example/java', ssoMethod: 'java', maintenance: unconfiguredMaintenance },

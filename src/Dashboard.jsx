@@ -216,7 +216,7 @@ export default function Dashboard({ auth, site, appearance }) {
     // 📢 公告状态管理
     const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(true);
     const [isAnnouncementClosing, setIsAnnouncementClosing] = useState(false);
-    const [announcementNow, setAnnouncementNow] = useState(() => Date.now());
+    const [dashboardNow, setDashboardNow] = useState(() => Date.now());
     const serverTimeOffsetRef = useRef(0);
     const announcementCloseAnimationTimerRef = useRef(null);
 
@@ -231,11 +231,11 @@ export default function Dashboard({ auth, site, appearance }) {
 
     const activeAnnouncement = useMemo(() => announcements.find(item => {
         const closeAt = item.closeAt ? new Date(item.closeAt).getTime() : null;
-        const isScheduled = !closeAt || Number.isNaN(closeAt) || closeAt > announcementNow;
+        const isScheduled = !closeAt || Number.isNaN(closeAt) || closeAt > dashboardNow;
         return isScheduled && (
             currentUser?.role === 'super_admin' || !item.targetType || item.targetType === 'all' || item.targetType === currentUser?.role
         );
-    }) || null, [announcements, currentUser?.role, announcementNow]);
+    }) || null, [announcements, currentUser?.role, dashboardNow]);
 
     // Announcement dismissal animation
     const triggerCloseAnnouncement = useCallback(() => {
@@ -257,11 +257,11 @@ export default function Dashboard({ auth, site, appearance }) {
     useEffect(() => {
         if (!activeAnnouncement || !isAnnouncementVisible || isAnnouncementClosing || !activeAnnouncement.closeAt) return undefined;
         const closeAt = new Date(activeAnnouncement.closeAt).getTime();
-        const remaining = closeAt - announcementNow;
+        const remaining = closeAt - dashboardNow;
         if (!Number.isFinite(remaining) || remaining <= 0) return undefined;
         const timer = window.setTimeout(triggerCloseAnnouncement, remaining);
         return () => window.clearTimeout(timer);
-    }, [activeAnnouncement, isAnnouncementVisible, isAnnouncementClosing, announcementNow, triggerCloseAnnouncement]);
+    }, [activeAnnouncement, isAnnouncementVisible, isAnnouncementClosing, dashboardNow, triggerCloseAnnouncement]);
 
     useEffect(() => {
         window.clearTimeout(announcementCloseAnimationTimerRef.current);
@@ -275,7 +275,7 @@ export default function Dashboard({ auth, site, appearance }) {
         const handleVisibilityChange = () => {
             const visible = document.visibilityState === 'visible';
             setIsPageVisible(visible);
-            if (visible) setAnnouncementNow(Date.now() + serverTimeOffsetRef.current);
+            if (visible) setDashboardNow(Date.now() + serverTimeOffsetRef.current);
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -283,7 +283,7 @@ export default function Dashboard({ auth, site, appearance }) {
 
     useEffect(() => {
         if (!isPageVisible) return undefined;
-        const timer = window.setInterval(() => setAnnouncementNow(Date.now() + serverTimeOffsetRef.current), 30_000);
+        const timer = window.setInterval(() => setDashboardNow(Date.now() + serverTimeOffsetRef.current), 30_000);
         return () => window.clearInterval(timer);
     }, [isPageVisible]);
 
@@ -388,7 +388,7 @@ export default function Dashboard({ auth, site, appearance }) {
                 const serverTime = Date.parse(data.serverTime);
                 if (Number.isFinite(serverTime)) {
                     serverTimeOffsetRef.current = serverTime - Date.now();
-                    setAnnouncementNow(serverTime);
+                    setDashboardNow(serverTime);
                 }
                 setContentLoadError('');
                 return true;
@@ -627,9 +627,9 @@ export default function Dashboard({ auth, site, appearance }) {
             confirmText: '删除模块'
         })) return;
         try {
-            await api.post('/competitions/batch-delete', { ids }, { fallback: '删除失败', timeoutMs: 60_000, retry: 0 });
+            const result = await api.post('/competitions/batch-delete', { ids }, { fallback: '删除失败', timeoutMs: 60_000, retry: 0 });
             await fetchLinks();
-            notify(`已删除 ${ids.length} 个智能体任务`, 'success');
+            notify(`已删除 ${result.deleted} 个智能体任务`, 'success');
         } catch (error) {
             notify(error.message || '删除失败', 'error');
         }
@@ -722,9 +722,11 @@ export default function Dashboard({ auth, site, appearance }) {
     const handleSendGift = async () => {
         if (!giftForm.title || !giftForm.targetUsers.length) return notify('请完善礼物信息', 'warning');
         const newGifts = giftForm.targetUsers.map(uid => ({
-            id: Date.now() + Math.random(),
+            id: crypto.randomUUID(),
             targetUserId: uid,
-            ...giftForm,
+            title: giftForm.title,
+            content: giftForm.content,
+            type: giftForm.type,
             sentAt: new Date().toISOString(),
             read: false
         }));
@@ -996,6 +998,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                                             </div>
                                                             <Suspense fallback={<CardLoadingNotice />}>
                                                                 <ContestCard
+                                                                    now={dashboardNow}
                                                                     link={link} isAdmin={isAdmin} userRole={currentUser?.role} overrideTime={link._overrideTime}
                                                                     onEdit={(l)=>{setEditingLink(l); setIsModalOpen(true);}}
                                                                     onDelete={handleDelete}

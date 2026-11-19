@@ -31,6 +31,18 @@ function stallBody(contentType = 'application/json', firstChunk = '') {
     return observed;
 }
 
+test('a changed storage token cannot authorize a request from the old page', async () => {
+    const originalStorage = globalThis.localStorage;
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; return Response.json({ ok: true }); };
+    try {
+        await api.get('/public');
+        globalThis.localStorage = { getItem: () => 'another-tab-token' };
+        await assert.rejects(api.post('/fixture', {}), { code: 'session_changed' });
+        assert.equal(requests, 1);
+    } finally { globalThis.localStorage = originalStorage; }
+});
+
 test('JSON body remains bounded after headers have arrived', { timeout: 2000 }, async () => {
     const observed = stallBody();
     await assert.rejects(api.get('/slow-json', { timeoutMs: 25, retry: 0 }), { code: 'request_timeout' });

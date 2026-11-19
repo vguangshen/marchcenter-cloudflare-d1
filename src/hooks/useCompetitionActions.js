@@ -91,6 +91,14 @@ export function useCompetitionActions({
         }
     };
 
+    const updateClassRemoval = (id, classRemoved) => {
+        setLinks(previous => previous.map(item => item.id === id
+            ? { ...item, classRemoved, teacherReady: 0, studentReady: 0 } : item));
+        setStudentAccountsByCard(previous => previous[id]?.length ? {
+            ...previous, [id]: previous[id].map(account => ({ ...account, platformReady: 0 }))
+        } : previous);
+    };
+
     const handleDeleteClass = async (link) => {
         if (!token || classActionKey) return;
         setClassActionKey(`remove:${link.id}`);
@@ -98,9 +106,7 @@ export function useCompetitionActions({
             const data = await api.post('/sso/class/remove', { competitionId: link.id }, {
                 fallback: '删除班级失败', retry: 0, timeoutMs: 60_000
             });
-            setLinks(previous => previous.map(item => item.id === link.id
-                ? { ...item, classRemoved: 1 }
-                : item));
+            updateClassRemoval(link.id, 1);
             notify(data.deleted
                 ? `班级 ${data.className || ''} 已从平台删除`
                 : '平台班级不存在，卡片已标记为删除', 'success');
@@ -147,9 +153,7 @@ export function useCompetitionActions({
             await api.post('/sso/class/restore', { competitionId: link.id }, {
                 fallback: '恢复班级失败', retry: 0, timeoutMs: 60_000
             });
-            setLinks(previous => previous.map(item => item.id === link.id
-                ? { ...item, classRemoved: 0 }
-                : item));
+            updateClassRemoval(link.id, 0);
             notify('已恢复，下次进入会自动重新建班', 'success');
         } catch (error) {
             notify(error.message || '恢复班级失败', 'error');

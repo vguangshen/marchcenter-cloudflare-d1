@@ -91,6 +91,59 @@ async function statusRows() {
     return harness.rows('SELECT * FROM user_platform_account_status ORDER BY competition_id, login_role');
 }
 
+test('in-flight account connection tests preserve concurrent edits and deletions', async () => {
+    const services = '/api/account-management/services';
+    const target = await seedAccountService();
+    const originalFetch = harness.platform.fetch;
+    async function testDuring(mutate, healthy = true) {
+        const started = Promise.withResolvers();
+        const finish = Promise.withResolvers();
+        harness.platform.fetch = async request => {
+            if (new URL(request.url).pathname === '/api/v1/device/info') {
+                started.resolve();
+                await finish.promise;
+                return Response.json({ success: true, deviceId: 'fixture', publicKey: { kty: 'RSA' } });
+            }
+            return Response.json({ success: healthy }, { status: healthy ? 200 : 503 });
+        };
+        const pending = harness.api(`${services}/${target}/test`, { body: {} });
+        try {
+            await Promise.race([started.promise, pending.then(result => {
+                throw new Error(`connection test ended before device lookup: ${result.text}`);
+            })]);
+            await mutate();
+        } finally { finish.resolve(); }
+        return pending;
+    }
+    try {
+        const created = await harness.api(services, { body: { name: 'second' } });
+        assert.equal(created.status, 201);
+        const second = created.data.config.id;
+        const passed = await testDuring(async () => {
+            assert.equal((await harness.api(`${services}/${second}`, { method: 'DELETE' })).status, 200);
+            assert.equal((await harness.api(services, { body: { name: 'third' } })).status, 201);
+        });
+        assert.equal(passed.status, 200, passed.text);
+        const list = (await harness.api(services)).data.services;
+        assert.deepEqual(list.map(item => item.name), ['E2E 账号服务', 'third']);
+        assert.equal(list[0].lastTestOk, true);
+
+        const stale = await testDuring(async () => {
+            const saved = await harness.api(`${services}/${target}`, {
+                method: 'PUT', body: { endpointUrl: 'http://localhost:9010' }
+            });
+            assert.equal(saved.status, 200);
+        });
+        assert.equal(stale.status, 409, stale.text);
+        assert.equal((await harness.api(services)).data.services[0].endpointUrl, 'http://localhost:9010');
+        const failed = await testDuring(async () => {
+            assert.equal((await harness.api(`${services}/${target}`, { method: 'DELETE' })).status, 200);
+        }, false);
+        assert.equal(failed.status, 404, failed.text);
+        assert.deepEqual((await harness.api(services)).data.services.map(item => item.name), ['third']);
+    } finally { harness.platform.fetch = originalFetch; }
+});
+
 test('configuration API saves, reads and redacts the sole official adapter template', async () => {
     const config = officialConfig('java');
     const saved = await harness.api('/api/sso-config', {
@@ -606,7 +659,10 @@ test('official JAVA token is reused across production requests in one Worker iso
 });
 
 test('paasV2 SSE uses one task entry for students and teachers with separate account caches', async () => {
-    const cacheHarness = await createProductionHarness({ officialTokenCacheScope: 'isolate' });
+    const frontendOrigin = 'https://app.example.invalid';
+    const cacheHarness = await createProductionHarness({
+        officialTokenCacheScope: 'isolate', bindings: { CORS_ORIGINS: frontendOrigin }
+    });
     try {
         const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 1024 });
         const pem = publicKey.export({ type: 'spki', format: 'pem' });
@@ -668,6 +724,15 @@ test('paasV2 SSE uses one task entry for students and teachers with separate acc
         });
         assert.equal(jsonLaunch.status, 200, jsonLaunch.text);
         verifyReturnUrl(jsonLaunch.data.postForm, `http://marchcenter.local/?agentTaskId=${competitionId}`);
+        const crossOrigin = await cacheHarness.api('/api/sso/execute', {
+            body: { competitionId }, headers: { Authorization: `Bearer ${sessionTokens.student}`, Origin: frontendOrigin }
+        });
+        assert.equal(crossOrigin.status, 200, crossOrigin.text);
+        verifyReturnUrl(crossOrigin.data.postForm, `${frontendOrigin}/?agentTaskId=${competitionId}`);
+        const untrusted = await cacheHarness.api('/api/sso/execute', {
+            body: { competitionId }, headers: { Origin: 'https://other.invalid' }
+        });
+        assert.equal(untrusted.status, 403);
         assert.deepEqual(
             cacheHarness.platform.state.requests.map(request => request.operationName),
             ['GetTokenInfo', 'GetTokenInfo']
@@ -967,12 +1032,24 @@ test('official class remove is idempotent when the remote class does not exist',
     assert.equal((await harness.rows('SELECT * FROM user_class_removals')).length, 1);
 });
 
-test('official class restore clears the ghost flag', async () => {
+test('restoring a removed SOAP class provisions it again, including legacy readiness records', async () => {
     const { competitionId } = await routeConfig(officialConfig('net'));
-    harness.platform.queueSoap('IsGroupExisted', success('group-1'));
-    await harness.api('/api/sso/class/remove', { body: { competitionId } });
+    assert.equal((await execute(competitionId)).status, 200);
+    assert.equal((await statusRows()).length, 1);
+    await harness.seedUser({ id: 2, username: 'class-member', role: 'student' });
+    await harness.seedUser({ id: 3, username: 'other-class', role: 'teacher' });
+    await harness.run("INSERT INTO classes (id, name, teacher_user_id) VALUES (5, 'restore fixture', 1)");
+    await harness.run('UPDATE users SET class_id = 5 WHERE id = 2');
+    await harness.run(`INSERT INTO user_platform_account_status (user_id, competition_id, login_role, student_index)
+        VALUES (2, ?, 'student', 1), (3, ?, 'teacher', 1)`, competitionId, competitionId);
+    const removed = await harness.api('/api/sso/class/remove', { body: { competitionId } });
+    assert.equal(removed.data.deleted, true);
     assert.equal((await harness.rows('SELECT * FROM user_class_removals')).length, 1);
+    assert.deepEqual((await statusRows()).map(row => row.user_id), [3], 'only accounts of the removed class are invalidated');
 
+    // Older Workers retained the readiness row when marking the card as removed.
+    await harness.run(`INSERT INTO user_platform_account_status (user_id, competition_id, login_role, student_index)
+        VALUES (1, ?, 'student', 1)`, competitionId);
     const restore = await harness.api('/api/sso/class/restore', {
         body: { competitionId }
     });
@@ -981,6 +1058,14 @@ test('official class restore clears the ghost flag', async () => {
     assert.equal((await harness.rows('SELECT * FROM user_class_removals')).length, 0);
     const cards = await harness.api('/api/competitions');
     assert.equal(Number(cards.data.find(card => card.id === competitionId).classRemoved), 0);
+    harness.platform.queueSoap('IsGroupExisted', success(null));
+    harness.platform.state.requests.length = 0;
+    const next = await execute(competitionId);
+    assert.equal(next.status, 200, next.text);
+    assert.equal(next.data.accountWasReady, false);
+    assert.ok(operationNames().includes('AddTrainGroup'));
+    await harness.api('/api/sso/class/restore', { body: { competitionId } });
+    assert.equal((await execute(competitionId)).data.accountWasReady, true, 'repeated restore must preserve a rebuilt class');
 });
 
 test('official class remove surfaces SOAP upstream failure as 502 with a visible message', async () => {

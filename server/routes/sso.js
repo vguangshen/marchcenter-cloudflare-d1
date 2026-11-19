@@ -17,6 +17,7 @@ import { isSuperAdmin, normalizeRole, ROLES } from '../utils/roleAccess.js';
 import { decryptSecretValue, encryptSecretValue } from '../utils/configSecrets.js';
 import { withD1Lock } from '../utils/d1Lock.js';
 import { getEnv, getRuntime, waitUntil } from '../config/runtime.js';
+import { allowedOrigins } from '../config/allowedOrigins.js';
 import { createRequestDeadline } from '../utils/requestDeadline.js';
 import { SSO_LAUNCH_TIMEOUT_MS, SSO_REPAIR_TIMEOUT_MS } from '../../src/constants/ssoTiming.js';
 import {
@@ -51,6 +52,15 @@ const ALLOWED_METHODS = new Set([
     'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement', 'direct', 'paasV2'
 ]);
 const CLASS_DELETE_METHODS = ACCOUNT_CAPABLE_METHODS;
+// The platform derives the shared class name from its teacher's username.
+const REMOTE_CLASS_ACCOUNTS = `competition_id = ? AND user_id IN (
+    SELECT id FROM users WHERE username = ?
+    UNION ALL
+    SELECT student.id FROM users teacher
+    JOIN classes c ON c.teacher_user_id = teacher.id
+    JOIN users student ON student.class_id = c.id
+    WHERE teacher.username = ?
+)`;
 
 // The Worker composition root may provide isolate-scoped token stores for
 // all requests.  Route/unit tests that do not run inside the Worker runtime
@@ -126,8 +136,10 @@ async function prepareExpertStudentTarget(target, competitionId, effectiveConfig
     return true;
 }
 
-function buildAgentTaskReturnUrl(requestUrl, cardId, configuredReturnUrl) {
-    const dashboard = new URL('/', requestUrl);
+function buildAgentTaskReturnUrl(req, cardId, configuredReturnUrl) {
+    const source = req.headers?.origin;
+    const origins = allowedOrigins(getRuntime().env);
+    const dashboard = new URL('/', source && origins.has(source) && /^https?:\/\//i.test(source) ? source : req.url);
     if (typeof configuredReturnUrl === 'string' && URL.canParse(configuredReturnUrl, dashboard)) {
         const configured = new URL(configuredReturnUrl, dashboard);
         if (configured.origin === dashboard.origin && !configured.username && !configured.password
@@ -299,7 +311,7 @@ async function executeSsoRequest(req, body = {}, { onStage, signal, forceAccount
     const { config, effectiveConfig } = await resolvePlatformConfig(trustedConfig, trustedContext);
     if (trustedConfig.method === 'paasV2') {
         if (restoreCard) {
-            const returnUrl = buildAgentTaskReturnUrl(req.url, restoreCard.id, effectiveConfig.returnUrl);
+            const returnUrl = buildAgentTaskReturnUrl(req, restoreCard.id, effectiveConfig.returnUrl);
             effectiveConfig.returnUrl = returnUrl;
             trustedContext.returnUrl = returnUrl;
         }
@@ -1247,16 +1259,16 @@ router.post('/class/remove', authMiddleware, async (req, res) => {
                 studentAccountList
             }, officialDependencyOverrides());
         }
-        await pool.query(
-            `INSERT INTO user_class_removals (user_id, competition_id, removed_at)
+        const scope = [req.user.id, competitionId];
+        const owner = req.user.classTeacherUsername || req.user.username;
+        const accounts = [competitionId, owner, owner];
+        await pool.batch([
+            [`INSERT INTO user_class_removals (user_id, competition_id, removed_at)
              VALUES (?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(user_id, competition_id) DO UPDATE SET removed_at = CURRENT_TIMESTAMP`,
-            [req.user.id, competitionId]
-        );
-        await pool.query(
-            'DELETE FROM user_competition_expert_student_bindings WHERE user_id = ? AND competition_id = ?',
-            [req.user.id, competitionId]
-        );
+             ON CONFLICT(user_id, competition_id) DO UPDATE SET removed_at = CURRENT_TIMESTAMP`, scope],
+            [`DELETE FROM user_platform_account_status WHERE ${REMOTE_CLASS_ACCOUNTS}`, accounts],
+            [`DELETE FROM user_competition_expert_student_bindings WHERE ${REMOTE_CLASS_ACCOUNTS}`, accounts]
+        ]);
         return res.json({
             success: true,
             deleted: outcome.deleted,
@@ -1282,10 +1294,15 @@ router.post('/class/restore', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: '竞赛卡片无效' });
         }
         await assertCompetitionAccess(req.user, competitionId);
-        await pool.query(
-            'DELETE FROM user_class_removals WHERE user_id = ? AND competition_id = ?',
-            [req.user.id, competitionId]
-        );
+        const scope = [req.user.id, competitionId];
+        const owner = req.user.classTeacherUsername || req.user.username;
+        // Older removals may still have ready rows. Only invalidate them when restoring a removed class.
+        await pool.batch([
+            [`DELETE FROM user_platform_account_status WHERE ${REMOTE_CLASS_ACCOUNTS}
+              AND EXISTS (SELECT 1 FROM user_class_removals WHERE user_id = ? AND competition_id = ?)`,
+                [competitionId, owner, owner, ...scope]],
+            ['DELETE FROM user_class_removals WHERE user_id = ? AND competition_id = ?', scope]
+        ]);
         return res.json({ success: true });
     } catch (error) {
         console.error('[SSO] 恢复班级失败：', error.message);

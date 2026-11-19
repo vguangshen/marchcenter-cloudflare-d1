@@ -1,4 +1,5 @@
 import { API_BASE } from '../constants/config';
+import { getTabToken } from './tabSession';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_RETRY_COUNT = 1;
@@ -163,8 +164,12 @@ export const apiFetch = async (input, options = {}) => {
         ...requestOptions
     } = options;
     const headers = new Headers(customHeaders || {});
-    const token = localStorage.getItem('authToken');
-    if (token && isApiUrl(url) && !headers.has('Authorization')) {
+    const ownApi = isApiUrl(url);
+    const token = ownApi ? getTabToken() : null;
+    if (ownApi && token !== localStorage.getItem('authToken')) {
+        throw new ApiError('登录账号已切换，请等待页面刷新', { code: 'session_changed' });
+    }
+    if (token && !headers.has('Authorization')) {
         headers.set('Authorization', `Bearer ${token}`);
     }
     if (
