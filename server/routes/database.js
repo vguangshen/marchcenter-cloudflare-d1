@@ -54,12 +54,14 @@ function sqlValue(value) {
     if (typeof value === 'number') return Number.isFinite(value) ? String(value) : 'NULL';
     if (typeof value === 'boolean') return value ? '1' : '0';
     const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    return `'${text.replace(/'/g, "''")}'`;
+    // Wrangler refuses any file whose text contains "BEGIN TRANSACTION", even
+    // inside a string literal, so split that word with SQL concatenation.
+    return `'${text.replace(/'/g, "''").replace(/TRANSACTION/g, "TRANS' || 'ACTION")}'`;
 }
 
 // Application tables in parent-first order. Restore clears them in reverse order.
 const BACKUP_TABLES = [
-    'users', 'classes', 'sso_configs', 'competitions',
+    'users', 'revoked_sessions', 'classes', 'sso_configs', 'competitions',
     'system_configs', 'system_initialization', 'login_attempts', 'd1_locks',
     'logo_library', 'user_manual_teacher_credentials', 'wallpaper_library',
     'login_verification_codes', 'registration_verification_codes',
@@ -87,8 +89,13 @@ router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
         };
         append('-- MarchCenter Cloudflare D1 data backup\n');
         append('-- Apply all D1 migrations before importing this file.\n');
+        append('-- Import: npx wrangler d1 execute DB --remote --file <this file>\n');
+        append('-- Wallpaper and cover images live in R2 and are not included.\n');
         append(`-- Generated: ${new Date().toISOString()}\n`);
-        append('PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n\n');
+        // D1 rejects BEGIN/COMMIT/SAVEPOINT and ignores PRAGMA foreign_keys.
+        // Wrangler applies the file as one unit; deferring foreign keys lets
+        // the clear-then-insert order run inside that unit.
+        append('PRAGMA defer_foreign_keys = true;\n\n');
         for (const tableName of [...BACKUP_TABLES].reverse()) {
             append(`DELETE FROM ${identifier(tableName)};\n`);
         }
@@ -117,7 +124,7 @@ router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
                 if (rows.length < 250) break;
             }
         }
-        append('COMMIT;\nPRAGMA foreign_keys=ON;\n');
+        append('PRAGMA defer_foreign_keys = false;\n');
         const output = chunks.join('');
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         res.setHeader('Content-Type', 'application/sql; charset=utf-8');

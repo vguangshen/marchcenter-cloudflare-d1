@@ -19,6 +19,14 @@ before(async () => {
             stream: (url, options) => request('POST', url, options?.body ? JSON.parse(options.body) : undefined) };
         export const onUnauthorized = listener => { window.addEventListener('fixture-unauthorized', listener); return () => window.removeEventListener('fixture-unauthorized', listener); };
         export const apiFetch = async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+        export const changePassword = async body => {
+            const previous = localStorage.getItem('authToken');
+            const data = await request('POST', '/auth/change-password', body);
+            if (previous && data?.token) window.dispatchEvent(new CustomEvent('fixture-token-rotated', { detail: { previous, token: data.token } }));
+            return data;
+        };
+        export const onTokenRotated = listener => { window.addEventListener('fixture-token-rotated', listener); return () => window.removeEventListener('fixture-token-rotated', listener); };
+        export const revokeSession = async token => { (window.__revokedSessions ||= []).push(token); };
     `;
     const feedbackStub = `export const feedbackEvents={notify:'fixture-notify',confirm:'fixture-confirm'}; export const notify=(message,type)=>window.__notifications.push({message,type}); export const confirmAction=async()=>true;`;
     const result = await build({
@@ -498,6 +506,45 @@ test('long-pressing a direct card shows disabled deletion without starting an SS
     } finally { await page.close(); }
 });
 
+test('a reset account must change its password before the workbench loads', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=app&mustChange=1`);
+        const dialog = page.getByRole('dialog', { name: '请先修改登录密码', exact: true });
+        await dialog.waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await dialog.isVisible(), true, 'Escape does not dismiss the required step');
+        assert.equal(await page.getByRole('button', { name: '稍后修改' }).count(), 0);
+        const protectedCalls = () => page.evaluate(() => window.__calls.filter(call => !['/auth/me', '/config/site'].includes(call.url)).map(call => call.url));
+        assert.deepEqual(await protectedCalls(), [], 'no workbench requests run before the change');
+
+        await page.getByLabel('新密码', { exact: true }).fill('123456');
+        await page.getByLabel('确认新密码', { exact: true }).fill('123456');
+        await page.getByRole('button', { name: '保存新密码并进入', exact: true }).click();
+        await page.getByText('新密码不能继续使用默认密码 123456', { exact: true }).waitFor();
+        assert.deepEqual(await protectedCalls(), []);
+
+        await page.getByLabel('新密码', { exact: true }).fill('Chosen-Password-2026');
+        await page.getByLabel('确认新密码', { exact: true }).fill('Chosen-Password-2026');
+        await page.getByRole('button', { name: '保存新密码并进入', exact: true }).click();
+        await dialog.waitFor({ state: 'detached' });
+        await page.getByRole('button', { name: '打开个人资料', exact: true }).waitFor();
+        assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), 'rotated-token');
+        assert.equal(await page.evaluate(() => window.__calls.filter(call => call.url === '/auth/change-password').length), 1);
+    } finally { await page.close(); }
+});
+
+test('a reset account can sign out from the required password step', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=app&mustChange=1`);
+        await page.getByRole('dialog', { name: '请先修改登录密码', exact: true }).waitFor();
+        await page.getByRole('button', { name: '退出登录', exact: true }).click();
+        await page.waitForFunction(() => localStorage.getItem('authToken') === null);
+        assert.deepEqual(await page.evaluate(() => window.__revokedSessions), ['fixture-token']);
+    } finally { await page.close(); }
+});
+
 test('applying a returned profile does not restart application bootstrap or fetch protected SSO settings', async () => {
     const page = await browser.newPage();
     try {
@@ -651,6 +698,38 @@ test('a delayed 401 for the previous account cannot log out the replacement sess
         await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-unauthorized', { detail: { token: 'replacement-token' } })));
         await page.getByText('anonymous', { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), null);
+    } finally { await page.close(); }
+});
+
+test('a password change adopts the rotated token and sign-out revokes it on the server', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=auth&signedOut=1`);
+        await page.getByText('anonymous', { exact: true }).waitFor();
+        await page.evaluate(() => window.__session.handleLoginSuccess(
+            { ...window.__profileUser, passwordChangeRecommended: true }, 'fixture-token', { animate: false }
+        ));
+        await page.waitForFunction(() => window.__session.authStatus === 'authenticated');
+        const meCalls = await page.evaluate(() => window.__calls.filter(call => call.url === '/auth/me').length);
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-token-rotated', {
+            detail: { previous: 'fixture-token', token: 'rotated-token' }
+        })));
+        await page.waitForFunction(() => window.__session.token === 'rotated-token');
+        assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), 'rotated-token');
+        assert.equal(await page.evaluate(() => window.__session.currentUser.passwordChangeRecommended), false);
+        assert.equal(await page.evaluate(() => window.__calls.filter(call => call.url === '/auth/me').length), meCalls,
+            'the rotated token is already verified');
+        // A late 401 for the revoked token must not sign the user out.
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-unauthorized', { detail: { token: 'fixture-token' } })));
+        assert.equal(await page.getByTestId('session-user').textContent(), 'fixture-user');
+        // A rotation for a token this tab does not hold is ignored.
+        await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-token-rotated', {
+            detail: { previous: 'someone-else', token: 'foreign-token' }
+        })));
+        assert.equal(await page.evaluate(() => window.__session.token), 'rotated-token');
+        await page.evaluate(() => window.__session.handleLogout());
+        await page.getByText('anonymous', { exact: true }).waitFor();
+        assert.deepEqual(await page.evaluate(() => window.__revokedSessions), ['rotated-token']);
     } finally { await page.close(); }
 });
 

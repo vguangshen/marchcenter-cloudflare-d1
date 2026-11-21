@@ -21,6 +21,11 @@ async function hmac(secret, value) {
     return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(value)));
 }
 
+export async function sessionTokenHash(token) {
+    const digest = await crypto.subtle.digest('SHA-256', encoder.encode(String(token || '')));
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export async function signToken(payload, secret, expiresInSeconds = 7 * 24 * 60 * 60) {
     const now = Math.floor(Date.now() / 1000);
     const issuedAtMs = Date.now();

@@ -2,8 +2,8 @@ import express from '../compat/express.js';
 import pool from "../config/db.js";
 import { authMiddleware, getJwtSecret } from "../middleware/auth.js";
 import { normalizeRole, ROLES } from "../utils/roleAccess.js";
-import { hashPassword, verifyPassword } from "../utils/password.js";
-import { signToken } from "../utils/token.js";
+import { ADMIN_RESET_DEFAULT_PASSWORD, hashPassword, verifyPassword } from "../utils/password.js";
+import { sessionTokenHash, signToken } from "../utils/token.js";
 import {
     emailServiceState, readEmailSettings, sendPasswordResetCodeEmail,
     sendRegistrationCodeEmail, sendVerificationCodeEmail
@@ -405,12 +405,14 @@ router.post("/login", async (req, res) => {
         }
 
         const user = rows[0];
-        if (user.is_disabled) {
-            return res.status(403).json({ error: "账号已被禁用，请联系管理员" });
-        }
+        // Check the password first so the disabled state is only disclosed to
+        // someone who already knows the account's credentials.
         if (!(await verifyPassword(password, user.password_hash))) {
             await recordFailedLogin(attemptKey, now);
             return res.status(400).json({ error: '用户名或密码错误' });
+        }
+        if (user.is_disabled) {
+            return res.status(403).json({ error: "账号已被禁用，请联系管理员" });
         }
         await pool.query('DELETE FROM login_attempts WHERE attempt_key = ?', [attemptKey]);
         await completeLogin(req, res, user);
@@ -727,12 +729,15 @@ router.post('/password-reset/confirm', async (req, res) => {
         if (!consumeResult.affectedRows) {
             return res.status(400).json({ error: '验证码已被使用' });
         }
+        // Millisecond precision: CURRENT_TIMESTAMP truncates to whole seconds,
+        // which would keep a session issued earlier in the same second alive.
+        const revokedAt = new Date();
         await pool.batch([
             [`UPDATE users
               SET password_hash = ?, password_change_recommended = 0,
-                  session_revoke_before = CURRENT_TIMESTAMP,
-                  session_revoke_at = CURRENT_TIMESTAMP
-              WHERE id = ?`, [passwordHash, user.id]],
+                  session_revoke_before = ?,
+                  session_revoke_at = ?
+              WHERE id = ?`, [passwordHash, revokedAt, revokedAt, user.id]],
             [`DELETE FROM login_verification_codes WHERE user_id = ? AND purpose = 'login'`, [user.id]]
         ]);
         return res.json({ message: '密码重置成功，请使用新密码登录' });
@@ -786,20 +791,51 @@ router.post('/change-password', authMiddleware, async (req, res) => {
         if (await verifyPassword(password, storedUser.password_hash)) {
             return res.status(400).json({ error: '新密码不能与当前密码相同' });
         }
+        if (password === ADMIN_RESET_DEFAULT_PASSWORD) {
+            return res.status(400).json({ error: '新密码不能使用默认密码 123456' });
+        }
         const passwordHash = await hashPassword(password);
+        // A password change ends every other session; this tab receives a
+        // fresh token issued after the revocation point.
+        const revokedAt = new Date();
         const [result] = await pool.query(
             `UPDATE users
-             SET password_hash = ?, password_change_recommended = 0
+             SET password_hash = ?, password_change_recommended = 0,
+                 session_revoke_before = ?, session_revoke_at = ?
              WHERE id = ? AND password_hash = ?`,
-            [passwordHash, req.user.id, storedUser.password_hash]
+            [passwordHash, revokedAt, revokedAt, req.user.id, storedUser.password_hash]
         );
         if (!result.affectedRows) return res.status(409).json({ error: '密码状态已更新，请刷新后重试' });
         await pool.query('DELETE FROM login_attempts WHERE attempt_key = ?', [changeAttemptKey]);
+        const token = await signToken({
+            id: req.user.id,
+            username: req.user.username,
+            role: req.user.role,
+            passwordChangeRecommended: false
+        }, getJwtSecret());
         res.setHeader('Cache-Control', 'no-store');
-        return res.json({ success: true, message: '新密码已生效' });
+        return res.json({ success: true, message: '新密码已生效，其他设备需要重新登录', token });
     } catch (error) {
         console.error('Recommended password change failed:', error);
         return res.status(500).json({ error: '修改密码失败，请稍后重试' });
+    }
+});
+
+// Signing out invalidates this token on the server, not only in the browser.
+router.post('/logout', authMiddleware, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+        const now = Date.now();
+        await pool.batch([
+            [`INSERT INTO revoked_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)
+              ON CONFLICT(token_hash) DO NOTHING`,
+            [await sessionTokenHash(req.sessionToken.value), req.user.id, req.sessionToken.expiresAt]],
+            ['DELETE FROM revoked_sessions WHERE expires_at <= ?', [now]]
+        ]);
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Logout failed:', error.message);
+        return res.status(503).json({ error: '退出登录暂时无法同步到服务器' });
     }
 });
 

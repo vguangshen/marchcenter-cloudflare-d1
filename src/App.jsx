@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import LoginPage from './components/views/LoginPage';
+import PasswordChangeReminder from './components/views/PasswordChangeReminder';
 import FeedbackCenter from './components/feedback/FeedbackCenter';
 import LoadErrorNotice from './components/feedback/LoadErrorNotice';
 import SystemBackgroundLayers from './components/layouts/SystemBackgroundLayers';
@@ -174,6 +175,22 @@ export default function App() {
                         />
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    // An administrator-reset account must choose a new password before the
+    // workbench (and every request it makes) is allowed to load.
+    if (currentUser.passwordChangeRecommended) {
+        return (
+            <div className={`${isDarkMode ? 'dark' : ''} min-h-screen w-full relative`} style={accentStyle}>
+                <FeedbackCenter />
+                {renderBackground()}
+                <PasswordChangeReminder
+                    username={currentUser.username}
+                    onLogout={auth.handleLogout}
+                    onComplete={() => notify('密码已更新，欢迎回来', 'success')}
+                />
             </div>
         );
     }

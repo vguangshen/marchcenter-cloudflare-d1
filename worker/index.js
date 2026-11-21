@@ -52,7 +52,8 @@ app.get('/api/ready', async (_req, res) => {
     try {
         await pool.query(`SELECT EXISTS (SELECT 1 FROM users),
             EXISTS (SELECT 1 FROM competitions), EXISTS (SELECT 1 FROM user_agent_task_results),
-            EXISTS (SELECT catalog_generation FROM paas_v2_platforms)`);
+            EXISTS (SELECT catalog_generation FROM paas_v2_platforms),
+            EXISTS (SELECT 1 FROM revoked_sessions)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });

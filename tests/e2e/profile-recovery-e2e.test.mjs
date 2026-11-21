@@ -54,14 +54,17 @@ test('voluntary password changes require the current password and keep the admin
         assert.equal(same.status, 400);
         const changed = await harness.api('/api/auth/change-password', { body: { currentPassword: 'Existing-password-1', password: 'Updated-password-2' } });
         assert.equal(changed.status, 200);
+        // The change revokes earlier sessions and hands this tab a fresh token.
+        assert.equal((await harness.api('/api/auth/me')).status, 401);
+        const as = token => ({ headers: { Authorization: `Bearer ${token}` } });
+        assert.equal((await harness.api('/api/auth/me', as(changed.data.token))).status, 200);
         assert.equal((await harness.api('/api/auth/login', { body: { username: 'e2e-admin', password: 'Existing-password-1' } })).status, 400);
         assert.equal((await harness.api('/api/auth/login', { body: { username: 'e2e-admin', password: 'Updated-password-2' } })).status, 200);
-        assert.equal((await harness.api('/api/auth/me')).status, 200);
 
         await harness.run('UPDATE users SET password_change_recommended = 1 WHERE id = 1');
-        const recommended = await harness.api('/api/auth/change-password', { body: { password: 'Permanent-password-3' } });
+        const recommended = await harness.api('/api/auth/change-password', { ...as(changed.data.token), body: { password: 'Permanent-password-3' } });
         assert.equal(recommended.status, 200);
-        assert.equal((await harness.api('/api/auth/me')).data.user.passwordChangeRecommended, false);
+        assert.equal((await harness.api('/api/auth/me', as(recommended.data.token))).data.user.passwordChangeRecommended, false);
         assert.equal((await harness.api('/api/auth/login', { body: { username: 'e2e-admin', password: 'Permanent-password-3' } })).status, 200);
     } finally { await harness.dispose(); }
 });

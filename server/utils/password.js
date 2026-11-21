@@ -1,5 +1,14 @@
+import { getEnv } from '../config/runtime.js';
+
+// Administrator resets set this well-known password; accounts holding it must
+// change it before doing anything else (see authMiddleware).
+export const ADMIN_RESET_DEFAULT_PASSWORD = '123456';
+
 const encoder = new TextEncoder();
 const DEFAULT_ITERATIONS = 100_000;
+// Cloudflare's Web Crypto rejects PBKDF2 above 100,000 iterations in
+// production (local workerd does not), so never hash beyond that.
+const MAX_WORKERS_ITERATIONS = 100_000;
 
 function toBase64(bytes) {
     let binary = '';
@@ -33,7 +42,8 @@ async function derive(password, salt, iterations) {
 export async function hashPassword(password) {
     const value = String(password);
     if (value.length < 6 || value.length > 128) throw new Error('密码长度必须为 6–128 个字符');
-    const iterations = Math.max(50_000, Number(getEnv('PBKDF2_ITERATIONS', DEFAULT_ITERATIONS)));
+    const configured = Number(getEnv('PBKDF2_ITERATIONS', DEFAULT_ITERATIONS));
+    const iterations = Math.min(MAX_WORKERS_ITERATIONS, Math.max(50_000, Number.isFinite(configured) ? configured : DEFAULT_ITERATIONS));
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const hash = await derive(value, salt, iterations);
     return `pbkdf2_sha256$${iterations}$${toBase64(salt)}$${toBase64(hash)}`;
@@ -53,4 +63,3 @@ export async function verifyPassword(password, encoded) {
         return false;
     }
 }
-import { getEnv } from '../config/runtime.js';

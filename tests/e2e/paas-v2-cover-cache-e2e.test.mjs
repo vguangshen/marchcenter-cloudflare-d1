@@ -12,6 +12,7 @@ before(async () => {
         requests.push(request.url);
         if (request.url.includes('/unavailable.png')) return new Response('Unavailable', { status: 503 });
         if (request.url.includes('/missing.png')) return new Response('Missing', { status: 404 });
+        if (request.url.includes('/active.svg')) return new Response('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', { headers: { 'Content-Type': 'image/svg+xml' } });
         if (request.url.includes('/invalid.png')) return new Response('not an image', { headers: { 'Content-Type': 'text/plain' } });
         if (request.url.includes('/oversized-length.png')) return new Response(png, { headers: { 'Content-Type': 'image/png', 'Content-Length': String(5 * 1024 * 1024 + 1) } });
         if (request.url.includes('/oversized-stream.png')) {
@@ -110,4 +111,11 @@ test('disallowed cover URLs return the production downgrade code before any requ
         assert.equal(response.data.code, 'cover_url_not_allowed', url);
         assert.deepEqual(requests, [], url);
     }
+});
+
+test('active image formats such as SVG are never stored on this origin', async () => {
+    const url = 'https://images.example.invalid/active.svg';
+    const response = await harness.api('/api/paas-v2/covers/cache', { body: { urls: [url] } });
+    assert.equal(response.status, 200, response.text);
+    assert.equal(response.data.covers[url], url, 'the original URL is kept instead of a same-origin copy');
 });

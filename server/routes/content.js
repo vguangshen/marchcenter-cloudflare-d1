@@ -136,8 +136,8 @@ router.post('/gifts', authMiddleware, adminOnly, async (req, res) => {
     try {
         const targetIds = [...new Set(gifts.map(gift => Number(gift.targetUserId)))];
         const [recipients] = await pool.query(
-            "SELECT id FROM users WHERE id IN (?) AND role NOT IN ('super_admin', 'admin')",
-            [targetIds]
+            "SELECT id FROM users WHERE id IN (SELECT value FROM json_each(?)) AND role NOT IN ('super_admin', 'admin')",
+            [JSON.stringify(targetIds)]
         );
         const validIds = new Set(recipients.map(item => Number(item.id)));
         if (targetIds.some(id => !validIds.has(id))) throw new Error('礼物接收用户不存在或不可接收');

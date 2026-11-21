@@ -172,6 +172,8 @@ AI 请求使用统一 fetch 传输，响应正文受超时和 2 MiB 限制。接
 
 后台数据库页面可以下载适合小型数据库的“数据 SQL 备份”。恢复时要先执行 migration，再导入备份。
 
+网页备份不使用 `BEGIN TRANSACTION`/`COMMIT`（D1 不支持显式事务），可直接用下方的 `wrangler d1 execute --file` 导入。备份只包含 D1 数据，R2 中的壁纸与封面图片需要单独备份。
+
 完整远程备份建议使用 Wrangler：
 
 ```bash

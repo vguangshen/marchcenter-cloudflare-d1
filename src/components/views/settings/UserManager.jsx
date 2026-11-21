@@ -52,7 +52,7 @@ const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefr
     const handleResetPassword = async (user) => {
         if (!await confirmAction({
             title: '重置登录密码',
-            message: `将用户「${user.username}」的密码重置为 123456，并立即撤销旧登录。用户登录后会收到修改密码提醒。`,
+            message: `将用户「${user.username}」的密码重置为 123456，并按会话策略撤销旧登录。用户登录后必须先修改密码才能继续使用。`,
             confirmText: '重置'
         })) return;
         try {
@@ -92,7 +92,7 @@ const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefr
 
             <div className="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
                 <div className="text-sm font-black text-indigo-900">安全密码重置</div>
-                <p className="mt-1 text-xs text-indigo-700/80">密码统一重置为 123456 并立即撤销旧会话；用户可继续登录，未修改时每次登录都会收到安全提醒。</p>
+                <p className="mt-1 text-xs text-indigo-700/80">密码统一重置为 123456 并撤销旧会话；用户用 123456 登录后会弹出修改密码窗口，修改前无法使用其他功能。</p>
             </div>
 
             {/* Table */}
@@ -253,7 +253,7 @@ const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefr
                         <button type="button" onClick={() => setResetCredential(null)} aria-label="关闭" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><X className="h-4 w-4" /></button>
                         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-700"><KeyRound className="h-6 w-6" /></div>
                         <h3 id="reset-credential-title" className="mt-4 text-lg font-black text-slate-900 dark:text-white">密码已重置</h3>
-                        <p className="mt-1 text-xs leading-5 text-slate-500"><strong>{resetCredential.username}</strong> 的登录密码已重置；用户登录后会收到修改密码提醒，但可稍后处理。</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500"><strong>{resetCredential.username}</strong> 的登录密码已重置；用户登录后必须先修改密码。</p>
                         <div className="mt-5 flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-2">
                             <code className="min-w-0 flex-1 truncate px-2 text-sm font-black tracking-wide text-amber-900">{showResetPassword ? resetCredential.password : '••••••'}</code>
                             <button type="button" onClick={() => setShowResetPassword(value => !value)} aria-label={showResetPassword ? '隐藏重置密码' : '显示重置密码'} className="grid h-9 w-9 place-items-center rounded-xl text-amber-700 transition hover:bg-white">{showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>

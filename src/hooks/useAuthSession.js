@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, onUnauthorized } from '../utils/api';
+import { api, onTokenRotated, onUnauthorized, revokeSession } from '../utils/api';
 import { getTabToken, setTabToken } from '../utils/tabSession';
 import { prefersReducedMotion } from '../utils/motionPreferences';
 import { notify } from '../utils/uiFeedback';
@@ -91,9 +91,11 @@ export function useAuthSession() {
         setCurrentUser(null);
         setToken(null);
         setAuthStatus('anonymous');
+        const signedOutToken = getTabToken();
         localStorage.removeItem('authUser');
         localStorage.removeItem('authToken');
         setTabToken(null);
+        void revokeSession(signedOutToken);
     }, [sessionChangedElsewhere]);
 
     const login = useCallback((user, tokenValue, { animate = true } = {}) => {
@@ -150,6 +152,19 @@ export function useAuthSession() {
             });
         return () => controller.abort();
     }, [token, logout]);
+
+    // A password change returns a new token; the old one is already revoked.
+    useEffect(() => onTokenRotated(event => {
+        const { previous, token: next } = event?.detail || {};
+        if (!next || !previous || getTabToken() !== previous || localStorage.getItem('authToken') !== previous) return;
+        const cachedUser = readCachedUser(previous);
+        localStorage.setItem('authToken', next);
+        setTabToken(next);
+        verifiedTokenRef.current = next;
+        if (cachedUser) cacheUser(next, { ...cachedUser, passwordChangeRecommended: false });
+        setCurrentUser(user => user ? { ...user, passwordChangeRecommended: false } : user);
+        setToken(next);
+    }), []);
 
     useEffect(() => onUnauthorized(event => {
         const activeToken = localStorage.getItem('authToken');

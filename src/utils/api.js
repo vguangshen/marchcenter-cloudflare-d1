@@ -5,6 +5,10 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_RETRY_COUNT = 1;
 const DEFAULT_RETRY_DELAY_MS = 250;
 const UNAUTHORIZED_EVENT = 'marchcenter:unauthorized';
+const TOKEN_ROTATED_EVENT = 'marchcenter:token-rotated';
+// Tokens being replaced by a password change. The server revokes them just
+// before returning the new token, so a parallel request may briefly see 401.
+const rotatingTokens = new Set();
 
 const resolveUrl = (input) => {
     const value = String(input);
@@ -199,12 +203,11 @@ export const apiFetch = async (input, options = {}) => {
                 }
                 throw error;
             }
-            if (response.status === 401 && isApiUrl(url) && (token || headers.has('Authorization'))) {
+            const sentToken = /^Bearer\s+(.+)$/i.exec(headers.get('Authorization') || '')?.[1] || null;
+            if (response.status === 401 && isApiUrl(url) && (token || headers.has('Authorization'))
+                && !rotatingTokens.has(sentToken)) {
                 window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT, {
-                    detail: {
-                        url, status: response.status,
-                        token: /^Bearer\s+(.+)$/i.exec(headers.get('Authorization') || '')?.[1] || null
-                    }
+                    detail: { url, status: response.status, token: sentToken }
                 }));
             }
             if (attempt < retryCount && isRetryableMethod(method) && isRetryableStatus(response.status)) {
@@ -329,6 +332,42 @@ export const apiStream = async (input, options = {}, onEvent = () => {}) => {
         requestSignal.dispose();
         requestSignal.abort();
     }
+};
+
+/**
+ * Change the password and adopt the replacement token the server issues.
+ * Every other session of the account is revoked by the same request.
+ */
+export const changePassword = async (body) => {
+    const previous = getTabToken();
+    if (previous) rotatingTokens.add(previous);
+    try {
+        const data = await apiRequest('/auth/change-password', {
+            method: 'POST', body: JSON.stringify(body), retry: 0, fallback: '修改密码失败'
+        });
+        if (previous && data?.token) {
+            window.dispatchEvent(new CustomEvent(TOKEN_ROTATED_EVENT, { detail: { previous, token: data.token } }));
+        }
+        return data;
+    } finally {
+        // Late responses for the old token are ignored by the session owner.
+        if (previous) window.setTimeout(() => rotatingTokens.delete(previous), 10_000);
+    }
+};
+
+/** Best-effort server-side sign-out for the given token. */
+export const revokeSession = (token) => {
+    if (!token) return Promise.resolve();
+    return fetch(resolveUrl('/auth/logout'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true
+    }).then(response => response.body?.cancel(), () => {});
+};
+
+export const onTokenRotated = (listener) => {
+    window.addEventListener(TOKEN_ROTATED_EVENT, listener);
+    return () => window.removeEventListener(TOKEN_ROTATED_EVENT, listener);
 };
 
 export const onUnauthorized = (listener) => {

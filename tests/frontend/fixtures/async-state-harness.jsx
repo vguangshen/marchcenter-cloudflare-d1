@@ -54,7 +54,7 @@ window.__agentResult = mode === 'agent-modules' ? { status: 'completed', score: 
 window.__failRefresh = scenario.get('rejectRefresh') === '1';
 window.__profileUser = {
     id: 7, username: 'fixture-user', role: mode === 'maintenance' ? 'super_admin' : 'student',
-    avatarDataUrl: avatar, passwordChangeRecommended: false
+    avatarDataUrl: avatar, passwordChangeRecommended: scenario.get('mustChange') === '1'
 };
 window.__testApi = async (method, url, body, requestToken) => {
     window.__calls.push({ method, url, body });
@@ -69,7 +69,11 @@ window.__testApi = async (method, url, body, requestToken) => {
         window.__profileUser = { ...window.__profileUser, ...body };
         return { success: true, user: window.__profileUser };
     }
-    if (method === 'POST' && url === '/auth/change-password') return { success: true };
+    if (method === 'POST' && url === '/auth/change-password') {
+        if (scenario.get('mustChange') !== '1') return { success: true };
+        window.__profileUser = { ...window.__profileUser, passwordChangeRecommended: false };
+        return { success: true, token: 'rotated-token' };
+    }
     if (method === 'POST' && url === '/auth/login') return { user: window.__profileUser, token: 'fixture-token' };
     if (method === 'POST' && url === '/paas-v2/result') return window.__agentResult;
     if (method === 'POST' && url === '/paas-v2/reset') {

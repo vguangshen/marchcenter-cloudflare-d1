@@ -6,13 +6,13 @@ import {
     assignableRoles, canManageRole, canSeeUser, normalizeRole, ROLES
 } from "../utils/roleAccess.js";
 import { canSeeUserInClass, getActorWithClass } from "../utils/classAccess.js";
-import { hashPassword } from "../utils/password.js";
+import { ADMIN_RESET_DEFAULT_PASSWORD, hashPassword } from "../utils/password.js";
 import { CONTENT_TYPES } from '../utils/contentRevision.js';
 import { extractGeoFromRequest } from '../utils/geolocation.js';
 import { normalizeAvatarDataUrl, readUserProfile } from '../utils/userProfile.js';
 
 const router = express.Router();
-const RESET_PASSWORD = '123456';
+const RESET_REVOKE_DELAYS_MS = Object.freeze({ immediate: 0, '1d': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000 });
 
 router.patch('/me/profile', authMiddleware, async (req, res) => {
     if (!Object.hasOwn(req.body || {}, 'avatarDataUrl')) {
@@ -63,6 +63,9 @@ async function getManagedTarget(actor, targetId, { allowSelf = false } = {}) {
 }
 
 const MAX_USER_BATCH_SIZE = 200;
+// Pass large lists as one JSON parameter so D1's 100 bound-parameter limit
+// never depends on how many users or competitions an administrator selected.
+const jsonList = values => JSON.stringify([...values]);
 // D1 limits each individual prepared statement to 100 bound parameters.
 const MAX_D1_BOUND_PARAMETERS = 100;
 const USER_PAGE_SIZE_DEFAULT = 50;
@@ -169,7 +172,7 @@ async function createUsersBatch(actorUser, inputUsers) {
         };
     });
 
-    const [existing] = await pool.query('SELECT username FROM users WHERE username IN (?)', [[...names]]);
+    const [existing] = await pool.query('SELECT username FROM users WHERE username IN (SELECT value FROM json_each(?))', [jsonList(names)]);
     if (existing.length) throw httpError(`用户已存在：${existing.map(item => item.username).join('、')}`, 409);
 
     const studentClassIds = [...new Set(normalizedUsers.map(item => item.classId).filter(id => Number.isInteger(id) && id > 0))];
@@ -177,7 +180,7 @@ async function createUsersBatch(actorUser, inputUsers) {
         throw httpError('创建学生账号时必须选择所属班级');
     }
     const [classRows] = studentClassIds.length
-        ? await pool.query('SELECT id FROM classes WHERE id IN (?)', [studentClassIds])
+        ? await pool.query('SELECT id FROM classes WHERE id IN (SELECT value FROM json_each(?))', [jsonList(studentClassIds)])
         : [[]];
     const validClassIds = new Set(classRows.map(item => Number(item.id)));
     const missingClassId = normalizedUsers.find(item => item.role === ROLES.STUDENT && !validClassIds.has(item.classId));
@@ -281,8 +284,8 @@ async function createUsersBatch(actorUser, inputUsers) {
     await pool.batch(statements);
     const [createdRows] = await pool.query(
         `SELECT u.id, u.username, u.email, u.role, u.class_id AS classId, c.name AS className
-         FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE u.username IN (?)`,
-        [[...names]]
+         FROM users u LEFT JOIN classes c ON c.id = u.class_id WHERE u.username IN (SELECT value FROM json_each(?))`,
+        [jsonList(names)]
     );
     const createdByName = new Map(createdRows.map(item => [item.username, item]));
     return normalizedUsers.map(item => ({
@@ -429,9 +432,19 @@ router.get("/me/theme", authMiddleware, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+const MAX_THEME_SETTINGS_BYTES = 16 * 1024;
+
 router.patch("/me/theme", authMiddleware, async (req, res) => {
+    const settings = req.body;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        return res.status(400).json({ error: '主题设置格式无效' });
+    }
+    const serialized = JSON.stringify(settings);
+    if (new TextEncoder().encode(serialized).byteLength > MAX_THEME_SETTINGS_BYTES) {
+        return res.status(413).json({ error: '主题设置内容过大' });
+    }
     try {
-        await pool.query("UPDATE users SET theme_settings = ? WHERE id = ?", [JSON.stringify(req.body), req.user.id]);
+        await pool.query("UPDATE users SET theme_settings = ? WHERE id = ?", [serialized, req.user.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -680,7 +693,7 @@ router.patch("/:id/permissions", authMiddleware, userManagerOnly, async (req, re
             return res.status(400).json({ error: "管理员账号不需要竞赛白名单" });
         }
         if (permissionIds.length) {
-            const [cards] = await pool.query('SELECT id FROM competitions WHERE id IN (?)', [permissionIds]);
+            const [cards] = await pool.query('SELECT id FROM competitions WHERE id IN (SELECT value FROM json_each(?))', [jsonList(permissionIds)]);
             if (cards.length !== permissionIds.length) return res.status(400).json({ error: '权限列表包含不存在的竞赛' });
         }
         const statements = [
@@ -696,7 +709,7 @@ router.patch("/:id/permissions", authMiddleware, userManagerOnly, async (req, re
             const unlockTime = rule.unlockTime ? new Date(rule.unlockTime) : null;
             const lockTime = rule.lockTime ? new Date(rule.lockTime) : null;
             if ((unlockTime && Number.isNaN(unlockTime.getTime())) || (lockTime && Number.isNaN(lockTime.getTime()))) {
-                throw new Error(`竞赛 ${competitionId} 的时间格式无效`);
+                throw httpError(`竞赛 ${competitionId} 的时间格式无效`);
             }
             if (unlockTime && lockTime && unlockTime >= lockTime) {
                 const error = new Error(`竞赛 ${competitionId} 的结束时间必须晚于开始时间`);
@@ -768,21 +781,31 @@ router.get("/:id/locations", authMiddleware, userManagerOnly, async (req, res) =
 router.patch("/:id/reset-password", authMiddleware, userManagerOnly, async (req, res) => {
     try {
         await getManagedTarget(req.user, req.params.id);
+        const [[policy]] = await pool.query(
+            'SELECT reset_session_revoke_mode AS revokeMode FROM users WHERE id = ? LIMIT 1',
+            [req.user.id]
+        );
+        const revokeMode = Object.hasOwn(RESET_REVOKE_DELAYS_MS, policy?.revokeMode) ? policy.revokeMode : 'immediate';
         const revokeBefore = new Date();
-        const resetPassword = RESET_PASSWORD;
+        const revokeAt = new Date(revokeBefore.getTime() + RESET_REVOKE_DELAYS_MS[revokeMode]);
+        const resetPassword = ADMIN_RESET_DEFAULT_PASSWORD;
         const hashedPassword = await hashPassword(resetPassword);
         await pool.query(
             `UPDATE users
              SET password_hash = ?, session_revoke_before = ?, session_revoke_at = ?,
                  password_change_recommended = 1
              WHERE id = ?`,
-            [hashedPassword, revokeBefore, revokeBefore, req.params.id]
+            [hashedPassword, revokeBefore, revokeAt, req.params.id]
         );
         res.setHeader('Cache-Control', 'no-store');
         res.json({
             success: true,
-            message: '密码已重置为 123456，旧登录已立即撤销',
+            message: revokeMode === 'immediate'
+                ? '密码已重置为 123456，旧登录已立即撤销；用户登录后必须先修改密码'
+                : `密码已重置为 123456，旧登录将在 ${revokeMode === '1d' ? '1 天' : '7 天'}后撤销；用户登录后必须先修改密码`,
             resetPassword,
+            revokeMode,
+            revokeAt: revokeAt.toISOString(),
             passwordChangeRecommended: true
         });
     } catch (err) {

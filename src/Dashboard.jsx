@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 
 // --- 组件引入 ---
-import PasswordChangeReminder from './components/views/PasswordChangeReminder';
 import Navbar from './components/layouts/Navbar';
 import AnnouncementBanner from './components/views/dashboard/AnnouncementBanner';
 import AgentTaskGroups from './components/views/dashboard/AgentTaskGroups';
@@ -104,7 +103,6 @@ export default function Dashboard({ auth, site, appearance }) {
     const [permissions, setPermissions] = useState({});
     const [userTimeRules, setUserTimeRules] = useState({});
     const [aiConfig, setAiConfig] = useState(DEFAULT_AI_CONFIG);
-    const [passwordReminderDismissed, setPasswordReminderDismissed] = useState(false);
 
     const {
         links, setLinks, linksPhase, linksLoadedForSession, linksLoadError,
@@ -439,9 +437,6 @@ export default function Dashboard({ auth, site, appearance }) {
         }
     }, [currentUserId, currentUserRole, fetchAiConfig, fetchLinks, fetchStudentAccounts, resetCompetitionCatalog, token]);
 
-    useEffect(() => {
-        setPasswordReminderDismissed(false);
-    }, [currentUser?.id]);
     useEffect(() => {
         if (!token || !currentUserId || !isPageVisible) return undefined;
         let cancelled = false;
@@ -798,21 +793,6 @@ export default function Dashboard({ auth, site, appearance }) {
         }`} style={accentStyle}>
 
             <FeedbackCenter />
-            {currentUser.passwordChangeRecommended && !passwordReminderDismissed && (
-                <PasswordChangeReminder
-                    username={currentUser.username}
-                    onDismiss={() => setPasswordReminderDismissed(true)}
-                    onComplete={async () => {
-                        try {
-                            await refreshCurrentUser();
-                            notify('密码已更新', 'success');
-                        } catch (error) {
-                            notify(error.message || '用户状态刷新失败，请重新登录', 'error');
-                            handleLogout();
-                        }
-                    }}
-                />
-            )}
             <div className="fixed left-1/2 top-4 z-[200] w-[min(92vw,560px)] -translate-x-1/2">
                 <LoadErrorNotice message={siteConfigLoadError} onRetry={fetchSiteConfig} />
             </div>

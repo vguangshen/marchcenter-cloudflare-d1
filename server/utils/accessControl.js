@@ -21,10 +21,12 @@ export async function getUserAccess(userId) {
 export async function getUsersAccess(userIds = []) {
     const ids = [...new Set(userIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
     if (!ids.length) return new Map();
+    // One JSON parameter keeps large pages within D1's bound-parameter limit.
+    const idList = JSON.stringify(ids);
     const [[policies], [permissions], [timeRules]] = await Promise.all([
-        pool.query('SELECT user_id, configured FROM user_access_policies WHERE user_id IN (?)', [ids]),
-        pool.query('SELECT user_id, competition_id FROM user_permissions WHERE user_id IN (?)', [ids]),
-        pool.query('SELECT user_id, competition_id, unlock_time, lock_time FROM user_competition_time_rules WHERE user_id IN (?)', [ids])
+        pool.query('SELECT user_id, configured FROM user_access_policies WHERE user_id IN (SELECT value FROM json_each(?))', [idList]),
+        pool.query('SELECT user_id, competition_id FROM user_permissions WHERE user_id IN (SELECT value FROM json_each(?))', [idList]),
+        pool.query('SELECT user_id, competition_id, unlock_time, lock_time FROM user_competition_time_rules WHERE user_id IN (SELECT value FROM json_each(?))', [idList])
     ]);
     const output = new Map(ids.map(id => [id, { configured: false, permissions: [], timeRules: {} }]));
     for (const row of policies) output.get(Number(row.user_id)).configured = Boolean(row.configured);

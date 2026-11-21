@@ -12,6 +12,24 @@ import { attachCompetitionMaintenance } from '../utils/competitionMaintenance.js
 
 const router = express.Router();
 
+// Card-editing configuration that only the super administrator's editor uses.
+// Other roles open cards through server-side lookups and never need it.
+const EDITOR_ONLY_FIELDS = Object.freeze([
+    'accountApiId', 'accountDbProvider', 'accountDbName', 'accountTableName',
+    'accountUsernameColumn', 'accountPasswordColumn', 'accountPasswordAlgorithm',
+    'classDeleteMapping', 'customPrompt', 'restoreOriginalPasswordCiphertext'
+]);
+
+function parseClassDeleteMapping(value, competitionId) {
+    if (!value) return null;
+    try { return JSON.parse(value); }
+    catch {
+        // One damaged row must not hide every card from every user.
+        console.error('[competitions] invalid class_delete_mapping', { competitionId });
+        return null;
+    }
+}
+
 function classDeleteSelection(data) {
     const mapping = normalizeClassDeleteMapping(data.classDeleteMapping);
     if (mapping.enabled && !isClassDeleteMappingReady(mapping)) {
@@ -270,7 +288,7 @@ router.get("/", authMiddleware, async (req, res) => {
         const visibleRows = rows.map(({ agentResultStatus, agentResultScore, ruleUserId, ruleUnlockTime, ruleLockTime, ...row }) => {
             const parsed = {
                 ...row,
-                classDeleteMapping: row.classDeleteMapping ? JSON.parse(row.classDeleteMapping) : null,
+                classDeleteMapping: parseClassDeleteMapping(row.classDeleteMapping, row.id),
                 hasAdminEntryPassword: Boolean(row.adminEntryCredentials)
             };
             if (row.ssoMethod === 'paasV2') {
@@ -282,13 +300,16 @@ router.get("/", authMiddleware, async (req, res) => {
                 parsed.adminEntryUsername = decodeAdminEntryCredentials(row.adminEntryCredentials).username;
             }
             delete parsed.adminEntryCredentials;
-            if (!isSuperAdmin(req.user)) delete parsed.restoreOriginalPasswordCiphertext;
             return parsed;
         });
         await Promise.all([
             attachAgentTaskModules(visibleRows),
             attachCompetitionMaintenance(visibleRows, req.user)
         ]);
+        // Maintenance checks above still read these fields; strip them last.
+        if (!isSuperAdmin(req.user)) {
+            for (const row of visibleRows) for (const field of EDITOR_ONLY_FIELDS) delete row[field];
+        }
         res.json(visibleRows);
     } catch (err) {
         console.error(err);

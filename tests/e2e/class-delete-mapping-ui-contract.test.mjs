@@ -47,7 +47,8 @@ test('manual credential restore exposes a masked optional original ciphertext in
     assert.match(editModal, /hasRestoreOriginalPasswordCiphertext[\s\S]*已保存/);
     assert.match(editModal, /留空时由执行端首次提取后自动写入/);
     assert.match(competitionsRoute, /restore_original_password_ciphertext AS restoreOriginalPasswordCiphertext/);
-    assert.match(competitionsRoute, /if \(!isSuperAdmin\(req\.user\)\) delete parsed\.restoreOriginalPasswordCiphertext/);
+    assert.match(competitionsRoute, /EDITOR_ONLY_FIELDS = Object\.freeze\(\[[\s\S]*'restoreOriginalPasswordCiphertext'[\s\S]*\]\)/);
+    assert.match(competitionsRoute, /if \(!isSuperAdmin\(req\.user\)\) \{\s*for \(const row of visibleRows\) for \(const field of EDITOR_ONLY_FIELDS\) delete row\[field\];/);
     assert.match(ssoRoute, /restoreCard\.restoreOriginalPasswordCiphertext \|\| ''/);
     assert.match(accountApi, /originalPasswordCiphertext \}/);
     assert.match(accountApi, /const originalPasswordCiphertext = String\(data\.originalPasswordCiphertext/);

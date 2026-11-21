@@ -32,6 +32,9 @@ const CACHE_COVER_TIMEOUT_MS = 20000;
 const MAX_COVER_BATCH_SIZE = 100;
 const COVER_BATCH_TIMEOUT_MS = 90000;
 const TRANSIENT_COVER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+// Cached covers are served from this origin, so only raster image types are
+// stored. SVG and other active formats stay on their original host.
+const CACHEABLE_COVER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/bmp']);
 const CACHED_COVER_PATH = /^\/api\/paas-v2\/covers\/[a-f0-9]{32}\.(?:png|jpe?g|webp|gif|avif)$/i;
 
 function coverEnhancementTimeout() {
@@ -153,7 +156,8 @@ async function cacheCoverOnce(coverUrl, bucket, key, externalSignal) {
         if (!buffer) return { retryable: false };
         const sniffed = sniffImageContentType(buffer);
         const headerType = response.headers.get('content-type') || '';
-        const contentType = sniffed || (headerType.toLowerCase().startsWith('image/') ? headerType : '');
+        const declaredType = headerType.split(';')[0].trim().toLowerCase();
+        const contentType = sniffed || (CACHEABLE_COVER_TYPES.has(declaredType) ? declaredType : '');
         if (!contentType) return { retryable: false };
         try {
             await waitForCoverOperation(() => bucket.put(key, buffer, {
@@ -758,7 +762,8 @@ router.get('/covers/:key', async (req, res) => {
         const object = await bucket.get(`${COVER_R2_PREFIX}${key}`);
         if (!object) return res.status(404).json({ error: '封面不存在' });
         const body = await object.arrayBuffer();
-        res.setHeader('Content-Type', object.httpMetadata?.contentType || 'image/png');
+        const storedType = String(object.httpMetadata?.contentType || '').split(';')[0].trim().toLowerCase();
+        res.setHeader('Content-Type', CACHEABLE_COVER_TYPES.has(storedType) ? storedType : 'application/octet-stream');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
         return res.send(Buffer.from(body));

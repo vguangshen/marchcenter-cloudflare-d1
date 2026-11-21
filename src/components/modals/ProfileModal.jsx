@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Eye, EyeOff, ImagePlus, KeyRound, Loader2, Mail, Save, ShieldCheck, UserRound, X } from 'lucide-react';
-import { api } from '../../utils/api';
+import { api, changePassword as requestPasswordChange } from '../../utils/api';
 import { notify } from '../../utils/uiFeedback';
 import { useModalAccessibility } from '../../hooks/useModalAccessibility';
 
@@ -129,7 +129,7 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
         if (currentPassword && currentPassword === password) { setPasswordError('新密码不能与当前密码相同'); return; }
         setChangingPassword(true);
         try {
-            await api.post('/auth/change-password', { currentPassword, password }, { fallback: '修改密码失败', retry: 0 });
+            await requestPasswordChange({ currentPassword, password });
             setCurrentPassword('');
             setPassword('');
             setConfirmation('');
