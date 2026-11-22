@@ -549,8 +549,11 @@ test('during the reminder period the workbench loads with a bottom-right card fo
         assert.ok(box.x + box.width > viewport.width - 40 && box.y + box.height > viewport.height - 40, 'card sits in the bottom-right corner');
 
         await card.getByRole('button', { name: '收起提醒', exact: true }).click();
+        assert.match(await card.getAttribute('class'), /acct-card--exit/, 'collapsing plays the fold-away animation');
+        await card.waitFor({ state: 'detached' });
         await page.getByRole('button', { name: /账号安全待完善 · 剩余 3 天/ }).click();
         await card.waitFor();
+        assert.match(await card.getAttribute('class'), /acct-card--enter/, 'expanding grows the card back out');
 
         await card.getByLabel('绑定邮箱', { exact: true }).fill('bad');
         await card.getByRole('button', { name: '绑定', exact: true }).click();

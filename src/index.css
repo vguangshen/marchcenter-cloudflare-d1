@@ -4013,3 +4013,117 @@ body {
     animation: none;
   }
 }
+
+/* ── Account security reminder ────────────────────────────────────────────
+   Frosted glass in the same family as the wallpaper login card. The blur
+   lives on the moving element itself (not a pseudo-layer) because opacity on
+   an ancestor would cut a child's backdrop off mid-animation. The card folds
+   into the bottom-right corner and the pill grows out of the same point. */
+.acct-glass {
+  border: 1px solid rgba(255, 255, 255, .7);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, .5), transparent 55%),
+    rgba(255, 255, 255, .56);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+  box-shadow:
+    0 30px 80px rgba(15, 23, 42, .2),
+    0 2px 10px rgba(15, 23, 42, .06),
+    inset 0 1px 0 rgba(255, 255, 255, .8);
+  transform-origin: 100% 100%;
+}
+
+.dark .acct-glass {
+  border-color: rgba(255, 255, 255, .14);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(99, 102, 241, .16), transparent 55%),
+    rgba(15, 23, 42, .62);
+  box-shadow:
+    0 30px 80px rgba(2, 6, 23, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.acct-glass .mc-input {
+  border-color: rgba(255, 255, 255, .75);
+  background: rgba(255, 255, 255, .55);
+  transition: background-color 200ms, border-color 200ms, box-shadow 200ms;
+}
+
+.acct-glass .mc-input:focus {
+  border-color: rgb(var(--system-accent-rgb, 99 102 241) / .55);
+  background: rgba(255, 255, 255, .85);
+  box-shadow: 0 0 0 4px rgb(var(--system-accent-rgb, 99 102 241) / .14);
+}
+
+.dark .acct-glass .mc-input {
+  border-color: rgba(255, 255, 255, .1);
+  background: rgba(15, 23, 42, .5);
+  color: #e2e8f0;
+}
+
+.dark .acct-glass .mc-input:focus {
+  background: rgba(15, 23, 42, .78);
+}
+
+.acct-glass .acct-divider {
+  border-top: 1px solid rgba(148, 163, 184, .22);
+}
+
+.acct-card--enter { animation: acct-card-in 460ms cubic-bezier(.22, 1, .36, 1) both; }
+.acct-card--exit { animation: acct-card-out 280ms cubic-bezier(.4, 0, .7, .2) both; pointer-events: none; }
+.acct-pill--enter { animation: acct-pill-in 360ms cubic-bezier(.34, 1.56, .64, 1) both; }
+
+@keyframes acct-card-in {
+  0% { opacity: 0; transform: translate(10px, 14px) scale(.55); border-radius: 999px; }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes acct-card-out {
+  0% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translate(10px, 14px) scale(.55); border-radius: 999px; }
+}
+
+@keyframes acct-pill-in {
+  0% { opacity: 0; transform: translateY(8px) scale(.6); }
+  100% { opacity: 1; transform: none; }
+}
+
+.acct-collapse-toggle svg {
+  transition: transform 280ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.acct-collapse-toggle:hover svg { transform: translateY(2px); }
+.acct-card--exit .acct-collapse-toggle svg { transform: translateY(3px) scale(.85); }
+
+/* Height-animated section (grid 1fr → 0fr) used when a step is completed. */
+.acct-section {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 360ms cubic-bezier(.22, 1, .36, 1), opacity 240ms ease;
+}
+
+.acct-section > div { min-height: 0; overflow: hidden; }
+.acct-section--hidden { grid-template-rows: 0fr; opacity: 0; }
+
+/* Keep animationend firing so the state machine still advances. */
+@media (prefers-reduced-motion: reduce) {
+  .acct-card--enter, .acct-card--exit, .acct-pill--enter { animation-duration: 1ms; }
+  .acct-section { transition-duration: 1ms; }
+}
+
+.acct-glass .mc-button--secondary {
+  border-color: rgba(255, 255, 255, .75);
+  background: rgba(255, 255, 255, .6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.acct-glass .mc-button--secondary:hover:not(:disabled) { background: rgba(255, 255, 255, .85); }
+
+.dark .acct-glass .mc-button--secondary {
+  border-color: rgba(255, 255, 255, .12);
+  background: rgba(30, 41, 59, .55);
+  color: #e2e8f0;
+}
