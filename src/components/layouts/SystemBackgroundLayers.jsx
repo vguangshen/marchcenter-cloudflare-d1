@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { THEMES } from '../../constants/themes';
-import { DEFAULT_SCENE_WALLPAPERS } from '../../constants/defaultSceneWallpapers';
+import DefaultSceneLayers from './DefaultSceneLayers';
 import { IMMERSIVE_WALLPAPERS } from '../../constants/immersiveWallpapers';
 import { prefersReducedMotion } from '../../utils/motionPreferences';
 import AccentRaceScene from '../branding/AccentRaceScene';
@@ -49,12 +49,9 @@ export default function SystemBackgroundLayers({
                 <div className={`neutral-system-background pointer-events-none fixed inset-0 z-0 ${isDarkMode ? 'neutral-system-background--dark' : ''}`}/>
             )}
             {showDefault && showDefaultScene && (
-                <img
-                    src={isDarkMode ? DEFAULT_SCENE_WALLPAPERS.dark : DEFAULT_SCENE_WALLPAPERS.light}
-                    decoding="async"
-                    alt=""
-                    aria-hidden="true"
-                    className="default-scene-image pointer-events-none fixed inset-0 z-0 h-full w-full object-cover object-[center_58%]"
+                <DefaultSceneLayers
+                    dark={isDarkMode}
+                    animate={systemEffects.wallpaperReveal !== false && !prefersReducedMotion()}
                 />
             )}
             {immersiveWallpaper && (

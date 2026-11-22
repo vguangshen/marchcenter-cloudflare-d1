@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import http from 'node:http';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright-core';
 import { testBrowserOptions } from '../helpers/browser.mjs';
@@ -33,7 +34,15 @@ before(async () => {
     const result = await build({
         entryPoints: [path.resolve('tests/frontend/fixtures/async-state-harness.jsx')],
         bundle: true, format: 'esm', write: false, logLevel: 'silent',
-        plugins: [{ name: 'fixture-transport', setup(builder) {
+        plugins: [{ name: 'vite-raw', setup(builder) {
+            // Mirror Vite's `?raw` imports (the layered default scene SVGs).
+            builder.onResolve({ filter: /\?raw$/ }, args => ({
+                path: path.resolve(args.resolveDir, args.path.replace(/\?raw$/, '')), namespace: 'raw'
+            }));
+            builder.onLoad({ filter: /.*/, namespace: 'raw' }, async args => ({
+                contents: `export default ${JSON.stringify(await readFile(args.path, 'utf8'))};`, loader: 'js'
+            }));
+        } }, { name: 'fixture-transport', setup(builder) {
             builder.onResolve({ filter: /\/utils\/(api|uiFeedback)(\.js)?$/ }, args => ({ path: args.path.includes('uiFeedback') ? 'feedback' : 'api', namespace: 'fixture' }));
             builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: args.path === 'api' ? apiStub : feedbackStub }));
         } }]

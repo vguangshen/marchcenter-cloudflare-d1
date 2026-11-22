@@ -205,7 +205,7 @@ test('CSP 两个来源保持一致', () => {
     assert.doesNotMatch(workerScriptSrc, /unsafe-inline/, 'script-src 禁止使用 unsafe-inline');
 });
 
-test('a cold default scene loads only the confirmed day or night artwork', async () => {
+test('a cold default scene renders only the confirmed day or night artwork', async () => {
     const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce' });
     const { promise: waitForConfig, resolve: confirmConfig } = Promise.withResolvers();
     try {
@@ -221,14 +221,47 @@ test('a cold default scene loads only the confirmed day or night artwork', async
         });
         await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
         await page.locator('.login-auth-card').waitFor();
-        assert.deepEqual(requests, []);
+        assert.equal(await page.locator('.default-scene').count(), 0, 'no artwork before the day/night choice is known');
 
         confirmConfig();
-        const night = page.locator('.default-scene-image[src$="competition-night.svg"]');
-        await night.evaluate(image => image.decode());
-        assert.deepEqual(requests, ['/default-scene/competition-night.svg']);
+        const night = page.locator('.default-scene[data-scene-mode="night"]');
+        await night.waitFor();
+        const layers = night.locator('img.default-scene-layer');
+        assert.equal(await layers.count(), 6);
+        await layers.evaluateAll(images => Promise.all(images.map(image => image.decode())));
+        assert.equal(await page.locator('.default-scene[data-scene-mode="dawn"]').count(), 0);
+        assert.match(await night.getAttribute('class'), /default-scene--static/, 'reduced motion shows the finished scene');
+        assert.deepEqual(requests, [], 'the layered scene ships with the app and needs no image request');
     } finally {
         confirmConfig();
+        await context.close();
+    }
+});
+
+test('the default scene assembles its layers once with compositor-only motion', async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    try {
+        const page = await context.newPage();
+        const { cspViolations } = collectPageErrors(page);
+        await page.route('**/api/config/site', route => route.fulfill({ json: { globalTheme: { effectMode: 'default', lightDark: 'light' } } }));
+        await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+        const scene = page.locator('.default-scene[data-scene-mode="dawn"]');
+        await page.locator('.default-scene.default-scene--playing').waitFor();
+        const animations = await scene.evaluate(root => [...root.querySelectorAll('img')].map(image => ({
+            layer: image.className.match(/--(\w+)$/)[1],
+            names: image.getAnimations().map(animation => animation.animationName),
+            props: image.getAnimations().flatMap(animation => animation.effect.getKeyframes().flatMap(frame => Object.keys(frame)))
+                .filter(key => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))
+        })));
+        assert.deepEqual(animations.map(entry => entry.layer), ['sky', 'far', 'mid', 'campus', 'front', 'details']);
+        for (const entry of animations) {
+            assert.equal(entry.names.length, 1, `${entry.layer} animates`);
+            assert.deepEqual([...new Set(entry.props)].sort(), ['opacity', 'transform'], `${entry.layer} only animates transform/opacity`);
+        }
+        await page.locator('.default-scene.default-scene--static').waitFor({ timeout: 5000 });
+        assert.equal(await scene.evaluate(root => root.querySelector('img').getAnimations().length), 0, 'hints are dropped after the intro');
+        assert.deepEqual(cspViolations, []);
+    } finally {
         await context.close();
     }
 });
