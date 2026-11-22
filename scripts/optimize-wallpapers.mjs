@@ -14,8 +14,8 @@
 //   progressive JPEG 才允许写回。
 //
 // 用法：
-//   node scripts/optimize-wallpapers.mjs --origin https://marchcenter.top --all
-//   node scripts/optimize-wallpapers.mjs --origin https://marchcenter.top --id 9
+//   node scripts/optimize-wallpapers.mjs --origin https://mcgo.app --all
+//   node scripts/optimize-wallpapers.mjs --origin https://mcgo.app --id 9
 //   node scripts/optimize-wallpapers.mjs --origin ... --id 9 --dry-run   # 只处理不写回
 //   node scripts/optimize-wallpapers.mjs --dir ./tmp --dry-run          # 本地文件演练
 //
@@ -121,7 +121,7 @@ if (args.dir) {
         .filter((file) => /\.(jpg|jpeg|png|webp|avif)$/i.test(file))
         .map((file) => ({ id: null, title: file, localPath: path.join(args.dir, file) }));
 } else {
-    if (!/^https?:\/\//.test(origin)) throw new Error('请提供 --origin（如 https://marchcenter.top）');
+    if (!/^https?:\/\//.test(origin)) throw new Error('请提供 --origin（如 https://mcgo.app）');
     const username = args['admin-user'] || process.env.MC_ADMIN_USER;
     const password = args['admin-password'] || process.env.MC_ADMIN_PASSWORD;
     if (!username || !password) throw new Error('需要管理员凭证（--admin-user/--admin-password 或 MC_ADMIN_USER/MC_ADMIN_PASSWORD）');

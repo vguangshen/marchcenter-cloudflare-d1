@@ -29,7 +29,7 @@ assert.equal(normalized.resendSeconds, 30);
 assert.equal(normalizeEmailSettings({ provider: 'cloudflare', resendApiKey: 'k' }).provider, 'resend');
 
 const preserved = mergeEmailSettings(
-    { provider: 'resend', resendApiKey: '', fromEmail: 'noreply@mail.marchcenter.top' },
+    { provider: 'resend', resendApiKey: '', fromEmail: 'noreply@mail.mcgo.app' },
     { provider: 'resend', resendApiKey: 'server-only-key', hasResendApiKey: true }
 );
 assert.equal(preserved.resendApiKey, 'server-only-key');

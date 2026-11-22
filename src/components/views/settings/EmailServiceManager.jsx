@@ -100,7 +100,7 @@ const EmailServiceManager = () => {
 
     const sendTest = async () => {
         if (!isEmailAddress(settings.fromEmail)) {
-            setNotice({ type: 'error', text: '发件邮箱必须是完整邮箱地址，例如 noreply@mail.marchcenter.top，不能只填写域名。' });
+            setNotice({ type: 'error', text: '发件邮箱必须是完整邮箱地址，例如 noreply@mail.mcgo.app，不能只填写域名。' });
             return;
         }
         if (!isEmailAddress(testRecipient)) {
@@ -188,7 +188,7 @@ const EmailServiceManager = () => {
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
                 <section className="space-y-6 rounded-3xl border border-slate-200 bg-white/85 p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900/75">
-                    <Field label="Resend API Key" hint={settings.hasResendApiKey ? '密钥已加密保存；留空表示继续使用原密钥，填写新值可直接替换。' : '请使用仅有 Sending access、并限制到 mail.marchcenter.top 的新密钥。'}>
+                    <Field label="Resend API Key" hint={settings.hasResendApiKey ? '密钥已加密保存；留空表示继续使用原密钥，填写新值可直接替换。' : '请使用仅有 Sending access、并限制到 mail.mcgo.app 的新密钥。'}>
                         <div className="relative">
                             <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
@@ -219,12 +219,12 @@ const EmailServiceManager = () => {
                     <div className="border-t border-slate-100 pt-6 dark:border-slate-800">
                         <h3 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><AtSign className="h-4 w-4 text-indigo-500" />发件身份</h3>
                         <p className="mt-1 text-[10px] leading-5 text-slate-400">
-                            发件邮箱必须使用已在 Resend 验证的 mail.marchcenter.top 域名。
+                            发件邮箱必须使用已在 Resend 验证的 mail.mcgo.app 域名。
                         </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="发件邮箱" hint="必须填写完整邮箱，例如 noreply@mail.marchcenter.top；不能只填写 mail.marchcenter.top。">
-                            <input type="email" className="account-api-input" value={settings.fromEmail} onChange={event => update('fromEmail', event.target.value)} placeholder="noreply@mail.marchcenter.top" />
+                        <Field label="发件邮箱" hint="必须填写完整邮箱，例如 noreply@mail.mcgo.app；不能只填写 mail.mcgo.app。">
+                            <input type="email" className="account-api-input" value={settings.fromEmail} onChange={event => update('fromEmail', event.target.value)} placeholder="noreply@mail.mcgo.app" />
                         </Field>
                         <Field label="发件人名称">
                             <input className="account-api-input" value={settings.fromName} onChange={event => update('fromName', event.target.value)} placeholder="MarchCenter" />

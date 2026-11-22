@@ -16,7 +16,7 @@ function publicPayload(settings) {
 
 function validateSettings(settings) {
     if (settings.fromEmail && !isValidEmail(settings.fromEmail)) {
-        throw Object.assign(new Error('发件邮箱必须是完整邮箱地址，例如 noreply@mail.marchcenter.top，不能只填写域名'), { status: 400 });
+        throw Object.assign(new Error('发件邮箱必须是完整邮箱地址，例如 noreply@mail.mcgo.app，不能只填写域名'), { status: 400 });
     }
     if (settings.enabled && !settings.fromEmail) {
         throw Object.assign(new Error('启用邮件服务前，请填写发件邮箱'), { status: 400 });

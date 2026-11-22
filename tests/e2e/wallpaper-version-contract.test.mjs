@@ -10,8 +10,8 @@ const read = (relative) => readFile(resolve(projectRoot, relative), 'utf8');
 // ============ 1. 壁纸内容 URL 版本化（纯函数单元测试） ============
 
 assert.equal(
-  wallpaperContentUrl(7, 'abc123', 'https://marchcenter.top'),
-  'https://marchcenter.top/api/wallpapers/7/content?v=abc123'
+  wallpaperContentUrl(7, 'abc123', 'https://mcgo.app'),
+  'https://mcgo.app/api/wallpapers/7/content?v=abc123'
 );
 assert.equal(wallpaperContentUrl(7, null), '/api/wallpapers/7/content');
 assert.equal(wallpaperContentUrl(7, 'a b/+=', 'https://x.test'), 'https://x.test/api/wallpapers/7/content?v=a%20b%2F%2B%3D');
@@ -25,11 +25,11 @@ try {
       async delete() { throw new Error('simulated cache delete failure'); }
     }
   };
-  await purgeWallpaperEdgeCache(7, 'abc123', 'https://marchcenter.top');
+  await purgeWallpaperEdgeCache(7, 'abc123', 'https://mcgo.app');
   globalThis.caches = { default: { delete: () => { throw new Error('simulated 2'); } } };
   await purgeWallpaperEdgeCache(7, 'abc123');
   globalThis.caches = undefined;
-  await purgeWallpaperEdgeCache(7, 'abc123', 'https://marchcenter.top');
+  await purgeWallpaperEdgeCache(7, 'abc123', 'https://mcgo.app');
 } finally {
   globalThis.caches = originalCaches;
 }
@@ -223,7 +223,7 @@ const VERSIONED_URL = `/api/wallpapers/8/content?v=${HASH}`;
 
 // 带 ?v=hash 的规范 URL 必须正确解析出 wallpaperId（修复 /(\d+)\/content$/ 不匹配查询参数）。
 assert.equal(wallpaperIdFromUrl(VERSIONED_URL), 8, '带版本参数的 URL 必须解析出 wallpaperId');
-assert.equal(wallpaperIdFromUrl(`http://marchcenter.top/api/wallpapers/8/content?v=${HASH}&x=1`), 8);
+assert.equal(wallpaperIdFromUrl(`http://mcgo.app/api/wallpapers/8/content?v=${HASH}&x=1`), 8);
 assert.equal(wallpaperIdFromUrl('/api/wallpapers/abc/content'), NaN);
 assert.equal(wallpaperIdFromUrl(''), NaN);
 assert.equal(wallpaperIdFromUrl(null), NaN);

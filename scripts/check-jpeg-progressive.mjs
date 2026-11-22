@@ -2,7 +2,7 @@
 // 用法：
 //   node scripts/check-jpeg-progressive.mjs <file...|url...>
 // 示例：
-//   node scripts/check-jpeg-progressive.mjs dist/out.jpg https://marchcenter.top/api/wallpapers/9/content?v=...
+//   node scripts/check-jpeg-progressive.mjs dist/out.jpg https://mcgo.app/api/wallpapers/9/content?v=...
 // 任一输入不是 progressive JPEG 时退出码为 1。
 import { readFile } from 'node:fs/promises';
 import { inspectJpeg } from './jpeg-utils.mjs';

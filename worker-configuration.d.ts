@@ -6,7 +6,7 @@ interface __BaseEnv_Env {
 	DB: D1Database;
 	ASSETS: Fetcher;
 	NODE_ENV: "production";
-	CORS_ORIGINS: "https://marchcenter.top,http://localhost:5173,http://127.0.0.1:5173";
+	CORS_ORIGINS: "https://mcgo.app,http://localhost:5173,http://127.0.0.1:5173";
 	ALLOW_HTTP_PLATFORMS: "false";
 	SSO_OUTBOUND_TIMEOUT_MS: "20000";
 	SSO_MODULE_INIT_TIMEOUT_MS: "120000";

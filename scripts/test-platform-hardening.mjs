@@ -33,18 +33,18 @@ app.get('/internal-error', (_req, res) => {
 app.get('/service-error', (_req, res) => {
     res.status(503).json({ error: '外部执行端暂时不可用' });
 });
-const internalResponse = await app.handle(new Request('https://marchcenter.top/internal-error'));
+const internalResponse = await app.handle(new Request('https://mcgo.app/internal-error'));
 const internalBody = await internalResponse.json();
 assert.equal(internalResponse.status, 500);
 assert.equal(internalBody.error, '服务器内部错误');
 assert.equal(internalBody.code, 'internal_error');
 assert.match(internalBody.requestId, /^[0-9a-f-]{36}$/i);
 assert.equal(JSON.stringify(internalBody).includes('secret_table'), false);
-const serviceResponse = await app.handle(new Request('https://marchcenter.top/service-error'));
+const serviceResponse = await app.handle(new Request('https://mcgo.app/service-error'));
 assert.deepEqual(await serviceResponse.json(), { error: '外部执行端暂时不可用' });
 
 const assetResponse = await worker.fetch(
-    new Request('https://marchcenter.top/'),
+    new Request('https://mcgo.app/'),
     {
         NODE_ENV: 'production',
         ASSETS: { fetch: async () => new Response('<!doctype html>') }

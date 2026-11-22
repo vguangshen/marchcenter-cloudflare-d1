@@ -639,7 +639,7 @@ export async function deleteWallpaper(id, { origin } = {}) {
 export async function purgeWallpaperEdgeCache(id, version, origin) {
   try {
     if (globalThis.caches?.default?.delete) {
-      const base = origin || 'https://marchcenter.top';
+      const base = origin || 'https://mcgo.app';
       const keys = [
         wallpaperContentUrl(id, version, base),
         wallpaperContentUrl(id, null, base)

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '..');
-const productionOrigins = ['https://marchcenter.top', 'https://mcgo.app'];
+const productionOrigins = ['https://mcgo.app'];
 
 async function execute(command, args, { cwd, capture = false }) {
     return new Promise((resolve, reject) => {
