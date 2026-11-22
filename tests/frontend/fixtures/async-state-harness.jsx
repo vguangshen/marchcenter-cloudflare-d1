@@ -7,11 +7,15 @@ import TaskAppModal from '../../../src/components/modals/TaskAppModal.jsx';
 import { useAgentTaskResults } from '../../../src/hooks/useAgentTaskResults.js';
 import { useAuthSession } from '../../../src/hooks/useAuthSession.js';
 import { useCompetitionActions } from '../../../src/hooks/useCompetitionActions.js';
+import { getBrandImageCenterOffset } from '../../../src/utils/brandImageAlignment.js';
 import { prepareLogoDataUrl } from '../../../src/utils/logoUpload.js';
 
 const scenario = new URLSearchParams(window.location.search);
 const mode = scenario.get('mode');
-if (mode === 'logo-upload') window.__prepareLogoDataUrl = prepareLogoDataUrl;
+if (mode === 'logo-upload') {
+    window.__prepareLogoDataUrl = prepareLogoDataUrl;
+    window.__getBrandImageCenterOffset = getBrandImageCenterOffset;
+}
 
 const moduleFixtureLink = (id, title, softwareUnique, agentModule, agentResult) => ({
     id, title, ssoMethod: 'paasV2', paasV2SoftwareUnique: softwareUnique,

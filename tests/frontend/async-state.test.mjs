@@ -931,6 +931,36 @@ test('a wide SVG uploads as a proportional transparent raster image and malforme
     } finally { await page.close(); }
 });
 
+test('brand image alignment balances visible pixels within transparent margins', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=logo-upload`);
+        const offsets = await page.evaluate(async () => {
+            const getOffset = async shapes => {
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100">${shapes}</svg>`;
+                const image = new Image();
+                image.src = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+                await image.decode();
+                return window.__getBrandImageCenterOffset(image);
+            };
+            // The body and descender have centered outer bounds, but vary in visual weight.
+            const wordmark = '<rect x="40" y="20" width="320" height="30"/><rect x="180" y="50" width="40" height="30"/>';
+            return {
+                upper: await getOffset(wordmark),
+                mirrored: await getOffset(`<g transform="translate(0 100) scale(1 -1)">${wordmark}</g>`),
+                centered: await getOffset('<rect x="100" y="25" width="200" height="50"/>'),
+                nearTop: await getOffset('<rect x="100" y="8" width="200" height="20"/>'),
+                empty: await getOffset('')
+            };
+        });
+        assert.ok(offsets.upper > 11 && offsets.upper < 12.5, `upper offset: ${offsets.upper}%`);
+        assert.ok(Math.abs(offsets.upper + offsets.mirrored) < 0.1);
+        assert.equal(offsets.centered, 0);
+        assert.equal(offsets.nearTop, 12.5);
+        assert.equal(offsets.empty, 0);
+    } finally { await page.close(); }
+});
+
 test('80 competition cards share the dashboard clock and skip idle dimension reads', async () => {
     const page = await browser.newPage({ reducedMotion: 'reduce' });
     try {
