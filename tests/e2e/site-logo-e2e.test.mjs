@@ -5,6 +5,8 @@ import { createProductionHarness } from './helpers/productionHarness.mjs';
 // 1×1 transparent PNG.
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const PNG_DATA_URL = `data:image/png;base64,${PNG_BASE64}`;
+// 6×2 PNG to exercise a rectangular brand image independently of the square logo.
+const BRAND_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAYAAAACCAYAAAB7Xa1eAAAAG0lEQVR4nGPgccv7D8JyxbPAuOHESzBmwCUBAIkiHGU0ZN7CAAAAAElFTkSuQmCC';
 
 let harness;
 before(async () => { harness = await createProductionHarness(); });
@@ -35,19 +37,43 @@ test('an uploaded logo is served publicly as immutable image bytes', async () =>
 
 test('site config accepts uploaded or https logo URLs and a logo background, and rejects unsafe URLs', async () => {
     const uploaded = await harness.api('/api/logo-library', { body: { dataUrl: PNG_DATA_URL } });
+    assert.equal(uploaded.status, 201, uploaded.text);
+    const uploadedBrand = await harness.api('/api/logo-library', {
+        body: { dataUrl: `data:image/png;base64,${BRAND_IMAGE_BASE64}` }
+    });
+    assert.equal(uploadedBrand.status, 201, uploadedBrand.text);
+    const navbarLogoUrl = `/api/logo-library/${uploaded.data.id}/image`;
+    const loginBrandImageUrl = `/api/logo-library/${uploadedBrand.data.id}/image`;
+    assert.notEqual(navbarLogoUrl, loginBrandImageUrl);
     const accepted = await harness.api('/api/config/site', { body: {
         navbarLogoType: 'custom',
-        navbarLogoUrl: `/api/logo-library/${uploaded.data.id}/image`,
+        navbarLogoUrl,
         navbarLogoBackground: 'none',
+        loginBrandName: 'MarchCenter',
+        loginBrandImageUrl,
         loginVisualCenterImageUrl: 'https://cdn.example.com/center.webp'
     } });
     assert.equal(accepted.status, 200, accepted.text);
     const stored = await harness.api('/api/config/site');
+    assert.equal(stored.data.navbarLogoUrl, navbarLogoUrl);
     assert.equal(stored.data.navbarLogoBackground, 'none');
+    assert.equal(stored.data.loginBrandName, 'MarchCenter');
+    assert.equal(stored.data.loginBrandImageUrl, loginBrandImageUrl);
 
-    for (const navbarLogoUrl of ['http://example.com/logo.png', 'javascript:alert(1)', PNG_DATA_URL, '/api/users/1', '//evil.example/logo.png']) {
-        const rejected = await harness.api('/api/config/site', { body: { navbarLogoType: 'custom', navbarLogoUrl } });
-        assert.equal(rejected.status, 400, navbarLogoUrl);
+    const brandImage = await harness.miniflare.dispatchFetch(`http://marchcenter.local${loginBrandImageUrl}`);
+    assert.equal(brandImage.status, 200);
+    assert.deepEqual(Buffer.from(await brandImage.arrayBuffer()), Buffer.from(BRAND_IMAGE_BASE64, 'base64'));
+
+    const externalBrand = await harness.api('/api/config/site', {
+        body: { ...stored.data, loginBrandImageUrl: 'https://cdn.example.com/brand.png' }
+    });
+    assert.equal(externalBrand.status, 200, externalBrand.text);
+
+    for (const url of ['http://example.com/logo.png', 'javascript:alert(1)', PNG_DATA_URL, '/api/users/1', '//evil.example/logo.png']) {
+        for (const field of ['navbarLogoUrl', 'loginBrandImageUrl']) {
+            const rejected = await harness.api('/api/config/site', { body: { [field]: url } });
+            assert.equal(rejected.status, 400, `${field}: ${url}`);
+        }
     }
     const badBackground = await harness.api('/api/config/site', { body: { navbarLogoBackground: 'rainbow' } });
     assert.equal(badBackground.status, 400);

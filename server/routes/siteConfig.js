@@ -14,7 +14,7 @@ const MAX_CONFIG_DEPTH = 6;
 const MAX_CONFIG_KEYS = 160;
 const MAX_TEXT_LENGTH = 4000;
 const ALLOWED_TOP_LEVEL_KEYS = new Set([
-    'loginTitle', 'loginSubtitle', 'loginBrandName', 'loginVisualTitle', 'loginVisualSubtitle',
+    'loginTitle', 'loginSubtitle', 'loginBrandName', 'loginBrandImageUrl', 'loginVisualTitle', 'loginVisualSubtitle',
     'loginVisualCenterType', 'loginVisualCenterValue', 'loginVisualCenterImageUrl',
     'loginWelcomeTitle', 'loginWelcomeSubtitle', 'loginTextAlign', 'loginPasswordTabText',
     'loginCodeTabText', 'loginUsernameLabel', 'loginUsernamePlaceholder', 'loginCodeAccountLabel',
@@ -47,7 +47,7 @@ const FOOTER_VISIBILITIES = new Set(['all', 'login_only', 'dashboard_only', 'non
 const LOGO_BACKGROUNDS = new Set(['theme', 'none']);
 // Image fields render as <img src>. Allow HTTPS links and logos uploaded to
 // this site's own library; reject http:, data:, javascript: and the like.
-const IMAGE_URL_KEYS = ['navbarLogoUrl', 'customLogoUrl', 'loginVisualCenterImageUrl'];
+const IMAGE_URL_KEYS = ['navbarLogoUrl', 'customLogoUrl', 'loginBrandImageUrl', 'loginVisualCenterImageUrl'];
 const LIBRARY_LOGO_PATH = /^\/api\/logo-library\/[1-9]\d{0,9}\/image$/;
 
 function isAllowedImageUrl(value) {

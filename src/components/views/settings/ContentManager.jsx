@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT, PRIMARY_BTN, normalizeSiteConfig } from '../../../constants/config';
 import BrandLogo, { BRAND_LOGO_PRESETS, brandLogoHasTile } from '../../branding/BrandLogo';
+import BrandName from '../../branding/BrandName';
 import { api } from '../../../utils/api';
-import { libraryLogoUrl, prepareLogoDataUrl } from '../../../utils/logoUpload';
+import { libraryLogoUrl, LOGO_FILE_ACCEPT, prepareLogoDataUrl } from '../../../utils/logoUpload';
 
 const VISUAL_CENTER_PRESETS = [
     { id: 'trophy', value: '🏆', label: '奖杯' },
@@ -74,7 +75,7 @@ function textValue(value, fallback = '') {
     return fallback;
 }
 
-function EditableText({ field, value, selected, onSelect, className = '', as = 'span' }) {
+function EditableText({ field, value, children, selected, onSelect, className = '', as = 'span' }) {
     const Tag = as;
     return (
         <Tag
@@ -94,9 +95,51 @@ function EditableText({ field, value, selected, onSelect, className = '', as = '
             className={`content-editable-target ${selected ? 'is-selected' : ''} ${className}`}
             data-edit-label={FIELD_META[field]?.[0] || '编辑文案'}
         >
-            {value || '点击输入文案'}
+            {children ?? (value || '点击输入文案')}
             <span className="content-edit-pencil"><Pencil /></span>
         </Tag>
+    );
+}
+
+function BrandNamePreview({ data, selected, onSelect }) {
+    return (
+        <EditableText field="loginBrandName" selected={selected} onSelect={onSelect} className="content-preview-brand">
+            <BrandName name={textValue(data.loginBrandName) || DEFAULT_SITE_CONFIG.loginBrandName} imageUrl={data.loginBrandImageUrl} />
+        </EditableText>
+    );
+}
+
+function BrandAssetUpload({ title, assetName, imageUrl, field, upload, onFile }) {
+    const inputRef = useRef(null);
+    const status = upload?.field === field ? upload : null;
+
+    return (
+        <div className="content-inspector-field">
+            <span>{title}</span>
+            <input
+                ref={inputRef}
+                type="file"
+                accept={LOGO_FILE_ACCEPT}
+                aria-label={`选择${assetName}`}
+                className="hidden"
+                onChange={event => onFile(event, field)}
+            />
+            <button
+                type="button"
+                className={`content-logo-upload ${imageUrl ? 'has-image' : ''}`}
+                onClick={() => inputRef.current?.click()}
+                disabled={upload?.pending}
+            >
+                <span className="content-logo-upload-thumb">
+                    {status?.pending ? <Loader2 className="animate-spin" /> : imageUrl ? <img src={imageUrl} alt="" /> : <Upload />}
+                </span>
+                <span>
+                    <strong>{status?.pending ? '正在上传…' : `${imageUrl ? '更换' : '上传'}${assetName}`}</strong>
+                    <small>SVG、PNG、JPEG、WebP、GIF、AVIF · 上传后保存并生效</small>
+                </span>
+            </button>
+            {status?.error && <small className="content-logo-error" role="alert">{status.error}</small>}
+        </div>
     );
 }
 
@@ -403,7 +446,7 @@ function DashboardPreview({ data, selectedKey, selectField }) {
         <div className="content-dashboard-preview">
             <div className="content-dashboard-nav">
                 <BrandLogoPreview data={data} selected={selectedKey === '__navbarLogo'} onSelect={selectField} />
-                <EditableText field="loginBrandName" value={get('loginBrandName', 'MarchCenter')} selected={selectedKey === 'loginBrandName'} onSelect={selectField} className="content-preview-brand" />
+                <BrandNamePreview data={data} selected={selectedKey === 'loginBrandName'} onSelect={selectField} />
                 <div className="content-dashboard-nav-items"><span>竞赛中心</span><span>训练进度</span><span>个人中心</span></div>
                 <div className="content-dashboard-avatar">A</div>
             </div>
@@ -458,19 +501,12 @@ function FooterScenePreview({ data, selectedKey, selectField }) {
 }
 
 function LoginPageCanvas({ scene, codeMode, data, selectedKey, selectField, modalState }) {
-    const get = (key, fallback) => textValue(data[key], fallback);
     if (scene === 'topbar') {
         return (
             <div className="content-chrome-scene content-topbar-scene">
                 <div className="content-preview-header">
                     <BrandLogoPreview data={data} selected={selectedKey === '__navbarLogo'} onSelect={selectField} />
-                    <EditableText
-                        field="loginBrandName"
-                        value={get('loginBrandName', 'MarchCenter')}
-                        selected={selectedKey === 'loginBrandName'}
-                        onSelect={selectField}
-                        className="content-preview-brand"
-                    />
+                    <BrandNamePreview data={data} selected={selectedKey === 'loginBrandName'} onSelect={selectField} />
                     <div className="content-preview-theme">☾</div>
                 </div>
                 <div className="content-topbar-page-skeleton" aria-hidden="true">
@@ -515,11 +551,9 @@ const ContentManager = ({ config, onSave }) => {
     const [selectedKey, setSelectedKey] = useState('loginWelcomeTitle');
     const [saved, setSaved] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [logoUploading, setLogoUploading] = useState(false);
-    const [logoError, setLogoError] = useState('');
+    const [imageUpload, setImageUpload] = useState(null);
     const [logoLibrary, setLogoLibrary] = useState([]);
     const editorRef = useRef(null);
-    const logoInputRef = useRef(null);
 
     const dirty = Object.entries(editedFields).some(
         ([key, value]) => JSON.stringify(value) !== JSON.stringify(normalizedConfig[key])
@@ -543,21 +577,20 @@ const ContentManager = ({ config, onSave }) => {
         return () => controller.abort();
     }, [selectedKey]);
 
-    const handleLogoFile = async event => {
+    const handleImageFile = async (event, field) => {
         const file = event.target.files?.[0];
         event.target.value = '';
-        if (!file || logoUploading) return;
-        setLogoError('');
-        setLogoUploading(true);
+        if (!file || imageUpload?.pending) return;
+        setImageUpload({ field, pending: true });
         try {
             const dataUrl = await prepareLogoDataUrl(file);
-            const item = await api.post('/logo-library', { dataUrl }, { retry: 0, fallback: 'Logo 上传失败' });
+            const item = await api.post('/logo-library', { dataUrl }, { retry: 0, fallback: '图片上传失败' });
             setLogoLibrary(previous => [item, ...previous.filter(entry => entry.id !== item.id)].slice(0, 12));
-            handlePatch({ navbarLogoType: 'custom', navbarLogoUrl: libraryLogoUrl(item.id) });
+            const url = libraryLogoUrl(item.id);
+            handlePatch(field === 'navbarLogoUrl' ? { navbarLogoType: 'custom', navbarLogoUrl: url } : { [field]: url });
+            setImageUpload(null);
         } catch (error) {
-            setLogoError(error.message || 'Logo 上传失败');
-        } finally {
-            setLogoUploading(false);
+            setImageUpload({ field, error: error.message || '图片上传失败' });
         }
     };
 
@@ -614,6 +647,8 @@ const ContentManager = ({ config, onSave }) => {
     const meta = FIELD_META[selectedKey];
     const selectedValue = meta ? textValue(formData[selectedKey]) : '';
     const isMultiline = Boolean(meta?.[2]);
+    const editingBrandName = selectedKey === 'loginBrandName';
+    const brandImageUploading = imageUpload?.pending && imageUpload.field === 'loginBrandImageUrl';
 
     return (
         <div className="content-studio space-y-5 pb-10">
@@ -627,7 +662,7 @@ const ContentManager = ({ config, onSave }) => {
                     <button
                         type="button"
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || imageUpload?.pending}
                         className={`flex min-w-36 items-center justify-center rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-wait disabled:opacity-70 ${PRIMARY_BTN}`}
                     >
                         {showSaved ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-300" /> : <Save className="mr-2 h-4 w-4" />}
@@ -792,28 +827,14 @@ const ContentManager = ({ config, onSave }) => {
                                 <div><ImageIcon /></div>
                                 <span><strong>顶部栏 Logo</strong><small>登录页顶部与登录后导航栏共用</small></span>
                             </div>
-                            <div className="content-inspector-field">
-                                <span>自定义图片</span>
-                                <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" className="hidden" onChange={handleLogoFile} />
-                                <button
-                                    type="button"
-                                    className={`content-logo-upload ${formData.navbarLogoType === 'custom' && formData.navbarLogoUrl ? 'has-image' : ''}`}
-                                    onClick={() => logoInputRef.current?.click()}
-                                    disabled={logoUploading}
-                                >
-                                    <span className="content-logo-upload-thumb">
-                                        {logoUploading ? <Loader2 className="animate-spin" />
-                                            : formData.navbarLogoType === 'custom' && formData.navbarLogoUrl
-                                                ? <img src={formData.navbarLogoUrl} alt="" />
-                                                : <Upload />}
-                                    </span>
-                                    <span>
-                                        <strong>{logoUploading ? '正在上传…' : formData.navbarLogoType === 'custom' && formData.navbarLogoUrl ? '更换 Logo 图片' : '上传 Logo 图片'}</strong>
-                                        <small>PNG、JPEG、WebP、GIF、AVIF；超过 100KB 会自动压缩</small>
-                                    </span>
-                                </button>
-                                {logoError && <small className="content-logo-error" role="alert">{logoError}</small>}
-                            </div>
+                            <BrandAssetUpload
+                                title="自定义图片"
+                                assetName=" Logo 图片"
+                                imageUrl={formData.navbarLogoType === 'custom' ? formData.navbarLogoUrl : ''}
+                                field="navbarLogoUrl"
+                                upload={imageUpload}
+                                onFile={handleImageFile}
+                            />
                             {logoLibrary.length > 0 && (
                                 <div className="content-inspector-field">
                                     <span>最近上传</span>
@@ -899,7 +920,7 @@ const ContentManager = ({ config, onSave }) => {
                             </div>
 
                             <label className="content-inspector-field">
-                                <span>显示文案</span>
+                                <span>{editingBrandName && formData.loginBrandImageUrl ? '替代文字' : '显示文案'}</span>
                                 {isMultiline ? (
                                     <textarea
                                         ref={editorRef}
@@ -916,8 +937,33 @@ const ContentManager = ({ config, onSave }) => {
                                         onChange={event => handleChange(selectedKey, event.target.value)}
                                     />
                                 )}
-                                <small>{selectedValue.length} 个字符 · 修改会实时显示在左侧预览</small>
+                                <small>{editingBrandName && formData.loginBrandImageUrl
+                                    ? '供屏幕阅读器使用，图片加载失败时会显示这段文字。'
+                                    : `${selectedValue.length} 个字符 · 修改会实时显示在左侧预览`}</small>
                             </label>
+
+                            {editingBrandName && (
+                                <>
+                                    <BrandAssetUpload
+                                        title="品牌名称图片"
+                                        assetName="品牌名称图片"
+                                        imageUrl={formData.loginBrandImageUrl}
+                                        field="loginBrandImageUrl"
+                                        upload={imageUpload}
+                                        onFile={handleImageFile}
+                                    />
+                                    {formData.loginBrandImageUrl && (
+                                        <button
+                                            type="button"
+                                            className="content-reset-field"
+                                            onClick={() => handleChange('loginBrandImageUrl', '')}
+                                            disabled={brandImageUploading}
+                                        >
+                                            <X />移除图片，改用文字
+                                        </button>
+                                    )}
+                                </>
+                            )}
 
                             {['welcomeTitle', 'welcomeSubtitle', 'dailyQuote'].includes(selectedKey) && (
                                 <div className="content-inspector-field">
@@ -973,9 +1019,12 @@ const ContentManager = ({ config, onSave }) => {
                             <button
                                 type="button"
                                 className="content-reset-field"
-                                onClick={() => handleChange(selectedKey, textValue(DEFAULT_SITE_CONFIG[selectedKey]))}
+                                disabled={editingBrandName && brandImageUploading}
+                                onClick={() => editingBrandName
+                                    ? handlePatch({ loginBrandName: DEFAULT_SITE_CONFIG.loginBrandName, loginBrandImageUrl: '' })
+                                    : handleChange(selectedKey, textValue(DEFAULT_SITE_CONFIG[selectedKey]))}
                             >
-                                <RotateCcw />恢复该位置默认文案
+                                <RotateCcw />{editingBrandName ? '恢复默认品牌名称' : '恢复该位置默认文案'}
                             </button>
                         </>
                     ) : (

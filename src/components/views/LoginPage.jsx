@@ -7,6 +7,7 @@ import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../constants/themes';
 import { api } from '../../utils/api';
 import { mark, measure, logStartupPerfSummary } from '../../utils/startupPerf';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
+import BrandName from '../branding/BrandName';
 import CdnIndicator from './login/CdnIndicator'; // 👈 确保这个路径正确
 import { inferLoginErrorField, LoginFieldError } from './login/LoginFieldError';
 
@@ -623,9 +624,11 @@ const LoginPage = ({
                                 imageClassName={brandLogoHasTile(config) ? 'h-7 w-7 object-contain' : 'h-10 w-10 object-contain'}
                             />
                         </div>
-                        <span className={`truncate text-lg font-black tracking-tight ${styles.title}`}>
-                            {text('loginBrandName', 'MarchCenter')}
-                        </span>
+                        <BrandName
+                            name={text('loginBrandName', 'MarchCenter')}
+                            imageUrl={config.loginBrandImageUrl}
+                            className={`truncate text-lg font-black tracking-tight ${styles.title}`}
+                        />
                     </div>
                     <div className="login-navbar-login-actions flex shrink-0 items-center gap-2">
                         <CdnIndicator />

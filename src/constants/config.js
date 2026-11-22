@@ -31,6 +31,7 @@ export const DEFAULT_SITE_CONFIG = {
     loginTitle: { text: "MarchCenter", align: "center", fontSize: "2xl" },
     loginSubtitle: { text: "管理你的竞赛工具和入口", align: "center" },
     loginBrandName: "MarchCenter",
+    loginBrandImageUrl: '',
     loginVisualTitle: "连接每一场竞赛",
     loginVisualSubtitle: "统一管理竞赛入口、账号与训练进度，让每一次出发都更简单。",
     loginVisualCenterType: "emoji",

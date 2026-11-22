@@ -6,6 +6,7 @@ import {
 import { GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
+import BrandName from '../branding/BrandName';
 
 const CHRISTMAS_ORNAMENTS = [{ icon: '🎀', left: '10%', speed: '3.5s', length: 12 }, { icon: '🔔', left: '25%', speed: '4s', length: 16 }, { icon: '🎁', left: '40%', speed: '3s', length: 10 }, { icon: '🧦', left: '55%', speed: '4.5s', length: 18 }, { icon: '🍪', left: '70%', speed: '3.2s', length: 14 }, { icon: '🦌', left: '85%', speed: '3.8s', length: 12 }];
 const LUNAR_ORNAMENTS = [{ icon: '🏮', left: '8%', speed: '4s', length: 20, size: 'text-3xl' }, { icon: '🧧', left: '22%', speed: '3s', length: 10, size: 'text-xl' }, { icon: '🏮', left: '35%', speed: '4.5s', length: 15, size: 'text-2xl' }, { icon: '✨', left: '50%', speed: '3s', length: 8, size: 'text-lg' }, { icon: '🏮', left: '65%', speed: '4s', length: 18, size: 'text-2xl' }, { icon: '🧧', left: '80%', speed: '3.5s', length: 12, size: 'text-xl' }, { icon: '🏮', left: '92%', speed: '5s', length: 22, size: 'text-3xl' }];
@@ -135,7 +136,8 @@ const Navbar = ({
                             {renderNavbarLogo()}
                             {isChristmas && <span className="absolute -top-3 -right-2 text-xl filter drop-shadow-sm rotate-12">🎅</span>}
                         </div>
-                        <span className={`hidden truncate bg-clip-text text-lg font-black tracking-tight text-transparent sm:block
+                        <span className="hidden min-w-0 sm:block">
+                            <BrandName name={getSafeTitle()} imageUrl={siteConfig?.loginBrandImageUrl} className={`block truncate bg-clip-text text-lg font-black tracking-tight text-transparent
                             ${isLunar ? 'bg-gradient-to-r from-red-800 to-orange-700' : ''}
                             ${isHalloween ? 'bg-gradient-to-r from-orange-400 to-purple-400' : ''}
                             ${isMidAutumn ? 'bg-gradient-to-r from-yellow-100 to-blue-200' : ''}
@@ -143,8 +145,7 @@ const Navbar = ({
                             ${isYuanxiao ? 'bg-gradient-to-r from-pink-600 to-purple-600' : ''}
                             ${isQingming ? 'bg-gradient-to-r from-slate-700 to-gray-500' : ''}
                             ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300' : ''}
-                        `}>
-                            {getSafeTitle()}
+                            `} />
                         </span>
                     </button>
 

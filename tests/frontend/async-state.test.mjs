@@ -891,6 +891,46 @@ test('site settings keeps a copy draft while appearance is saved and preserves b
     } finally { await page.close(); }
 });
 
+test('a wide SVG uploads as a proportional transparent raster image and malformed SVG is rejected', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=logo-upload`);
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120"><rect x="120" y="30" width="240" height="60" fill="#236bc5"/></svg>';
+        const image = await page.evaluate(async markup => {
+            const file = new File([markup], 'brand.svg', { type: 'image/svg+xml' });
+            const dataUrl = await window.__prepareLogoDataUrl(file);
+            const raster = await (await fetch(dataUrl)).blob();
+            const bitmap = await createImageBitmap(raster);
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const context = canvas.getContext('2d');
+                context.drawImage(bitmap, 0, 0);
+                return {
+                    type: raster.type,
+                    size: raster.size,
+                    width: bitmap.width,
+                    height: bitmap.height,
+                    cornerAlpha: context.getImageData(0, 0, 1, 1).data[3],
+                    centerAlpha: context.getImageData(Math.floor(bitmap.width / 2), Math.floor(bitmap.height / 2), 1, 1).data[3]
+                };
+            } finally { bitmap.close(); }
+        }, svg);
+        assert.match(image.type, /^image\/(png|webp)$/);
+        assert.ok(image.size > 0 && image.size <= 100 * 1024);
+        assert.ok(image.width > 0 && image.height > 0);
+        assert.ok(Math.abs(image.width / image.height - 4) < 0.05, `${image.width}x${image.height}`);
+        assert.equal(image.cornerAlpha, 0);
+        assert.equal(image.centerAlpha, 255);
+
+        await assert.rejects(page.evaluate(() => window.__prepareLogoDataUrl(new File(
+            ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120"><rect></svg>'],
+            'broken.svg', { type: 'image/svg+xml' }
+        ))));
+    } finally { await page.close(); }
+});
+
 test('80 competition cards share the dashboard clock and skip idle dimension reads', async () => {
     const page = await browser.newPage({ reducedMotion: 'reduce' });
     try {

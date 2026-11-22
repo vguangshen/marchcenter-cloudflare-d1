@@ -1604,6 +1604,16 @@ body {
   transition: transform 840ms cubic-bezier(.22, 1, .36, 1);
 }
 
+.brand-name-image {
+  display: block;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 12rem);
+  max-height: 1.75rem;
+  object-fit: contain;
+}
+
 .dark .login-portal-header {
   border-bottom-color: rgba(51, 65, 85, .6);
   background: rgba(15, 23, 42, .7);
@@ -2057,9 +2067,14 @@ body {
 }
 
 .content-preview-brand {
+  min-width: 0;
   margin-left: 12px;
   font-size: 18px;
   font-weight: 950;
+}
+
+.content-preview-brand .brand-name-image {
+  max-height: 1.5rem;
 }
 
 .content-preview-theme {
