@@ -46,15 +46,20 @@
     </g>
   </defs>
 
+  <g data-layer="sky">
   <path d="M0 0h1600v900H0z" fill="url(#sky)"/>
   <ellipse cx="822" cy="627" rx="746" ry="397" fill="url(#evening)"/>
   <g fill="none" stroke="#e3aa88" stroke-linecap="round">
     <path d="M90 356c141 8 232-10 350-12 116-2 183 12 268 10m477-1c125 4 253-12 357-11" opacity=".08"/>
     <path d="M246 401c109 2 177-8 264-8m362 25c132-7 187-3 306-8m136 35 143-5" opacity=".14"/>
   </g>
+  </g>
+  <g data-layer="far">
   <path d="M0 468c122-24 210-33 324-6 125 30 184 63 293 68 101 5 160-20 241-17 97 3 134 18 232 12 162-9 279-78 510-38v178H0z" fill="#85575b" opacity=".42"/>
   <path d="M0 524c129-11 259-3 371 19 132 26 249 36 384 18 163-22 271 13 408-16 175-36 282-36 437-21v113H0z" fill="#6f4b54"/>
   <path d="m0 581 103-11 119 3 98-15 116 15 120 6 119-9 83 6 106 2 172-7 119 11 86-8 173-27 186 16v72H0z" fill="#513743"/>
+  </g>
+  <g data-layer="mid">
   <path d="M0 606q265-9 480 4t428 0 692-10v300H0z" fill="url(#water)"/>
 
   <g opacity=".72">
@@ -69,14 +74,18 @@
   <path d="M0 635c237-10 363 8 534 6m1066 1c-178-11-307-1-516 2" fill="none" stroke="#b08175" stroke-width="2" opacity=".56"/>
   <path d="M0 672c115-5 275 3 409 5m1191-5c-89-6-223 5-394 1M0 706c90-4 206 2 312 1m1288-4c-79-1-185 2-278 3" fill="none" stroke="#825963" stroke-width="2" opacity=".52"/>
   <path d="M89 638v33m122-37v37m115-31v36m116-36v24m671-23v26m131-32v39m109-41v36m122-33v34M43 669v35m104-33v29m123-30v36m105-29v23m839-22v15m105-24v34m118-35v35m110-36v35" fill="none" stroke="#9a716d" opacity=".39"/>
+  </g>
 
+  <g data-layer="front">
   <use href="#rowhouse" transform="translate(290 435) scale(1.29)"/>
   <use href="#rowhouse" transform="translate(159 402) scale(1.64)"/>
   <use href="#rowhouse" transform="translate(-77 389) scale(1.74)"/>
   <use href="#rowhouse" transform="translate(1316 438) scale(-1.3 1.3)"/>
   <use href="#rowhouse" transform="translate(1437 408) scale(-1.52 1.56)"/>
   <use href="#rowhouse" transform="translate(1678 388) scale(-1.83 1.74)"/>
+  </g>
 
+  <g data-layer="focal">
   <g fill="none" stroke="#db9776" stroke-linecap="round">
     <path d="M113 725q82 5 165 2m77 11 58 2m-297 53h143m95 20 163 4m700-83c91 7 153 4 230-2m-244 63 86-4m-30 53 118-7" opacity=".24"/>
     <path d="m166 743 47 2m111 45 47 3m782-68 45 2m115 22 62-2m-190 29 60-2m53 44 64-3" opacity=".46" stroke-width="2"/>
@@ -93,6 +102,9 @@
   </g>
   <path d="M617 707c60 1 105-8 182-8 70-1 126 7 184 8-70 2-116 4-186 4-74 0-108-4-180-4z" fill="#d39975" opacity=".47"/>
   <path d="M719 726q86-5 171 0-87 7-171 0m36 22q48-3 104 0-43 5-104 0m-56 20q110-5 215 2-109 2-215-2m60 23q39-2 86 0-37 4-86 0" fill="#c2856e" opacity=".42"/>
+  </g>
+  <g data-layer="details">
   <path d="M0 770c74-7 168 12 255 38 58 18 102 56 156 92H0zm1600-3c-98 12-171 15-255 42-67 22-117 64-157 91h412z" fill="#271f31"/>
   <path d="M0 773c111-1 225 20 316 70m1284-70c-142 2-222 22-329 76" fill="none" stroke="#754c5a" stroke-width="2" opacity=".73"/>
+  </g>
 </svg>

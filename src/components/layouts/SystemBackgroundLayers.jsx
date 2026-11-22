@@ -1,9 +1,29 @@
 import React, { lazy, Suspense } from 'react';
 import { THEMES } from '../../constants/themes';
-import DefaultSceneLayers from './DefaultSceneLayers';
 import { IMMERSIVE_WALLPAPERS } from '../../constants/immersiveWallpapers';
 import { prefersReducedMotion } from '../../utils/motionPreferences';
 import AccentRaceScene from '../branding/AccentRaceScene';
+import LayeredSvgScene from './LayeredSvgScene';
+import { useSceneIntro } from './layeredScene';
+import dawnScene from '../../../public/default-scene/competition-dawn.svg?raw';
+import nightScene from '../../../public/default-scene/competition-night.svg?raw';
+
+const ACCENT_LAYERS = ['sky', 'far', 'mid', 'front', 'focal', 'details'];
+const accentReady = () => Promise.resolve();
+
+// The theme-colour track follows the live accent variable, so its layers stay
+// inline <svg> elements (an <img> could not inherit the CSS variable); each
+// layer is still its own box, animated only with transform/opacity.
+function AccentSceneLayers({ dark, animate }) {
+    const { rootProps } = useSceneIntro('accent', animate, accentReady);
+    return (
+        <div aria-hidden="true" data-scene="accent" {...rootProps}>
+            {ACCENT_LAYERS.map(role => (
+                <AccentRaceScene key={role} dark={dark} layers={[role]} className={`layered-scene-layer layered-scene-layer--${role}`} />
+            ))}
+        </div>
+    );
+}
 
 const IMMERSIVE_EFFECT_COMPONENTS = Object.freeze({
     christmas: lazy(() => import('../effects/SnowSystem')),
@@ -39,6 +59,7 @@ export default function SystemBackgroundLayers({
     const isWallpaperSoftened = !currentUser && !isUnlocking;
     const showDefault = effectMode === 'default';
     const showNeutral = showDefault || effectMode === 'immersive' || (effectMode === 'wallpaper' && !hasWallpaper);
+    const animateScene = systemEffects.wallpaperReveal !== false && !prefersReducedMotion();
 
     return (
         <>
@@ -49,17 +70,28 @@ export default function SystemBackgroundLayers({
                 <div className={`neutral-system-background pointer-events-none fixed inset-0 z-0 ${isDarkMode ? 'neutral-system-background--dark' : ''}`}/>
             )}
             {showDefault && showDefaultScene && (
-                <DefaultSceneLayers
-                    dark={isDarkMode}
-                    animate={systemEffects.wallpaperReveal !== false && !prefersReducedMotion()}
-                />
+                <div className="default-scene pointer-events-none fixed inset-0 z-0 overflow-hidden" data-scene-mode={isDarkMode ? 'night' : 'dawn'}>
+                    <LayeredSvgScene
+                        sceneKey="competition"
+                        variant={isDarkMode ? 'night' : 'dawn'}
+                        source={isDarkMode ? nightScene : dawnScene}
+                        animate={animateScene}
+                        focusY="58%"
+                    />
+                </div>
             )}
             {immersiveWallpaper && (
                 <div
                     aria-hidden="true"
                     className={`immersive-wallpaper-layer pointer-events-none fixed inset-0 z-0 overflow-hidden ${currentUser && !suspendImmersive ? 'immersive-wallpaper-layer--dashboard' : ''}`}
                 >
-                    <img key={immersiveWallpaper} src={immersiveWallpaper} alt="" decoding="async" className="h-full w-full object-cover object-[center_55%]"/>
+                    <LayeredSvgScene
+                        key={immersiveWallpaper}
+                        sceneKey={`immersive:${activeImmersive}`}
+                        url={immersiveWallpaper}
+                        animate={animateScene}
+                        focusY="55%"
+                    />
                 </div>
             )}
             {effectMode === 'color' && (
@@ -68,7 +100,7 @@ export default function SystemBackgroundLayers({
                     style={{ '--system-accent-rgb': currentTheme.rgb || THEMES.blue.rgb }}
                     aria-hidden="true"
                 >
-                    <AccentRaceScene dark={isDarkMode} className="block h-full w-full"/>
+                    <AccentSceneLayers dark={isDarkMode} animate={animateScene} />
                 </div>
             )}
             {hasWallpaper && (

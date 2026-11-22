@@ -226,11 +226,12 @@ test('a cold default scene renders only the confirmed day or night artwork', asy
         confirmConfig();
         const night = page.locator('.default-scene[data-scene-mode="night"]');
         await night.waitFor();
-        const layers = night.locator('img.default-scene-layer');
+        const layers = night.locator('img.layered-scene-layer');
+        await layers.first().waitFor();
         assert.equal(await layers.count(), 6);
         await layers.evaluateAll(images => Promise.all(images.map(image => image.decode())));
         assert.equal(await page.locator('.default-scene[data-scene-mode="dawn"]').count(), 0);
-        assert.match(await night.getAttribute('class'), /default-scene--static/, 'reduced motion shows the finished scene');
+        assert.equal(await night.locator('.layered-scene').getAttribute('data-scene-phase'), 'static', 'reduced motion shows the finished scene');
         assert.deepEqual(requests, [], 'the layered scene ships with the app and needs no image request');
     } finally {
         confirmConfig();
@@ -238,33 +239,44 @@ test('a cold default scene renders only the confirmed day or night artwork', asy
     }
 });
 
-test('the default scene assembles its layers once with compositor-only motion', async () => {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
-    try {
-        const page = await context.newPage();
-        const { cspViolations } = collectPageErrors(page);
-        await page.route('**/api/config/site', route => route.fulfill({ json: { globalTheme: { effectMode: 'default', lightDark: 'light' } } }));
-        await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-        const scene = page.locator('.default-scene[data-scene-mode="dawn"]');
-        await page.locator('.default-scene.default-scene--playing').waitFor();
-        const animations = await scene.evaluate(root => [...root.querySelectorAll('img')].map(image => ({
-            layer: image.className.match(/--(\w+)$/)[1],
-            names: image.getAnimations().map(animation => animation.animationName),
-            props: image.getAnimations().flatMap(animation => animation.effect.getKeyframes().flatMap(frame => Object.keys(frame)))
-                .filter(key => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))
-        })));
-        assert.deepEqual(animations.map(entry => entry.layer), ['sky', 'far', 'mid', 'campus', 'front', 'details']);
-        for (const entry of animations) {
-            assert.equal(entry.names.length, 1, `${entry.layer} animates`);
-            assert.deepEqual([...new Set(entry.props)].sort(), ['opacity', 'transform'], `${entry.layer} only animates transform/opacity`);
+const SCENE_CASES = [
+    { name: 'default skyline', theme: { effectMode: 'default', lightDark: 'light' }, scene: 'competition',
+        roles: ['sky', 'far', 'mid', 'focal', 'front', 'details'] },
+    { name: 'mid-autumn holiday scene', theme: { effectMode: 'immersive', immersive: 'mid_autumn', lightDark: 'dark' }, scene: 'immersive:mid_autumn',
+        roles: ['sky', 'celestial', 'far', 'mid', 'focal', 'front', 'details'] },
+    { name: 'theme-colour track', theme: { effectMode: 'color', manualColor: 'blue', lightDark: 'light' }, scene: 'accent',
+        roles: ['sky', 'far', 'mid', 'front', 'focal', 'details'] }
+];
+
+for (const sceneCase of SCENE_CASES) {
+    test(`the ${sceneCase.name} assembles its layers once with compositor-only motion`, async () => {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+        try {
+            const page = await context.newPage();
+            const { cspViolations } = collectPageErrors(page);
+            await page.route('**/api/config/site', route => route.fulfill({ json: { globalTheme: sceneCase.theme } }));
+            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+            const scene = page.locator(`.layered-scene[data-scene="${sceneCase.scene}"]`);
+            await page.locator(`.layered-scene--playing[data-scene="${sceneCase.scene}"]`).waitFor();
+            const animations = await scene.evaluate(root => [...root.querySelectorAll('.layered-scene-layer')].map(layer => ({
+                role: layer.getAttribute('class').match(/layered-scene-layer--(\w+)/)[1],
+                names: layer.getAnimations().map(animation => animation.animationName),
+                props: layer.getAnimations().flatMap(animation => animation.effect.getKeyframes().flatMap(frame => Object.keys(frame)))
+                    .filter(key => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))
+            })));
+            assert.deepEqual(animations.map(entry => entry.role), sceneCase.roles);
+            for (const entry of animations) {
+                assert.equal(entry.names.length, 1, `${entry.role} animates`);
+                assert.deepEqual([...new Set(entry.props)].sort(), ['opacity', 'transform'], `${entry.role} only animates transform/opacity`);
+            }
+            await page.locator(`.layered-scene--static[data-scene="${sceneCase.scene}"]`).waitFor({ timeout: 5000 });
+            assert.equal(await scene.evaluate(root => root.querySelector('.layered-scene-layer').getAnimations().length), 0, 'hints are dropped after the intro');
+            assert.deepEqual(cspViolations, []);
+        } finally {
+            await context.close();
         }
-        await page.locator('.default-scene.default-scene--static').waitFor({ timeout: 5000 });
-        assert.equal(await scene.evaluate(root => root.querySelector('img').getAnimations().length), 0, 'hints are dropped after the intro');
-        assert.deepEqual(cspViolations, []);
-    } finally {
-        await context.close();
-    }
-});
+    });
+}
 
 test('登录按钮日夜主题均以完整边框区域绘制渐变且不平铺', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'reduce' });

@@ -11,7 +11,11 @@ const laneLines = [
     'M368 742c7-68 198-113 484-136 282-22 484 27 473 97-10 63-214 125-488 150-244 22-475-25-469-111Z'
 ];
 
-export default function AccentRaceScene({ className = '', dark = false }) {
+// `layers` limits the drawing to some depth layers (sky, far, mid, front,
+// focal, details) so the background can animate them separately; omitted,
+// the whole scene is drawn.
+export default function AccentRaceScene({ className = '', dark = false, layers = null }) {
+    const show = name => !layers || layers.includes(name);
     const id = useId();
     const paint = name => `url(#${id}-${name})`;
     const draw = dark ? {
@@ -60,17 +64,24 @@ export default function AccentRaceScene({ className = '', dark = false }) {
                 <path id={`${id}-infield`} d="M407 739c8-64 182-108 446-130 260-21 450 28 440 93-10 56-199 113-453 135-218 19-438-24-433-98Z"/>
             </defs>
 
+            {show('sky') && (<>
             <path d="M0 0h1600v900H0z" fill={paint('sky')}/>
             <path d="M0 0h1600v900H0z" fill={paint('glow')}/>
+            </>)}
+            {show('far') && (<>
             <path d="M0 564c174-16 237-91 373-79 95 8 157 54 277 51 106-3 138-64 241-66 127-3 198 68 310 56 99-11 187-72 269-49 54 15 89 32 130 38v150H0Z" fill={draw.far} fillOpacity={dark ? '.58' : '.64'}/>
             <path d="M0 583c116-17 207-55 323-44 111 11 182 54 297 50 113-4 189-61 267-55 160 13 212 59 350 28 153-35 257-54 363-12v148H0Z" fill={draw.ridge} fillOpacity=".75"/>
+            </>)}
+            {show('mid') && (<>
             <path d="M0 642c223-53 356-3 580-17 167-10 236-53 392-51 190 2 417 67 628 12v314H0Z" fill={draw.land}/>
             <path d="M0 642c223-53 356-3 580-17 167-10 236-53 392-51 190 2 417 67 628 12v314H0Z" fill={paint('ground')}/>
             <g fill="none" stroke={draw.outline} strokeWidth="1.4" strokeOpacity={dark ? '.54' : '.46'} strokeLinecap="round">
                 <path d="M0 610c121-23 235-32 333-9 70 16 158 32 249 17M1340 594c91 10 177 5 260-17"/>
                 <path d="M0 699c118-29 206-25 277-16M0 717c80-19 129-20 180-18M1394 596l105-10 101-19"/>
             </g>
+            </>)}
 
+            {show('front') && (<>
             <use href={`#${id}-outer-ring`} fill={draw.fieldEdge} stroke={draw.outline} strokeOpacity=".5" strokeWidth="9"/>
             <use href={`#${id}-outer-ring`} fill={paint('track')}/>
             <g fill="none" stroke={draw.line} strokeWidth="1.55" strokeOpacity={dark ? '.54' : '.83'}>
@@ -82,7 +93,9 @@ export default function AccentRaceScene({ className = '', dark = false }) {
                 <path d="M648 755c0-27 95-56 192-62 111-7 204 4 216 30 12 29-75 60-180 66-115 6-228-11-228-34Z"/>
                 <path d="m693 727 333 23m-186-58 31 97"/>
             </g>
+            </>)}
 
+            {show('focal') && (<>
             <g>
                 <path d="M601 630 641 573l344-19 104 57-78 30-343 9Z" fill={draw.foundation}/>
                 <path d="m654 572 35-30 304-10 76 62-79 26-336 13Z" fill={paint('glass')}/>
@@ -99,7 +112,9 @@ export default function AccentRaceScene({ className = '', dark = false }) {
                 <path d="m735 640 196-12 58 10-52 12-212 5Z" fill={draw.foundation}/>
                 <path d="m726 654 211-6 49-10m-210 26 137-5" fill="none" stroke={draw.line} strokeOpacity=".61" strokeWidth="2"/>
             </g>
+            </>)}
 
+            {show('details') && (<>
             <g fill="none" stroke={draw.rail} strokeOpacity=".72" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M85 607h86l54-36h44l23-19h49m927 20 34-24h54l41-30h49m-1446 297 62-15h59l34-14h36m1151 46h53l49-28 129-14"/>
                 <path d="M881 493v-30l18-13m-230 93v-30l-25-15m395 46 22-30v-22"/>
@@ -115,6 +130,7 @@ export default function AccentRaceScene({ className = '', dark = false }) {
                 <path d="m404 818 10 7m-40 3 14 7m-43 5 13 7m-42 4 13 7m-37 2 11 8m859-125 8 7m25-3 9 7m26-3 9 7m25-3 10 7m25-3 10 7"/>
             </g>
             <path d="M0 877c71-7 145 9 200 23H0Zm1453 23c52-22 94-30 147-33v33Z" fill={draw.ridge} fillOpacity=".75"/>
+            </>)}
         </svg>
     );
 }

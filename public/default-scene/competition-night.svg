@@ -65,7 +65,7 @@
   <path fill="url(#ground)" d="M0 647c275-28 426 24 640 7 194-16 333-45 477-36 195 11 360-28 483-18v300H0Z"/>
   </g>
 
-  <g data-layer="campus">
+  <g data-layer="focal">
   <g id="campus">
     <path fill="#2b406a" d="M707 615q158-28 357-24 168 3 308 29l-6 19H711z"/>
     <path fill="#25365c" d="M960 591h243v24H960z"/>

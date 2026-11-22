@@ -4253,108 +4253,133 @@ body {
 .content-dashboard-search { gap: 8px; }
 .content-dashboard-search > svg { width: 14px; height: 14px; flex: 0 0 auto; }
 
-/* ── Default competition skyline: layered entrance ───────────────────────────
-   Six depth layers assemble back to front, like a camera settling on the
-   scene: the sky eases in from a slight zoom, the hills and ground rise in
-   staggered bands, the stadium lifts into place, the track sweeps up from the
-   foreground and the podium and lights arrive last. Only transform and
-   opacity animate, on pre-rasterised layers. */
-.default-scene {
-  position: fixed;
+/* ── Layered scene entrances ─────────────────────────────────────────────────
+   The default skyline, the holiday scenes and the theme-colour track are each
+   split into depth layers that assemble back to front, like a camera settling
+   on the scene: the sky eases in from a slight zoom, a moon or sun rises,
+   hills and ground lift in staggered bands, the focal subject (stadium,
+   village, bridge, boats…) grows into place, the foreground sweeps up and the
+   small details arrive last. Only transform and opacity animate, on layers
+   the browser rasterises once. */
+.layered-scene {
+  position: absolute;
   inset: 0;
-  z-index: 0;
   overflow: hidden;
   pointer-events: none;
 }
 
-.default-scene-layer {
+.layered-scene-layer {
   position: absolute;
   inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 58%;
+  object-position: center var(--scene-focus-y, 50%);
   user-select: none;
   transform-origin: 50% 100%;
 }
 
-.default-scene--waiting .default-scene-layer { opacity: 0; }
+.layered-scene--waiting .layered-scene-layer { opacity: 0; }
 
-.default-scene--playing .default-scene-layer {
+.layered-scene--playing .layered-scene-layer {
   will-change: transform, opacity;
   animation: var(--scene-name) var(--scene-duration) cubic-bezier(.16, 1, .3, 1)
     calc(var(--scene-delay) + var(--scene-offset, 0ms)) both;
 }
 
-.default-scene-layer--sky {
-  --scene-name: default-scene-sky-in;
+.layered-scene-layer--sky {
+  --scene-name: layered-scene-sky-in;
   --scene-duration: 1700ms;
   --scene-delay: 0ms;
-  transform-origin: 62% 52%;
+  transform-origin: 50% 45%;
 }
 
-.default-scene-layer--far {
-  --scene-name: default-scene-far-in;
+.layered-scene-layer--celestial {
+  --scene-name: layered-scene-celestial-in;
+  --scene-duration: 1800ms;
+  --scene-delay: 200ms;
+}
+
+.layered-scene-layer--far {
+  --scene-name: layered-scene-far-in;
   --scene-duration: 1500ms;
   --scene-delay: 140ms;
 }
 
-.default-scene-layer--mid {
-  --scene-name: default-scene-mid-in;
+.layered-scene-layer--mid {
+  --scene-name: layered-scene-mid-in;
   --scene-duration: 1500ms;
   --scene-delay: 260ms;
 }
 
-.default-scene-layer--campus {
-  --scene-name: default-scene-campus-in;
+.layered-scene-layer--focal {
+  --scene-name: layered-scene-focal-in;
   --scene-duration: 1400ms;
   --scene-delay: 520ms;
-  transform-origin: 63% 68%;
+  transform-origin: 50% 72%;
 }
 
-.default-scene-layer--front {
-  --scene-name: default-scene-front-in;
+.layered-scene-layer--front {
+  --scene-name: layered-scene-front-in;
   --scene-duration: 1600ms;
   --scene-delay: 380ms;
 }
 
-.default-scene-layer--details {
-  --scene-name: default-scene-details-in;
+.layered-scene-layer--details {
+  --scene-name: layered-scene-details-in;
   --scene-duration: 1000ms;
   --scene-delay: 980ms;
 }
 
-@keyframes default-scene-sky-in {
+/* Scene-specific anchors so each focal subject grows from where it stands. */
+[data-scene="competition"] .layered-scene-layer--sky { transform-origin: 62% 52%; }
+[data-scene="competition"] .layered-scene-layer--focal { transform-origin: 63% 68%; }
+[data-scene="accent"] .layered-scene-layer--focal { transform-origin: 52% 66%; }
+[data-scene="immersive:christmas"] .layered-scene-layer--focal { transform-origin: 50% 77%; }
+[data-scene="immersive:lunar_new_year"] .layered-scene-layer--focal { transform-origin: 49% 74%; }
+[data-scene="immersive:halloween"] .layered-scene-layer--focal { transform-origin: 50% 55%; }
+[data-scene="immersive:mid_autumn"] .layered-scene-layer--focal { transform-origin: 53% 70%; }
+[data-scene="immersive:dragon_boat"] .layered-scene-layer--focal { transform-origin: 50% 76%; }
+[data-scene="immersive:yuanxiao"] .layered-scene-layer--focal { transform-origin: 50% 74%; }
+[data-scene="immersive:qingming"] .layered-scene-layer--focal { transform-origin: 49% 74%; }
+
+@keyframes layered-scene-sky-in {
   from { opacity: 0; transform: scale(1.08); }
   to { opacity: 1; transform: none; }
 }
 
-@keyframes default-scene-far-in {
-  from { opacity: 0; transform: translate3d(0, 6%, 0); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes default-scene-mid-in {
+@keyframes layered-scene-celestial-in {
   from { opacity: 0; transform: translate3d(0, 9%, 0); }
   to { opacity: 1; transform: none; }
 }
 
-@keyframes default-scene-campus-in {
+@keyframes layered-scene-far-in {
+  from { opacity: 0; transform: translate3d(0, 6%, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes layered-scene-mid-in {
+  from { opacity: 0; transform: translate3d(0, 9%, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes layered-scene-focal-in {
   from { opacity: 0; transform: translate3d(0, 5%, 0) scale(.965); }
   to { opacity: 1; transform: none; }
 }
 
-@keyframes default-scene-front-in {
+@keyframes layered-scene-front-in {
   from { opacity: 0; transform: translate3d(0, 14%, 0); }
   40% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
 
-@keyframes default-scene-details-in {
+@keyframes layered-scene-details-in {
   from { opacity: 0; transform: translate3d(0, 3%, 0); }
   to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .default-scene--playing .default-scene-layer { animation: none; }
+  .layered-scene--playing .layered-scene-layer { animation: none; }
 }
