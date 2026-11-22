@@ -52,3 +52,50 @@ test('site config accepts uploaded or https logo URLs and a logo background, and
     const badBackground = await harness.api('/api/config/site', { body: { navbarLogoBackground: 'rainbow' } });
     assert.equal(badBackground.status, 400);
 });
+
+test('site config can be edited when stored or cached data contains the obsolete loginLogo field', async () => {
+    const currentConfig = {
+        loginBrandName: 'MarchCenter',
+        loginTitle: { text: 'MarchCenter', align: 'center', fontSize: '2xl' },
+        navbarLogoType: 'custom',
+        navbarLogoUrl: 'https://cdn.example.com/current.png',
+        navbarLogoBackground: 'none',
+        loginLogoType: 'Trophy',
+        customLogoUrl: 'https://cdn.example.com/legacy.png',
+        globalTheme: { effectMode: 'default', lightDark: 'dark' }
+    };
+    const cachedConfig = { ...currentConfig, loginLogo: 'trophy' };
+    await harness.run(
+        `INSERT INTO system_configs (config_key, config_value) VALUES (?, ?)
+         ON CONFLICT(config_key) DO UPDATE SET config_value = excluded.config_value`,
+        'site_global', JSON.stringify(cachedConfig)
+    );
+
+    const loaded = await harness.api('/api/config/site');
+    assert.equal(loaded.status, 200, loaded.text);
+    assert.deepEqual(loaded.data, currentConfig);
+
+    const edited = { ...loaded.data, loginWelcomeTitle: '欢迎回来' };
+    const saved = await harness.api('/api/config/site', { body: edited });
+    assert.equal(saved.status, 200, saved.text);
+    assert.deepEqual(saved.data.config, edited);
+
+    const updated = { ...edited, loginWelcomeTitle: '欢迎来到 MarchCenter' };
+    const savedFromCache = await harness.api('/api/config/site', {
+        body: { ...updated, loginLogo: cachedConfig.loginLogo }
+    });
+    assert.equal(savedFromCache.status, 200, savedFromCache.text);
+    assert.deepEqual(savedFromCache.data.config, updated);
+
+    const rejected = await harness.api('/api/config/site', {
+        body: { ...cachedConfig, unexpectedServerFlag: true }
+    });
+    assert.equal(rejected.status, 400, rejected.text);
+    assert.match(rejected.data.message, /未知字段：unexpectedServerFlag/);
+
+    const [stored] = await harness.rows('SELECT config_value FROM system_configs WHERE config_key = ?', 'site_global');
+    assert.deepEqual(JSON.parse(stored.config_value), updated);
+    const refreshed = await harness.api('/api/config/site');
+    assert.equal(refreshed.status, 200, refreshed.text);
+    assert.deepEqual(refreshed.data, updated);
+});

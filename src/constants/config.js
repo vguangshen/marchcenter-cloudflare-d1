@@ -1,3 +1,5 @@
+import { removeObsoleteSiteConfigFields } from '../utils/siteConfigCompatibility.js';
+
 // Production and preview use the same origin. Vite proxies /api in development;
 // a separate API origin is an explicit build-time option when needed.
 export const API_BASE = String(import.meta.env?.VITE_API_BASE || '/api').replace(/\/+$/, '');
@@ -84,7 +86,7 @@ export const DEFAULT_SITE_CONFIG = {
 const LEGACY_SEARCH_PLACEHOLDER = '搜索竞赛或考点...';
 
 export function normalizeSiteConfig(value = {}) {
-    const config = value && typeof value === 'object' ? value : {};
+    const config = value && typeof value === 'object' ? removeObsoleteSiteConfigFields(value) : {};
     return {
         ...DEFAULT_SITE_CONFIG,
         ...config,

@@ -1,4 +1,5 @@
 import { getRuntime } from '../config/runtime.js';
+import { removeObsoleteSiteConfigFields } from '../../src/utils/siteConfigCompatibility.js';
 import {
     computeWallpaperAccentFromJpeg,
     normalizeThemeAccent
@@ -321,7 +322,7 @@ export async function getSiteGlobalConfig(env) {
   ).bind('site_global').first();
   if (!row?.config_value) return {};
   try {
-    return JSON.parse(row.config_value);
+    return removeObsoleteSiteConfigFields(JSON.parse(row.config_value));
   } catch {
     return {};
   }

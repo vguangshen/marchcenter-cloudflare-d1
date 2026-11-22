@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import LoginPage from './components/views/LoginPage';
 import PasswordChangeReminder from './components/views/PasswordChangeReminder';
@@ -13,6 +13,7 @@ import { useAuthSession } from './hooks/useAuthSession';
 import { useThemeController } from './hooks/useThemeController';
 import { useWallpaperPresentation } from './hooks/useWallpaperPresentation';
 import { api } from './utils/api';
+import { getTabToken } from './utils/tabSession';
 import { notify } from './utils/uiFeedback';
 import { CACHED_SITE_CONFIG_KEY, readStoredJson } from './utils/uiThemeSettings';
 import { mark, measure } from './utils/startupPerf';
@@ -34,22 +35,36 @@ export default function App() {
     });
     const [siteConfigLoadError, setSiteConfigLoadError] = useState('');
     const [isSiteConfigReady, setIsSiteConfigReady] = useState(false);
+    const currentSiteConfig = useRef(siteConfig);
+    const siteConfigSaveQueue = useRef(Promise.resolve());
 
-    const persistSiteConfig = useCallback(async (newConfig) => {
-        try {
-            await api.post('/config/site', newConfig, { fallback: '站点配置保存失败' });
-            setSiteConfig(newConfig);
-            localStorage.setItem(CACHED_SITE_CONFIG_KEY, JSON.stringify(newConfig));
-            return true;
-        } catch (error) {
-            notify(error.message, 'error');
-            return false;
-        }
+    const commitSiteConfig = useCallback((config) => {
+        currentSiteConfig.current = config;
+        setSiteConfig(config);
     }, []);
 
+    const persistSiteConfig = useCallback((changes) => {
+        // Each panel edits its own fields. Build the full payload after earlier saves finish.
+        const save = siteConfigSaveQueue.current.then(async () => {
+            if (!token || getTabToken() !== token) return false;
+            const newConfig = { ...currentSiteConfig.current, ...changes };
+            try {
+                await api.post('/config/site', newConfig, { fallback: '站点配置保存失败' });
+                commitSiteConfig(newConfig);
+                localStorage.setItem(CACHED_SITE_CONFIG_KEY, JSON.stringify(newConfig));
+                return true;
+            } catch (error) {
+                notify(error.message, 'error');
+                return false;
+            }
+        });
+        siteConfigSaveQueue.current = save;
+        return save;
+    }, [commitSiteConfig, token]);
+
     const saveGlobalTheme = useCallback((settings) => (
-        persistSiteConfig({ ...siteConfig, globalTheme: settings })
-    ), [persistSiteConfig, siteConfig]);
+        persistSiteConfig({ globalTheme: settings })
+    ), [persistSiteConfig]);
     const {
         uiThemeSettings, effectiveLightDark, isDarkMode,
         saveUiThemeSettings, handleLoginThemeToggle
@@ -83,6 +98,7 @@ export default function App() {
 
     // Public site configuration
     const fetchSiteConfig = useCallback(async () => {
+        const initialConfig = currentSiteConfig.current;
         let succeeded = false;
         mark('siteConfigRequestStart');
         try {
@@ -90,21 +106,21 @@ export default function App() {
             const config = normalizeSiteConfig(data.data || data);
             succeeded = true;
 
-            if (Object.keys(config).length > 0) {
-                setSiteConfig(config);
+            if (currentSiteConfig.current === initialConfig) {
+                commitSiteConfig(config);
                 localStorage.setItem(CACHED_SITE_CONFIG_KEY, JSON.stringify(config));
             }
             setIsSiteConfigReady(true);
         } catch (e) {
             setSiteConfigLoadError(e.message || '站点配置读取失败，请重试');
             const local = readStoredJson(CACHED_SITE_CONFIG_KEY);
-            if (local) setSiteConfig(normalizeSiteConfig(local));
+            if (local && currentSiteConfig.current === initialConfig) commitSiteConfig(normalizeSiteConfig(local));
         } finally {
             mark('siteConfigRequestEnd');
             measure('siteConfigRequest', 'siteConfigRequestStart', 'siteConfigRequestEnd');
             if (succeeded) setSiteConfigLoadError('');
         }
-    }, []);
+    }, [commitSiteConfig]);
 
     useEffect(() => { fetchSiteConfig(); }, [fetchSiteConfig]);
 

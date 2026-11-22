@@ -507,7 +507,8 @@ function LoginPageCanvas({ scene, codeMode, data, selectedKey, selectField, moda
 
 const ContentManager = ({ config, onSave }) => {
     const normalizedConfig = useMemo(() => normalizeSiteConfig(config || {}), [config]);
-    const [formData, setFormData] = useState(normalizedConfig);
+    const [editedFields, setEditedFields] = useState({});
+    const formData = { ...normalizedConfig, ...editedFields };
     const [scene, setScene] = useState('login');
     const [codeMode, setCodeMode] = useState(false);
     const [modalState, setModalState] = useState('form');
@@ -519,20 +520,11 @@ const ContentManager = ({ config, onSave }) => {
     const [logoLibrary, setLogoLibrary] = useState([]);
     const editorRef = useRef(null);
     const logoInputRef = useRef(null);
-    const syncedConfigRef = useRef(normalizedConfig);
 
-    // A refreshed site config only replaces the form when nothing is being
-    // edited; unsaved work is never overwritten by a background reload.
-    useEffect(() => {
-        const previous = JSON.stringify(syncedConfigRef.current);
-        syncedConfigRef.current = normalizedConfig;
-        setFormData(current => (JSON.stringify(current) === previous ? normalizedConfig : current));
-    }, [normalizedConfig]);
-
-    const dirty = useMemo(
-        () => JSON.stringify(formData) !== JSON.stringify(normalizedConfig),
-        [formData, normalizedConfig]
+    const dirty = Object.entries(editedFields).some(
+        ([key, value]) => JSON.stringify(value) !== JSON.stringify(normalizedConfig[key])
     );
+    const showSaved = saved && !dirty;
 
     useEffect(() => {
         if (!dirty) return undefined;
@@ -571,7 +563,13 @@ const ContentManager = ({ config, onSave }) => {
 
     const handlePatch = patch => {
         setSaved(false);
-        setFormData(previous => ({ ...previous, ...patch }));
+        setEditedFields(previous => {
+            const next = { ...previous, ...patch };
+            for (const [key, value] of Object.entries(patch)) {
+                if (!saving && JSON.stringify(value) === JSON.stringify(normalizedConfig[key])) delete next[key];
+            }
+            return next;
+        });
     };
 
     const handleChange = (key, value) => {
@@ -594,17 +592,21 @@ const ContentManager = ({ config, onSave }) => {
     };
 
     const handleSave = async () => {
-        const cleanConfig = { ...formData };
-        const brandName = textValue(cleanConfig.loginBrandName, 'MarchCenter');
-        cleanConfig.loginBrandName = brandName;
-        cleanConfig.loginTitle = typeof cleanConfig.loginTitle === 'object'
-            ? { ...cleanConfig.loginTitle, text: brandName }
-            : brandName;
+        const changes = { ...editedFields };
+        if (Object.hasOwn(changes, 'loginBrandName')) {
+            const brandName = textValue(changes.loginBrandName, 'MarchCenter');
+            changes.loginBrandName = brandName;
+            changes.loginTitle = typeof formData.loginTitle === 'object'
+                ? { ...formData.loginTitle, text: brandName }
+                : brandName;
+        }
         setSaving(true);
-        const success = await onSave(cleanConfig);
+        const success = await onSave(changes);
         setSaving(false);
         if (!success) return;
-        setFormData(cleanConfig);
+        setEditedFields(current => Object.fromEntries(Object.entries(current).filter(
+            ([key, value]) => !Object.hasOwn(editedFields, key) || value !== editedFields[key]
+        )));
         setSaved(true);
         window.setTimeout(() => setSaved(false), 1800);
     };
@@ -616,15 +618,7 @@ const ContentManager = ({ config, onSave }) => {
     return (
         <div className="content-studio space-y-5 pb-10">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                <div>
-                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
-                        <Sparkles className="h-3 w-3" />所见即所得内容工作台
-                    </div>
-                    <h1 className="text-2xl font-black text-slate-900 dark:text-white">全局文案</h1>
-                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                        将鼠标移到预览中的文案上，点击即可编辑对应位置；所有修改保存后立即同步到真实页面。
-                    </p>
-                </div>
+                <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">点击预览中的文案即可编辑，保存后全站生效。</p>
                 <div className="flex items-center gap-3">
                     <span className={`hidden items-center gap-2 text-xs font-bold sm:flex ${dirty ? 'text-amber-600' : 'text-slate-400'}`}>
                         <span className={`h-2 w-2 rounded-full ${dirty ? 'bg-amber-400' : 'bg-emerald-400'}`} />
@@ -636,8 +630,8 @@ const ContentManager = ({ config, onSave }) => {
                         disabled={saving}
                         className={`flex min-w-36 items-center justify-center rounded-xl px-5 py-2.5 text-sm font-bold disabled:cursor-wait disabled:opacity-70 ${PRIMARY_BTN}`}
                     >
-                        {saved ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-300" /> : <Save className="mr-2 h-4 w-4" />}
-                        {saving ? '正在保存...' : saved ? '已保存并生效' : '保存并生效'}
+                        {showSaved ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-300" /> : <Save className="mr-2 h-4 w-4" />}
+                        {saving ? '正在保存...' : showSaved ? '已保存并生效' : '保存并生效'}
                     </button>
                 </div>
             </div>

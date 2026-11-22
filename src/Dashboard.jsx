@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import {
-    Sparkles, Network, Key, Users, Megaphone, Gift, Type, Palette,
+    Sparkles, Network, Key, Users, Megaphone, Gift, Palette,
     RefreshCw, Quote,
     Database, Loader2, AlertTriangle, Mail, Edit2, Trash2
 } from 'lucide-react';
@@ -37,8 +37,7 @@ const ApiEngine = lazy(() => import('./components/views/settings/ApiEngine'));
 const SsoManager = lazy(() => import('./components/views/settings/SsoManager'));
 const UserManager = lazy(() => import('./components/views/settings/UserManager'));
 const GiftManager = lazy(() => import('./components/views/settings/GiftManager'));
-const ContentManager = lazy(() => import('./components/views/settings/ContentManager'));
-const AppearanceManager = lazy(() => import('./components/views/settings/AppearanceManager'));
+const SiteSettings = lazy(() => import('./components/views/settings/SiteSettings'));
 const AnnouncementManager = lazy(() => import('./components/views/settings/AnnouncementManager'));
 const DatabaseManager = lazy(() => import('./components/views/settings/DatabaseManager'));
 const AccountManagementApiManager = lazy(() => import('./components/views/settings/AccountManagementApiManager'));
@@ -293,14 +292,13 @@ export default function Dashboard({ auth, site, appearance }) {
     const ADMIN_TABS = isAdmin ? [
         { id: 'api', label: 'API 设置', icon: Sparkles },
         { id: 'sso', label: '免密登录配置', icon: Key },
+        { id: 'account-api', label: '账号管理 API', icon: Network },
+        { id: 'database', label: '数据库配置', icon: Database },
         { id: 'email', label: '邮件服务', icon: Mail },
         { id: 'users', label: '用户管理', icon: Users },
         { id: 'announcements', label: '系统公告', icon: Megaphone },
         { id: 'gifts', label: '赠送礼物', icon: Gift },
-        { id: 'content', label: '全局文案', icon: Type },
-        { id: 'appearance', label: '界面外观', icon: Palette },
-        { id: 'database', label: '数据库配置', icon: Database },
-        { id: 'account-api', label: '账号管理 API', icon: Network }
+        { id: 'site', label: '站点设置', icon: Palette }
     ] : [{ id: 'users', label: '用户管理', icon: Users }];
 
     // Effects
@@ -898,8 +896,16 @@ export default function Dashboard({ auth, site, appearance }) {
                                     />
                                 )}
                                 {settingsTab === 'gifts' && <GiftManager giftForm={giftForm} setGiftForm={setGiftForm} onSend={handleSendGift} sentGifts={sentGiftsWithUser} onEdit={(g) => { setEditingGift(g); setIsEditGiftModalOpen(true); }} onDelete={handleDeleteGift} users={users} onSearchUsers={searchUsersForGift} loadError={contentLoadError} onRetry={fetchSharedContent} />}
-                                {settingsTab === 'content' && <ContentManager config={siteConfig} onSave={persistSiteConfig} />}
-                                {settingsTab === 'appearance' && <AppearanceManager settings={uiThemeSettings} effectiveLightDark={effectiveLightDark} onSave={saveUiThemeSettings} token={token} />}
+                                {settingsTab === 'site' && (
+                                    <SiteSettings
+                                        config={siteConfig}
+                                        onSaveContent={persistSiteConfig}
+                                        settings={uiThemeSettings}
+                                        effectiveLightDark={effectiveLightDark}
+                                        onSaveAppearance={saveUiThemeSettings}
+                                        token={token}
+                                    />
+                                )}
                                 {settingsTab === 'database' && <DatabaseManager token={token} />}
                                 {settingsTab === 'account-api' && <AccountManagementApiManager token={token} onBindingsChange={refreshCompetitionBindings} />}
                                 </Suspense>

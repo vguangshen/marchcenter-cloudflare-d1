@@ -1,6 +1,7 @@
 import express from '../compat/express.js';
 import db from '../config/db.js';
 import { authMiddleware, adminOnly } from '../middleware/auth.js';
+import { removeObsoleteSiteConfigFields } from '../../src/utils/siteConfigCompatibility.js';
 
 const router = express.Router();
 
@@ -181,6 +182,7 @@ router.get('/', async (req, res) => {
                 config = value;
             }
         }
+        config = removeObsoleteSiteConfigFields(config);
 
         // 壁纸被选中时附带内容版本（content_hash）与主题色（theme_accent，
         // 落库时已计算）。版本即内容指纹：新上传 / 未来同 ID 替换内容
@@ -217,9 +219,8 @@ router.get('/', async (req, res) => {
 
 // 保存全局配置 (需要管理员权限，这里复用 authMiddleware)
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
-    const newConfig = req.body;
-
     try {
+        const newConfig = removeObsoleteSiteConfigFields(req.body);
         const serializedConfig = validateSiteConfig(newConfig);
         // 使用 SQLite ON CONFLICT 实现“有则更新，无则插入”
         const query = `

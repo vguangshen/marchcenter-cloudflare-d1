@@ -845,6 +845,52 @@ test('sending a page of gifts produces one distinct, compact gift per recipient'
     } finally { await page.close(); }
 });
 
+test('site settings keeps a copy draft while appearance is saved and preserves both changes', async () => {
+    const page = await browser.newPage();
+    try {
+        const readSiteWrites = () => page.evaluate(() => window.__calls
+            .filter(call => call.method === 'POST' && call.url === '/config/site')
+            .map(call => call.body));
+        await page.goto(`${origin}/?mode=maintenance`);
+        await page.getByRole('button', { name: '系统工具', exact: true }).click();
+
+        const sidebar = page.locator('.settings-shell > aside');
+        await sidebar.getByRole('button', { name: '站点设置', exact: true }).click();
+        assert.equal(await sidebar.getByRole('button', { name: '全局文案', exact: true }).count(), 0);
+        assert.equal(await sidebar.getByRole('button', { name: '界面外观', exact: true }).count(), 0);
+        const sidebarLabels = (await sidebar.getByRole('button').allTextContents()).map(label => label.trim());
+        const accessConfigIndex = sidebarLabels.indexOf('免密登录配置');
+        assert.deepEqual(sidebarLabels.slice(accessConfigIndex, accessConfigIndex + 3), [
+            '免密登录配置', '账号管理 API', '数据库配置'
+        ]);
+
+        const copyTab = page.getByRole('button', { name: '全局文案', exact: true });
+        const appearanceTab = page.getByRole('button', { name: '界面外观', exact: true });
+        await copyTab.click();
+        const welcomeEditor = page.getByRole('textbox', { name: /显示文案/ });
+        const initialWelcome = await welcomeEditor.inputValue();
+        const draftWelcome = '欢迎访问测试站点';
+        await welcomeEditor.fill(draftWelcome);
+
+        await appearanceTab.click();
+        await page.getByRole('button', { name: 'Dark', exact: true }).click();
+        await page.getByText('当前：深色模式', { exact: true }).waitFor();
+        const appearanceWrites = await readSiteWrites();
+        assert.equal(appearanceWrites.length, 1);
+        assert.equal(appearanceWrites[0].globalTheme.lightDark, 'dark');
+        assert.equal(appearanceWrites[0].loginWelcomeTitle, initialWelcome);
+
+        await copyTab.click();
+        assert.equal(await welcomeEditor.inputValue(), draftWelcome);
+        await page.getByRole('button', { name: '保存并生效', exact: true }).click();
+        await page.getByRole('button', { name: '已保存并生效', exact: true }).waitFor();
+        const writes = await readSiteWrites();
+        assert.equal(writes.length, 2);
+        assert.equal(writes[1].loginWelcomeTitle, draftWelcome);
+        assert.deepEqual(writes[1].globalTheme, appearanceWrites[0].globalTheme);
+    } finally { await page.close(); }
+});
+
 test('80 competition cards share the dashboard clock and skip idle dimension reads', async () => {
     const page = await browser.newPage({ reducedMotion: 'reduce' });
     try {

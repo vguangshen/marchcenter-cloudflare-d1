@@ -164,11 +164,6 @@ const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
 
     return (
         <div className="settings-theme-aware min-w-0 max-w-full space-y-8 animate-in fade-in duration-500 pb-10">
-            <div>
-                <h1 className="text-2xl font-black text-slate-900">界面外观</h1>
-                <p className="mt-1 text-xs text-slate-500">选择一种背景效果，再按需调整详细内容</p>
-            </div>
-
             <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
                 <div className="mb-5">
                     <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
