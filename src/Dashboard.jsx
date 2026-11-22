@@ -19,7 +19,7 @@ import DeleteUserModal from './components/modals/DeleteUserModal';
 
 // --- 配置 ---
 import {
-    DEFAULT_AI_CONFIG, INK_TEXT_SHADOW
+    DEFAULT_AI_CONFIG, DEFAULT_SITE_CONFIG, INK_TEXT_SHADOW
 } from './constants/config';
 import { THEMES } from './constants/themes';
 import { IMMERSIVE_WALLPAPERS } from './constants/immersiveWallpapers';
@@ -790,7 +790,7 @@ export default function Dashboard({ auth, site, appearance }) {
     return (
         <div className={`${isDarkMode ? 'dark' : ''} min-h-screen w-full relative ${
             systemEffects.dashboardCardReveal === false ? 'system-effects-no-card-reveal' : ''
-        }`} style={accentStyle}>
+        } ${uiThemeSettings.effectMode === 'default' ? 'system-background-default' : ''}`} style={accentStyle}>
 
             <FeedbackCenter />
             <div className="fixed left-1/2 top-4 z-[200] w-[min(92vw,560px)] -translate-x-1/2">
@@ -1074,8 +1074,8 @@ export default function Dashboard({ auth, site, appearance }) {
 
                 {shouldShowFooter('dashboard') && (
                     <footer className="py-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000 shrink-0">
-                        <p className={`font-bold ${hasImmersiveWallpaper ? 'text-slate-100' : 'text-slate-400/80 dark:text-slate-600'} ${getFooterSizeClass()}`}>
-                            {siteConfig.footerText || "© 2025 Competition Hub. All rights reserved."}
+                        <p className={`site-footer-copy font-bold ${hasImmersiveWallpaper ? 'text-slate-100' : 'text-slate-400/80 dark:text-slate-600'} ${getFooterSizeClass()}`}>
+                            {siteConfig.footerText || DEFAULT_SITE_CONFIG.footerText}
                         </p>
                     </footer>
                 )}

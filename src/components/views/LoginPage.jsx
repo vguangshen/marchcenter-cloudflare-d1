@@ -3,6 +3,7 @@ import {
     Sun, Moon, Loader2, User, Lock, ArrowRight, CloudRain,
     Eye, EyeOff, X, ShieldCheck, CheckCircle2, Mail, Ban
 } from 'lucide-react';
+import { DEFAULT_SITE_CONFIG } from '../../constants/config';
 import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../constants/themes';
 import { IMMERSIVE_WALLPAPERS } from '../../constants/immersiveWallpapers';
 import { api } from '../../utils/api';
@@ -626,7 +627,7 @@ const LoginPage = ({
                             />
                         </div>
                         <BrandName
-                            name={text('loginBrandName', 'MarchCenter')}
+                            name={text('loginBrandName', DEFAULT_SITE_CONFIG.loginBrandName)}
                             imageUrl={config.loginBrandImageUrl}
                             className={`truncate text-lg font-black tracking-tight ${styles.title}`}
                         />
@@ -681,7 +682,7 @@ const LoginPage = ({
                                 {text('loginWelcomeTitle', '欢迎回来')}
                             </h1>
                             <p className={`mt-1.5 text-xs font-medium ${styles.subtitle}`}>
-                                {text('loginWelcomeSubtitle', '请输入您的 MarchCenter 账号凭证')}
+                                {text('loginWelcomeSubtitle', DEFAULT_SITE_CONFIG.loginWelcomeSubtitle)}
                             </p>
                         </div>
 
@@ -934,8 +935,8 @@ const LoginPage = ({
             </main>
 
             {showFooter && (
-                <footer className={`text-center font-bold ${footerSizeClass} ${Object.hasOwn(IMMERSIVE_WALLPAPERS, immersiveMode) ? 'text-slate-100' : `opacity-80 ${styles.footer}`}`}>
-                    {text('footerText', '© 2026 MarchCenter. All rights reserved.')}
+                <footer className={`site-footer-copy text-center font-bold ${footerSizeClass} ${Object.hasOwn(IMMERSIVE_WALLPAPERS, immersiveMode) ? 'text-slate-100' : `opacity-80 ${styles.footer}`}`}>
+                    {text('footerText', DEFAULT_SITE_CONFIG.footerText)}
                 </footer>
             )}
 
@@ -1091,7 +1092,7 @@ const LoginPage = ({
                                 <div>
                                     <div className="mb-4 pr-8">
                                         <h2 id="register-modal-title" className={`text-lg font-black ${styles.title}`}>
-                                            {text('registerTitle', '创建 MarchCenter 账号')}
+                                            {text('registerTitle', DEFAULT_SITE_CONFIG.registerTitle)}
                                         </h2>
                                         <p className={`mt-1.5 text-xs ${styles.subtitle}`}>
                                             {text('registerSubtitle', '填写以下信息完成新用户注册')}

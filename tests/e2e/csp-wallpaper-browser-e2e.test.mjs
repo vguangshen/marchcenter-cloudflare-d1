@@ -205,6 +205,34 @@ test('CSP 两个来源保持一致', () => {
     assert.doesNotMatch(workerScriptSrc, /unsafe-inline/, 'script-src 禁止使用 unsafe-inline');
 });
 
+test('a cold default scene loads only the confirmed day or night artwork', async () => {
+    const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'reduce' });
+    const { promise: waitForConfig, resolve: confirmConfig } = Promise.withResolvers();
+    try {
+        const page = await context.newPage();
+        const requests = [];
+        page.on('request', request => {
+            const pathname = new URL(request.url()).pathname;
+            if (pathname.startsWith('/default-scene/')) requests.push(pathname);
+        });
+        await page.route('**/api/config/site', async route => {
+            await waitForConfig;
+            await route.fulfill({ json: { globalTheme: { effectMode: 'default', lightDark: 'dark' } } });
+        });
+        await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+        await page.locator('.login-auth-card').waitFor();
+        assert.deepEqual(requests, []);
+
+        confirmConfig();
+        const night = page.locator('.default-scene-image[src$="competition-night.svg"]');
+        await night.evaluate(image => image.decode());
+        assert.deepEqual(requests, ['/default-scene/competition-night.svg']);
+    } finally {
+        confirmConfig();
+        await context.close();
+    }
+});
+
 test('登录按钮日夜主题均以完整边框区域绘制渐变且不平铺', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'reduce' });
     try {

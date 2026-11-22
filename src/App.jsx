@@ -15,7 +15,7 @@ import { useWallpaperPresentation } from './hooks/useWallpaperPresentation';
 import { api } from './utils/api';
 import { getTabToken } from './utils/tabSession';
 import { notify } from './utils/uiFeedback';
-import { CACHED_SITE_CONFIG_KEY, readStoredJson } from './utils/uiThemeSettings';
+import { CACHED_SITE_CONFIG_KEY, normalizeUiThemeSettings, patchUiThemeSettings, readStoredJson } from './utils/uiThemeSettings';
 import { mark, measure } from './utils/startupPerf';
 
 const loadDashboard = () => import('./Dashboard.jsx');
@@ -47,11 +47,15 @@ export default function App() {
         // Each panel edits its own fields. Build the full payload after earlier saves finish.
         const save = siteConfigSaveQueue.current.then(async () => {
             if (!token || getTabToken() !== token) return false;
-            const newConfig = { ...currentSiteConfig.current, ...changes };
             try {
-                await api.post('/config/site', newConfig, { fallback: '站点配置保存失败' });
-                commitSiteConfig(newConfig);
-                localStorage.setItem(CACHED_SITE_CONFIG_KEY, JSON.stringify(newConfig));
+                const current = currentSiteConfig.current;
+                const patch = typeof changes === 'function' ? changes(current) : changes;
+                if (!patch) return false;
+                const newConfig = { ...current, ...patch };
+                const saved = await api.post('/config/site', newConfig, { fallback: '站点配置保存失败' });
+                const savedConfig = normalizeSiteConfig(saved?.config || newConfig);
+                commitSiteConfig(savedConfig);
+                localStorage.setItem(CACHED_SITE_CONFIG_KEY, JSON.stringify(savedConfig));
                 return true;
             } catch (error) {
                 notify(error.message, 'error');
@@ -62,11 +66,16 @@ export default function App() {
         return save;
     }, [commitSiteConfig, token]);
 
-    const saveGlobalTheme = useCallback((settings) => (
-        persistSiteConfig({ globalTheme: settings })
-    ), [persistSiteConfig]);
+    const saveGlobalTheme = useCallback(async (changes, { requiredMode } = {}) => {
+        const saved = await persistSiteConfig(({ globalTheme }) => {
+            const current = normalizeUiThemeSettings(globalTheme);
+            if (requiredMode && current.effectMode !== requiredMode) return null;
+            return { globalTheme: patchUiThemeSettings(current, changes) };
+        });
+        return saved && currentSiteConfig.current.globalTheme;
+    }, [persistSiteConfig]);
     const {
-        uiThemeSettings, effectiveLightDark, isDarkMode,
+        uiThemeSettings, effectiveLightDark, isDarkMode, isGlobalThemeApplied,
         saveUiThemeSettings, handleLoginThemeToggle
     } = useThemeController({
         globalTheme: siteConfig.globalTheme,
@@ -158,6 +167,7 @@ export default function App() {
             currentTheme={currentTheme}
             hasWallpaper={hasWallpaper}
             wallpaperUrl={wallpaperUrl}
+            showDefaultScene={isGlobalThemeApplied && (isSiteConfigReady || Boolean(siteConfigLoadError))}
             suspendImmersive={suspendImmersive}
             onWallpaperLoad={handleWallpaperLoad}
             onWallpaperError={handleWallpaperError}

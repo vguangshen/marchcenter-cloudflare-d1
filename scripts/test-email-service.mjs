@@ -14,16 +14,24 @@ assert.deepEqual(defaults, DEFAULT_EMAIL_SETTINGS);
 
 const normalized = normalizeEmailSettings({
     enabled: true,
-    fromEmail: '  noreply@example.com ',
+    fromEmail: '  noreply@marchcenter.example.com ',
     fromName: '  MarchCenter 通知 ',
-    replyTo: ' support@example.com ',
+    replyTo: ' support@marchcenter.example.com ',
+    verificationSubject: 'MarchCenter 验证码 {{code}}',
+    verificationHeading: '验证 MarchCenter 账号',
+    verificationIntro: '{{username}}，您正在登录 MarchCenter。',
+    verificationFooter: 'MarchCenter 通知中心',
     codeTtlMinutes: 100,
     resendSeconds: 1
 });
 assert.equal(normalized.enabled, true);
-assert.equal(normalized.fromEmail, 'noreply@example.com');
-assert.equal(normalized.fromName, 'MarchCenter 通知');
-assert.equal(normalized.replyTo, 'support@example.com');
+assert.equal(normalized.fromEmail, 'noreply@marchcenter.example.com');
+assert.equal(normalized.fromName, 'mcgo.app 通知');
+assert.equal(normalized.replyTo, 'support@marchcenter.example.com');
+assert.equal(normalized.verificationSubject, 'mcgo.app 验证码 {{code}}');
+assert.equal(normalized.verificationHeading, '验证 mcgo.app 账号');
+assert.equal(normalized.verificationIntro, '{{username}}，您正在登录 mcgo.app。');
+assert.equal(normalized.verificationFooter, 'mcgo.app 通知中心');
 assert.equal(normalized.codeTtlMinutes, 30);
 assert.equal(normalized.resendSeconds, 30);
 assert.equal(normalizeEmailSettings({ provider: 'cloudflare', resendApiKey: 'k' }).provider, 'resend');

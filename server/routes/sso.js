@@ -19,6 +19,7 @@ import { withD1Lock } from '../utils/d1Lock.js';
 import { getEnv, getRuntime, waitUntil } from '../config/runtime.js';
 import { allowedOrigins } from '../config/allowedOrigins.js';
 import { createRequestDeadline } from '../utils/requestDeadline.js';
+import { BRAND_NAME } from '../../src/constants/brand.js';
 import { SSO_LAUNCH_TIMEOUT_MS, SSO_REPAIR_TIMEOUT_MS } from '../../src/constants/ssoTiming.js';
 import {
     isPlatformAccountReady, markPlatformAccountReady
@@ -845,7 +846,7 @@ router.get('/admin-entry/relay/:token', async (req, res) => {
     try {
         const launch = await consumeAdminEntryLaunchToken(req.params.token);
         if (!launch) {
-            return res.status(410).send('管理员登录链接已使用或已过期，请返回 MarchCenter 重试。');
+            return res.status(410).send(`管理员登录链接已使用或已过期，请返回 ${BRAND_NAME} 重试。`);
         }
         const [cards] = await pool.query(
             `SELECT url, sso_method AS ssoMethod,
@@ -870,7 +871,7 @@ router.get('/admin-entry/relay/:token', async (req, res) => {
         return res.status(302).send('');
     } catch (error) {
         console.error('[SSO] 管理员登录中转失败：', error.message);
-        return res.status(500).send('管理员登录中转失败，请返回 MarchCenter 重试。');
+        return res.status(500).send(`管理员登录中转失败，请返回 ${BRAND_NAME} 重试。`);
     }
 });
 

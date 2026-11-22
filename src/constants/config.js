@@ -1,4 +1,5 @@
-import { removeObsoleteSiteConfigFields } from '../utils/siteConfigCompatibility.js';
+import { normalizeStoredSiteConfig } from '../utils/siteConfigCompatibility.js';
+import { BRAND_NAME } from './brand.js';
 
 // Production and preview use the same origin. Vite proxies /api in development;
 // a separate API origin is an explicit build-time option when needed.
@@ -28,9 +29,9 @@ export const DEFAULT_AI_CONFIG = {
 
 // --- 默认站点配置 ---
 export const DEFAULT_SITE_CONFIG = {
-    loginTitle: { text: "MarchCenter", align: "center", fontSize: "2xl" },
+    loginTitle: { text: BRAND_NAME, align: "center", fontSize: "2xl" },
     loginSubtitle: { text: "管理你的竞赛工具和入口", align: "center" },
-    loginBrandName: "MarchCenter",
+    loginBrandName: BRAND_NAME,
     loginBrandImageUrl: '',
     loginVisualTitle: "连接每一场竞赛",
     loginVisualSubtitle: "统一管理竞赛入口、账号与训练进度，让每一次出发都更简单。",
@@ -38,7 +39,7 @@ export const DEFAULT_SITE_CONFIG = {
     loginVisualCenterValue: "🏆",
     loginVisualCenterImageUrl: "",
     loginWelcomeTitle: "欢迎回来",
-    loginWelcomeSubtitle: "请输入您的 MarchCenter 账号凭证",
+    loginWelcomeSubtitle: `请输入您的 ${BRAND_NAME} 账号凭证`,
     loginTextAlign: "left",
     loginPasswordTabText: "密码登录",
     loginCodeTabText: "免密验证码登录",
@@ -63,7 +64,7 @@ export const DEFAULT_SITE_CONFIG = {
     forgotSubtitle: "通过账号绑定邮箱验证身份并设置新密码。",
     forgotInstruction: "验证码将在 10 分钟内有效。",
     forgotCloseText: "重置密码",
-    registerTitle: "创建 MarchCenter 账号",
+    registerTitle: `创建 ${BRAND_NAME} 账号`,
     registerSubtitle: "填写以下信息完成新用户注册",
     registerSubmitText: "立即注册",
     registerSuccessTitle: "账号创建成功",
@@ -72,7 +73,7 @@ export const DEFAULT_SITE_CONFIG = {
     welcomeSubtitle: "准备好开始今天的挑战了吗？",
     dailyQuote: "保持热爱，奔赴下一场挑战。",
     dashboardTextAlign: "left",
-    footerText: "© 2026 MarchCenter. All rights reserved.",
+    footerText: `© 2026 ${BRAND_NAME}. All rights reserved.`,
     footerSize: "small",
     footerVisibility: "all",
     navbarLogoType: 'Trophy',
@@ -87,7 +88,7 @@ export const DEFAULT_SITE_CONFIG = {
 const LEGACY_SEARCH_PLACEHOLDER = '搜索竞赛或考点...';
 
 export function normalizeSiteConfig(value = {}) {
-    const config = value && typeof value === 'object' ? removeObsoleteSiteConfigFields(value) : {};
+    const config = value && typeof value === 'object' ? normalizeStoredSiteConfig(value) : {};
     return {
         ...DEFAULT_SITE_CONFIG,
         ...config,

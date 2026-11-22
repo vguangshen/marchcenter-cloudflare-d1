@@ -1,4 +1,4 @@
-# MarchCenter — Cloudflare Workers + D1
+# mcgo.app — Cloudflare Workers + D1
 
 本地恢复版本与验证范围见 [Cloudflare 版本恢复说明](docs/RECOVERY.md)。
 本轮可靠性、性能与发布流程改进见 [改进记录](docs/IMPROVEMENTS.md)。建议使用 Node.js 24 和 `npm ci` 安装锁定依赖。

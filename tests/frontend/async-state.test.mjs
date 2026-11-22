@@ -891,6 +891,83 @@ test('site settings keeps a copy draft while appearance is saved and preserves b
     } finally { await page.close(); }
 });
 
+test('swiping theme cards saves once and queued choices keep newer appearance settings', async () => {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+        const readWrites = () => page.evaluate(() => window.__calls
+            .filter(call => call.method === 'POST' && call.url === '/config/site')
+            .map(({ body }) => [body.globalTheme.effectMode, body.globalTheme.manualColor, body.globalTheme.lightDark]));
+        const choose = color => page.locator(`.theme-carousel-swatch[data-theme-key=${color}]`).click();
+        const release = () => page.evaluate(() => {
+            const resolve = window.__releaseThemeSave;
+            window.__releaseThemeSave = null;
+            resolve();
+        });
+
+        await page.goto(`${origin}/?mode=maintenance`);
+        // The component fixture omits the app stylesheet. Supply the snapping layout for the mouse gesture.
+        await page.addStyleTag({ content: `
+            .theme-carousel-viewport { width: min(75vw, 660px); overflow: auto hidden; scroll-snap-type: x mandatory; }
+            .theme-carousel-rail { display: flex; width: 100%; }
+            .theme-carousel-rail::before, .theme-carousel-rail::after { content: ''; flex: 0 0 15%; }
+            .theme-carousel-slide { flex: 0 0 70%; min-width: 0; height: 150px; scroll-snap-align: center; }
+            .theme-carousel-art { width: 100%; height: 100px; pointer-events: none; }
+        ` });
+        await page.getByRole('button', { name: '系统工具', exact: true }).click();
+        await page.getByRole('button', { name: '站点设置', exact: true }).click();
+        await page.getByRole('button', { name: '界面外观', exact: true }).click();
+        await page.getByRole('button', { name: /手动选择主色调/ }).click();
+        const viewport = page.locator('.theme-carousel-viewport');
+        await viewport.scrollIntoViewIfNeeded();
+        const initialWrites = await readWrites();
+        assert.equal(initialWrites.length, 1);
+        const [initialMode, initialColor, initialLightDark] = initialWrites[0];
+        assert.equal(initialMode, 'color');
+        assert.equal(initialColor, 'blue');
+
+        await page.evaluate(() => {
+            const original = window.__testApi;
+            window.__holdThemeColor = 'red';
+            window.__testApi = async (method, url, body, ...args) => {
+                const response = await original(method, url, body, ...args);
+                if (method === 'POST' && url === '/config/site' && body.globalTheme.manualColor === window.__holdThemeColor) {
+                    window.__holdThemeColor = null;
+                    await new Promise(resolve => { window.__releaseThemeSave = resolve; });
+                }
+                return response;
+            };
+        });
+
+        const { x, y, width, height } = await viewport.boundingBox();
+        await page.mouse.move(x + width * .75, y + height / 2);
+        await page.mouse.down();
+        await page.mouse.move(x + width * .2, y + height / 2, { steps: 10 });
+        assert.deepEqual(await readWrites(), initialWrites);
+        await page.mouse.up();
+        await page.waitForFunction(() => typeof window.__releaseThemeSave === 'function');
+        assert.deepEqual(await readWrites(), [...initialWrites, ['color', 'red', initialLightDark]]);
+
+        await choose('orange');
+        await choose('yellow');
+        await page.getByRole('button', { name: 'Dark', exact: true }).click();
+        await release();
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('competition_hub_site_config')).globalTheme.manualColor === 'yellow');
+        const afterDark = [...initialWrites, ['color', 'red', initialLightDark], ['color', 'red', 'dark'], ['color', 'yellow', 'dark']];
+        assert.deepEqual(await readWrites(), afterDark);
+
+        await page.evaluate(() => { window.__holdThemeColor = 'green'; });
+        await choose('green');
+        await page.waitForFunction(() => typeof window.__releaseThemeSave === 'function');
+        await choose('teal');
+        await page.getByRole('button', { name: /默认效果/ }).click();
+        await release();
+        await viewport.waitFor({ state: 'detached' });
+        await page.getByRole('button', { name: 'Light', exact: true }).click();
+        await page.getByText('当前：浅色模式', { exact: true }).waitFor();
+        assert.deepEqual(await readWrites(), [...afterDark, ['color', 'green', 'dark'], ['default', 'green', 'dark'], ['default', 'green', 'light']]);
+    } finally { await page.close(); }
+});
+
 test('a wide SVG uploads as a proportional transparent raster image and malformed SVG is rejected', async () => {
     const page = await browser.newPage();
     try {

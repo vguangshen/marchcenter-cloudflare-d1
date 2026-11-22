@@ -1,3 +1,5 @@
+import { BRAND_NAME } from '../constants/brand.js';
+
 function append(parent, tagName, { className = '', text = '' } = {}) {
     const element = parent.ownerDocument.createElement(tagName);
     if (className) element.className = className;
@@ -18,7 +20,7 @@ export function renderLaunchWindow(opened, {
             ? { accent: '#7c3aed', accentEnd: '#4f46e5', soft: '#f5f3ff' }
             : { accent: '#4f46e5', accentEnd: '#2563eb', soft: '#eef2ff' };
     const doc = opened.document;
-    doc.title = `MarchCenter · ${title}`;
+    doc.title = `${BRAND_NAME} · ${title}`;
     doc.documentElement.lang = 'zh-CN';
     doc.documentElement.style.background = palette.soft;
     doc.body.replaceChildren();

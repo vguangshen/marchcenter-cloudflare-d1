@@ -65,6 +65,12 @@ export const normalizeUiThemeSettings = (value) => {
     };
 };
 
+export const patchUiThemeSettings = (settings, changes) => normalizeUiThemeSettings({
+    ...settings,
+    ...changes,
+    systemEffects: { ...settings?.systemEffects, ...changes.systemEffects }
+});
+
 export const mergeLocalLightDark = (globalThemeSettings) => {
     const localTheme = readStoredJson(LOCAL_THEME_PREFERENCE_KEY);
     if (localTheme && ['light', 'dark'].includes(localTheme.lightDark)) {

@@ -3,7 +3,7 @@ import {
     LogOut, Plus, Search, LayoutDashboard, Settings,
     Edit3, Check, Megaphone, LayoutGrid, Bot
 } from 'lucide-react';
-import { GLASS_INPUT } from '../../constants/config';
+import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
 import BrandName from '../branding/BrandName';
@@ -56,8 +56,8 @@ const Navbar = ({
         const brandName = siteConfig?.loginBrandName;
         if (typeof brandName === 'string' && brandName.trim()) return brandName;
         const titleData = siteConfig?.loginTitle;
-        if (!titleData) return "Competition Hub";
-        return typeof titleData === 'object' ? (titleData.text || "Competition Hub") : titleData;
+        if (!titleData) return DEFAULT_SITE_CONFIG.loginBrandName;
+        return typeof titleData === 'object' ? (titleData.text || DEFAULT_SITE_CONFIG.loginBrandName) : titleData;
     };
 
     const getCurrentOrnaments = () => {

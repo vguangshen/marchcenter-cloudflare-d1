@@ -91,7 +91,6 @@ const WallpaperManager = ({ settings, onSave, token }) => {
             await loadWallpapers();
             if (enable || isBingActive) {
                 await onSave({
-                    ...settings,
                     effectMode: 'wallpaper',
                     immersive: null,
                     backgroundMode: 'bing',
@@ -120,7 +119,6 @@ const WallpaperManager = ({ settings, onSave, token }) => {
         }
         setBusy('enable-bing');
         await onSave({
-            ...settings,
             effectMode: 'wallpaper',
             immersive: null,
             backgroundMode: 'bing',
@@ -135,7 +133,6 @@ const WallpaperManager = ({ settings, onSave, token }) => {
     const selectWallpaper = async (wallpaper) => {
         setBusy(`select-${wallpaper.id}`);
         await onSave({
-            ...settings,
             effectMode: 'wallpaper',
             immersive: null,
             backgroundMode: 'wallpaper',
@@ -163,7 +160,6 @@ const WallpaperManager = ({ settings, onSave, token }) => {
             });
             await loadWallpapers();
             await onSave({
-                ...settings,
                 effectMode: 'wallpaper',
                 immersive: null,
                 backgroundMode: 'wallpaper',
@@ -193,7 +189,6 @@ const WallpaperManager = ({ settings, onSave, token }) => {
             await request(`/${wallpaper.id}`, { method: 'DELETE' });
             if (Number(settings.wallpaperId) === Number(wallpaper.id)) {
                 await onSave({
-                    ...settings,
                     effectMode: 'default',
                     immersive: null,
                     backgroundMode: 'default',

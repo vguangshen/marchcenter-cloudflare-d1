@@ -3,6 +3,7 @@ import { allowedOrigins } from '../server/config/allowedOrigins.js';
 import { getEnv, runWithRuntime } from '../server/config/runtime.js';
 import pool from '../server/config/db.js';
 import { createOfficialTokenStore, PAAS_V2_TOKEN_TTL_MS } from '../server/utils/officialCompat/tokenStore.js';
+import { BRAND_NAME } from '../src/constants/brand.js';
 
 import authRoutes from '../server/routes/auth.js';
 import competitionRoutes from '../server/routes/competitions.js';
@@ -255,7 +256,7 @@ export default {
                 return withSecurityHeaders(Response.redirect(`${url.origin}/favicon.svg`, 308), request, env);
             }
 
-            if (!env.ASSETS) return new Response('MarchCenter Worker is running', { status: 200 });
+            if (!env.ASSETS) return new Response(`${BRAND_NAME} Worker is running`, { status: 200 });
             const assetResponse = await env.ASSETS.fetch(request);
             if (assetResponse.status !== 404) {
                 const entryResponse = url.pathname === '/' || url.pathname === '/index.html'

@@ -27,7 +27,7 @@ const DatabaseManager = ({ token }) => {
         try {
             const { blob, headers } = await api.blob('/database/backup', { method: 'POST', fallback: '备份失败' });
             const disposition = headers.get('content-disposition') || '';
-            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `marchcenter-d1-${Date.now()}.sql`;
+            const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `mcgo.app-d1-${Date.now()}.sql`;
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement('a');
             anchor.href = url;

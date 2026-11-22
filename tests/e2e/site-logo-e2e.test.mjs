@@ -57,7 +57,7 @@ test('site config accepts uploaded or https logo URLs and a logo background, and
     const stored = await harness.api('/api/config/site');
     assert.equal(stored.data.navbarLogoUrl, navbarLogoUrl);
     assert.equal(stored.data.navbarLogoBackground, 'none');
-    assert.equal(stored.data.loginBrandName, 'MarchCenter');
+    assert.equal(stored.data.loginBrandName, 'mcgo.app');
     assert.equal(stored.data.loginBrandImageUrl, loginBrandImageUrl);
 
     const brandImage = await harness.miniflare.dispatchFetch(`http://marchcenter.local${loginBrandImageUrl}`);
@@ -79,18 +79,23 @@ test('site config accepts uploaded or https logo URLs and a logo background, and
     assert.equal(badBackground.status, 400);
 });
 
-test('site config can be edited when stored or cached data contains the obsolete loginLogo field', async () => {
+test('site config canonicalizes legacy branding and removes the obsolete loginLogo field', async () => {
     const currentConfig = {
-        loginBrandName: 'MarchCenter',
-        loginTitle: { text: 'MarchCenter', align: 'center', fontSize: '2xl' },
+        loginBrandName: 'mcgo.app',
+        loginTitle: { text: 'mcgo.app', align: 'center', fontSize: '2xl' },
         navbarLogoType: 'custom',
         navbarLogoUrl: 'https://cdn.example.com/current.png',
         navbarLogoBackground: 'none',
         loginLogoType: 'Trophy',
-        customLogoUrl: 'https://cdn.example.com/legacy.png',
+        customLogoUrl: 'https://cdn.example.com/MarchCenter.png',
         globalTheme: { effectMode: 'default', lightDark: 'dark' }
     };
-    const cachedConfig = { ...currentConfig, loginLogo: 'trophy' };
+    const cachedConfig = {
+        ...currentConfig,
+        loginBrandName: 'MarchCenter',
+        loginTitle: { ...currentConfig.loginTitle, text: 'MarchCenter' },
+        loginLogo: 'trophy'
+    };
     await harness.run(
         `INSERT INTO system_configs (config_key, config_value) VALUES (?, ?)
          ON CONFLICT(config_key) DO UPDATE SET config_value = excluded.config_value`,
@@ -106,9 +111,9 @@ test('site config can be edited when stored or cached data contains the obsolete
     assert.equal(saved.status, 200, saved.text);
     assert.deepEqual(saved.data.config, edited);
 
-    const updated = { ...edited, loginWelcomeTitle: '欢迎来到 MarchCenter' };
+    const updated = { ...edited, loginWelcomeTitle: '欢迎来到 mcgo.app' };
     const savedFromCache = await harness.api('/api/config/site', {
-        body: { ...updated, loginLogo: cachedConfig.loginLogo }
+        body: { ...updated, loginWelcomeTitle: '欢迎来到 MarchCenter', loginLogo: cachedConfig.loginLogo }
     });
     assert.equal(savedFromCache.status, 200, savedFromCache.text);
     assert.deepEqual(savedFromCache.data.config, updated);

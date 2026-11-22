@@ -55,7 +55,7 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
 
     if (!isOpen) return null;
     const username = typeof user?.username === 'string' ? user.username : '';
-    const displayName = username || 'MarchCenter 用户';
+    const displayName = username || 'mcgo.app 用户';
     const avatarInitial = Array.from(displayName.trim())[0]?.toUpperCase() || 'M';
     const changed = draft.avatarDataUrl !== profileDraft(user).avatarDataUrl;
     const setAvatar = value => { setDraft({ avatarDataUrl: value }); setError(''); };
@@ -182,7 +182,7 @@ export default function ProfileModal({ isOpen, onClose, onSaved, user }) {
                                 </div>
                             </section>
                             <section className="rounded-2xl border border-violet-100 bg-violet-50/45 p-4 dark:border-violet-900/60 dark:bg-violet-950/20">
-                                <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="rounded-xl bg-violet-100 p-2 text-violet-600 dark:bg-violet-950/70 dark:text-violet-300"><KeyRound className="h-4 w-4" /></div><div><h3 className="text-sm font-black text-slate-800 dark:text-white">登录密码</h3><p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">定期更新密码，保护您的 MarchCenter 账号。</p></div></div><button type="button" onClick={() => setShowPassword(value => !value)} className="mc-button mc-button--ghost mc-button--compact !px-2 !text-[11px]">{showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}{showPassword ? '隐藏密码' : '显示密码'}</button></div>
+                                <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="rounded-xl bg-violet-100 p-2 text-violet-600 dark:bg-violet-950/70 dark:text-violet-300"><KeyRound className="h-4 w-4" /></div><div><h3 className="text-sm font-black text-slate-800 dark:text-white">登录密码</h3><p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">定期更新密码，保护您的 mcgo.app 账号。</p></div></div><button type="button" onClick={() => setShowPassword(value => !value)} className="mc-button mc-button--ghost mc-button--compact !px-2 !text-[11px]">{showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}{showPassword ? '隐藏密码' : '显示密码'}</button></div>
                                 {user?.passwordChangeRecommended ? <div className="mc-alert mc-alert--warning mt-4 !p-3 text-[11px]">当前账号使用的是管理员设置的密码，可直接设置新的登录密码。</div> : <label className="mt-4 block"><span className="mc-field-label">当前密码</span><input type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={currentPassword} onChange={event => { setCurrentPassword(event.target.value); setPasswordError(''); }} className="mc-input" placeholder="输入当前登录密码" /></label>}
                                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                                     <label className="block"><span className="mc-field-label">新密码</span><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={event => { setPassword(event.target.value); setPasswordError(''); setPasswordSuccess(''); }} className="mc-input" placeholder="6–128 位" /></label>

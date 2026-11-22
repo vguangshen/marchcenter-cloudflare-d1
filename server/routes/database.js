@@ -1,6 +1,7 @@
 import express from '../compat/express.js';
 import pool, { getDatabaseConfig, testDatabaseConfig } from '../config/db.js';
 import { authMiddleware, adminOnly } from '../middleware/auth.js';
+import { BRAND_NAME } from '../../src/constants/brand.js';
 
 const router = express.Router();
 
@@ -87,7 +88,7 @@ router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
             }
             chunks.push(chunk);
         };
-        append('-- MarchCenter Cloudflare D1 data backup\n');
+        append(`-- ${BRAND_NAME} Cloudflare D1 data backup\n`);
         append('-- Apply all D1 migrations before importing this file.\n');
         append('-- Import: npx wrangler d1 execute DB --remote --file <this file>\n');
         append('-- Wallpaper and cover images live in R2 and are not included.\n');
@@ -128,7 +129,7 @@ router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
         const output = chunks.join('');
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         res.setHeader('Content-Type', 'application/sql; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="marchcenter-d1-data-${timestamp}.sql"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${BRAND_NAME}-d1-data-${timestamp}.sql"`);
         res.setHeader('Cache-Control', 'no-store');
         res.send(output);
     } catch (error) {

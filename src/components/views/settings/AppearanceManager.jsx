@@ -1,20 +1,22 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import {
-    Check, ChevronLeft, ChevronRight, Cloud, Moon, Palette, PartyPopper,
+    Check, Cloud, Moon, Palette, PartyPopper,
     Snowflake, Sparkles, Sun, SunMoon, Ghost, Ship, CircleDot, Umbrella,
     MonitorPlay, LayoutDashboard, PanelTop, Image
 } from 'lucide-react';
-import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../../constants/themes';
+import { DEFAULT_SYSTEM_EFFECTS } from '../../../constants/themes';
+import { DEFAULT_SCENE_WALLPAPERS } from '../../../constants/defaultSceneWallpapers';
 import { IMMERSIVE_WALLPAPERS } from '../../../constants/immersiveWallpapers';
 import WallpaperManager from './WallpaperManager';
+import ThemeCarousel from './ThemeCarousel';
 
 const EFFECT_MODES = [
     {
         id: 'default',
         icon: Sparkles,
         label: '默认效果',
-        desc: '纯净无色高级质感',
-        accent: 'from-slate-600 to-slate-900'
+        desc: '静态竞赛场景',
+        accent: 'from-indigo-500 to-slate-800'
     },
     {
         id: 'immersive',
@@ -34,7 +36,7 @@ const EFFECT_MODES = [
         id: 'color',
         icon: Palette,
         label: '手动选择主色调',
-        desc: '彩色轨迹与柔光网格',
+        desc: '滑动切换竞赛主题',
         accent: 'from-amber-400 to-rose-500'
     }
 ];
@@ -49,19 +51,9 @@ const IMMERSIVE_OPTIONS = [
     { id: 'qingming', icon: Umbrella, label: '清明雨上', desc: '烟雨纸鸢', color: 'gray' }
 ];
 
-const COLOR_OPTIONS = [
-    { key: 'blue', label: '科技蓝', desc: '清晰可靠' },
-    { key: 'red', label: '祥瑞红', desc: '醒目热烈' },
-    { key: 'orange', label: '活力橙', desc: '明快有力' },
-    { key: 'yellow', label: '明亮黄', desc: '温暖明亮' },
-    { key: 'green', label: '清新绿', desc: '自然平衡' },
-    { key: 'teal', label: '翡翠青', desc: '沉静清爽' },
-    { key: 'cyan', label: '天际蓝', desc: '轻盈通透' },
-    { key: 'indigo', label: '静谧蓝', desc: '深邃专注' },
-    { key: 'purple', label: '梦幻紫', desc: '灵动想象' },
-    { key: 'pink', label: '浪漫粉', desc: '柔和亲切' },
-    { key: 'rose', label: '玫瑰红', desc: '鲜明热烈' },
-    { key: 'slate', label: '水墨灰', desc: '克制稳重' }
+const DEFAULT_SCENE_PREVIEWS = [
+    { mode: 'light', label: '晨光', icon: Sun },
+    { mode: 'dark', label: '夜赛', icon: Moon }
 ];
 
 const SYSTEM_EFFECT_OPTIONS = [
@@ -92,14 +84,13 @@ const SYSTEM_EFFECT_OPTIONS = [
 ];
 
 const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
-    const colorScrollerRef = useRef(null);
     const effectMode = settings.effectMode || 'default';
     const systemEffects = {
         ...DEFAULT_SYSTEM_EFFECTS,
         ...(settings.systemEffects || {})
     };
 
-    const updateSettings = (patch) => onSave({ ...settings, ...patch });
+    const updateSettings = (patch) => onSave(patch);
 
     const selectEffectMode = (mode) => {
         if (mode === 'default') {
@@ -140,24 +131,13 @@ const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
             immersive: null,
             backgroundMode: 'default',
             wallpaperId: null,
-            themeAccent: null,
-            manualColor: THEMES[settings.manualColor] ? settings.manualColor : 'blue'
-        });
-    };
-
-    const scrollColors = (direction) => {
-        const scroller = colorScrollerRef.current;
-        if (!scroller) return;
-        scroller.scrollBy({
-            left: direction * Math.max(280, scroller.clientWidth * 0.72),
-            behavior: 'smooth'
+            themeAccent: null
         });
     };
 
     const toggleSystemEffect = (key) => {
         updateSettings({
             systemEffects: {
-                ...systemEffects,
                 [key]: systemEffects[key] === false
             }
         });
@@ -208,39 +188,36 @@ const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
 
             {effectMode === 'default' && (
                 <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-top-2">
-                    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)] lg:items-center">
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)] lg:items-center">
                         <div>
-                            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-600">
-                                <Sparkles className="h-3.5 w-3.5"/> PURE INTERFACE
-                            </span>
-                            <h3 className="mt-4 text-lg font-black text-slate-900">纯净登录 · 雨后矢量主页</h3>
+                            <h3 className="text-lg font-black text-slate-900">赛场天际线</h3>
                             <p className="mt-2 max-w-xl text-xs leading-6 text-slate-500">
-                                登录页保持克制的黑白灰质感；进入主页后降低纯白亮度，
-                                以静态玻璃分区、细线网格、水珠和雨痕衬托竞赛卡片，不使用循环动画。
+                                赛道通向远处的竞赛场馆。登录页和主页会随明暗模式切换，分别呈现晨光与夜赛。
                             </p>
                         </div>
-                        <div className="grid h-44 grid-cols-2 gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-2">
-                            <div className="neutral-effect-preview relative overflow-hidden rounded-xl border border-white/80 p-3">
-                                <span className="text-[8px] font-black text-slate-500">登录页</span>
-                                <div className="absolute inset-x-3 bottom-3 top-8 overflow-hidden rounded-lg border border-slate-200 bg-white/65 shadow-lg">
-                                    <div className="grid h-full grid-cols-2">
-                                        <div className="border-r border-slate-200 bg-slate-50/80"/>
-                                        <div className="p-2">
-                                            <div className="h-1.5 w-10 rounded-full bg-slate-700"/>
-                                            <div className="mt-2 h-4 rounded bg-white"/>
-                                            <div className="mt-1.5 h-4 rounded bg-slate-900"/>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="after-rain-effect-preview relative overflow-hidden rounded-xl border border-white/80 p-3">
-                                <span className="relative z-10 text-[8px] font-black text-slate-600">登录后主页</span>
-                                <div className="after-rain-effect-preview__droplets absolute inset-0"/>
-                                <div className="absolute inset-x-3 bottom-3 top-8 grid grid-cols-2 gap-2">
-                                    <div className="rounded-lg border border-white/75 bg-white/52 shadow-lg backdrop-blur-md"/>
-                                    <div className="rounded-lg border border-white/75 bg-white/52 shadow-lg backdrop-blur-md"/>
-                                </div>
-                            </div>
+                        <div className="grid min-w-0 grid-cols-2 gap-2">
+                            {DEFAULT_SCENE_PREVIEWS.map(({ mode, label, icon: Icon }) => {
+                                const active = effectiveLightDark === mode;
+                                return (
+                                    <figure
+                                        key={mode}
+                                        aria-current={active || undefined}
+                                        className={`min-w-0 overflow-hidden rounded-xl border bg-slate-50 ${active ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'}`}
+                                    >
+                                        <img
+                                            src={DEFAULT_SCENE_WALLPAPERS[mode]}
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
+                                            className="aspect-video w-full object-cover"
+                                        />
+                                        <figcaption className="flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold text-slate-600">
+                                            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true"/>
+                                            {label}
+                                        </figcaption>
+                                    </figure>
+                                );
+                            })}
                         </div>
                     </div>
                 </section>
@@ -293,77 +270,11 @@ const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
             )}
 
             {effectMode === 'color' && (
-                <section className="min-w-0 max-w-full overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-top-2">
-                    <div
-                        className="accent-effect-preview relative mb-6 h-40 overflow-hidden rounded-2xl border border-white/70"
-                        style={{ '--system-accent-rgb': (THEMES[settings.manualColor] || THEMES.blue).rgb }}
-                    >
-                        <div className="accent-effect-preview__grid absolute inset-0"/>
-                        <div className="accent-effect-preview__orbit accent-effect-preview__orbit--one"/>
-                        <div className="accent-effect-preview__orbit accent-effect-preview__orbit--two"/>
-                        <div className="accent-effect-preview__node accent-effect-preview__node--one"/>
-                        <div className="accent-effect-preview__node accent-effect-preview__node--two"/>
-                        <div className="accent-effect-preview__node accent-effect-preview__node--three"/>
-                        <div className="absolute bottom-5 left-5 right-5 rounded-xl border border-white/70 bg-white/45 p-3 shadow-lg backdrop-blur-md">
-                            <div className="h-2 w-24 rounded-full bg-slate-800/80"/>
-                            <div className="mt-2 h-1.5 w-40 max-w-full rounded-full bg-slate-400/40"/>
-                        </div>
-                    </div>
-                    <div className="mb-5 flex items-center justify-between gap-4">
-                        <div>
-                            <h3 className="text-sm font-bold text-slate-800">选择系统主色调</h3>
-                            <p className="mt-1 text-[10px] text-slate-400">横向滑动，或使用右侧按钮翻页</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => scrollColors(-1)}
-                                aria-label="向左查看更多色调"
-                                className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600 active:scale-95"
-                            >
-                                <ChevronLeft className="h-4 w-4"/>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => scrollColors(1)}
-                                aria-label="向右查看更多色调"
-                                className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-white shadow-sm transition hover:bg-indigo-600 active:scale-95"
-                            >
-                                <ChevronRight className="h-4 w-4"/>
-                            </button>
-                        </div>
-                    </div>
-                    <div
-                        ref={colorScrollerRef}
-                        className="theme-color-scroller flex w-full min-w-0 max-w-full snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-3 pt-2 scroll-smooth"
-                    >
-                        {COLOR_OPTIONS.map((option) => {
-                            const active = settings.manualColor === option.key;
-                            const theme = THEMES[option.key] || THEMES.blue;
-                            return (
-                                <button
-                                    key={option.key}
-                                    type="button"
-                                    onClick={() => updateSettings({ manualColor: option.key })}
-                                    aria-pressed={active}
-                                    className="group flex w-[92px] min-w-[92px] snap-start flex-col items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-slate-50"
-                                >
-                                    <span className={`relative grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br ${theme.gradient} shadow-sm transition group-hover:scale-105 group-hover:shadow-md ${
-                                        active ? 'scale-110 ring-4 ring-slate-200 ring-offset-2 shadow-lg' : ''
-                                    }`}>
-                                        {active && <Check className="h-6 w-6 text-white drop-shadow-md"/>}
-                                    </span>
-                                    <span className="min-w-0 text-center">
-                                        <span className={`block text-xs font-bold ${active ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`}>
-                                            {option.label}
-                                        </span>
-                                        <span className="mt-0.5 block truncate text-[9px] text-slate-400">{option.desc}</span>
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </section>
+                <ThemeCarousel
+                    value={settings.manualColor}
+                    dark={effectiveLightDark === 'dark'}
+                    onChange={manualColor => onSave({ manualColor }, { requiredMode: 'color' })}
+                />
             )}
 
             <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">

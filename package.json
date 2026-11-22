@@ -4,7 +4,7 @@
   "private": true,
   "engines": { "node": ">=22" },
   "type": "module",
-  "description": "MarchCenter on Cloudflare Workers, Static Assets and D1",
+  "description": "mcgo.app on Cloudflare Workers, Static Assets and D1",
   "scripts": {
     "dev": "vite",
     "build": "npm run lint && vite build",

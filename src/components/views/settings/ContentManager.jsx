@@ -23,7 +23,7 @@ const VISUAL_CENTER_PRESETS = [
 const FIELD_META = {
     loginBrandName: ['品牌名称', '登录页顶部栏及登录后导航栏显示的品牌名称。'],
     loginVisualTitle: ['左侧视觉主标题', '登录卡片左侧插画下方的核心标语。'],
-    loginVisualSubtitle: ['左侧视觉说明', '用于解释 MarchCenter 的统一入口能力。', true],
+    loginVisualSubtitle: ['左侧视觉说明', '用于说明 mcgo.app 的统一入口功能。', true],
     loginWelcomeTitle: ['欢迎标题', '登录表单顶部的第一层标题。'],
     loginWelcomeSubtitle: ['欢迎说明', '欢迎标题下方的账号登录提示。'],
     loginPasswordTabText: ['密码登录标签', '密码登录方式的页签名称。'],
@@ -249,7 +249,7 @@ function LoginCardPreview({ data, selectedKey, selectField, codeMode = false }) 
             <div className="content-preview-form">
                 <div>
                     <EditableText field="loginWelcomeTitle" value={get('loginWelcomeTitle', '欢迎回来')} selected={selectedKey === 'loginWelcomeTitle'} onSelect={selectField} as="h2" className="content-form-title" />
-                    <EditableText field="loginWelcomeSubtitle" value={get('loginWelcomeSubtitle', '请输入您的 MarchCenter 账号凭证')} selected={selectedKey === 'loginWelcomeSubtitle'} onSelect={selectField} className="content-form-subtitle" />
+                    <EditableText field="loginWelcomeSubtitle" value={get('loginWelcomeSubtitle', DEFAULT_SITE_CONFIG.loginWelcomeSubtitle)} selected={selectedKey === 'loginWelcomeSubtitle'} onSelect={selectField} className="content-form-subtitle" />
                 </div>
 
                 <div className="content-preview-tabs">
@@ -388,7 +388,7 @@ function ModalPreview({ type, data, selectedKey, selectField, modalState = 'form
                     {isForgot && <div className="content-modal-icon"><LockKeyhole /></div>}
                     <EditableText
                         field={isForgot ? 'forgotTitle' : 'registerTitle'}
-                        value={get(isForgot ? 'forgotTitle' : 'registerTitle', isForgot ? '重置您的访问密码' : '创建 MarchCenter 账号')}
+                        value={get(isForgot ? 'forgotTitle' : 'registerTitle', isForgot ? '重置您的访问密码' : DEFAULT_SITE_CONFIG.registerTitle)}
                         selected={selectedKey === (isForgot ? 'forgotTitle' : 'registerTitle')}
                         onSelect={selectField}
                         as="h3"
@@ -468,7 +468,7 @@ function DashboardPreview({ data, selectedKey, selectField }) {
 
 function FooterScenePreview({ data, selectedKey, selectField }) {
     const visibility = data.footerVisibility || 'all';
-    const footerText = textValue(data.footerText, '© 2026 MarchCenter. All rights reserved.');
+    const footerText = textValue(data.footerText, DEFAULT_SITE_CONFIG.footerText);
     const pages = [
         { id: 'login', label: '登录页', visible: visibility === 'all' || visibility === 'login_only' },
         { id: 'dashboard', label: '登录后首页', visible: visibility === 'all' || visibility === 'dashboard_only' }
@@ -627,7 +627,7 @@ const ContentManager = ({ config, onSave }) => {
     const handleSave = async () => {
         const changes = { ...editedFields };
         if (Object.hasOwn(changes, 'loginBrandName')) {
-            const brandName = textValue(changes.loginBrandName, 'MarchCenter');
+            const brandName = textValue(changes.loginBrandName, DEFAULT_SITE_CONFIG.loginBrandName);
             changes.loginBrandName = brandName;
             changes.loginTitle = typeof formData.loginTitle === 'object'
                 ? { ...formData.loginTitle, text: brandName }

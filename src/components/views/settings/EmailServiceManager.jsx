@@ -3,19 +3,20 @@ import {
     AlertTriangle, AtSign, CheckCircle2, Clock3, Loader2,
     KeyRound, Mail, RefreshCw, Save, Send, Eye, EyeOff
 } from 'lucide-react';
+import { BRAND_NAME } from '../../../constants/brand';
 import { api } from '../../../utils/api';
 
 const DEFAULT_SETTINGS = {
     provider: 'resend',
     enabled: false,
     fromEmail: '',
-    fromName: 'MarchCenter',
+    fromName: BRAND_NAME,
     replyTo: '',
     resendApiKey: '',
     hasResendApiKey: false,
-    verificationSubject: 'MarchCenter 登录验证码',
-    verificationHeading: 'MarchCenter 登录验证码',
-    verificationIntro: '您正在登录 MarchCenter，请使用下方验证码完成身份校验。',
+    verificationSubject: `${BRAND_NAME} 登录验证码`,
+    verificationHeading: `${BRAND_NAME} 登录验证码`,
+    verificationIntro: `您正在登录 ${BRAND_NAME}，请使用下方验证码完成身份校验。`,
     verificationFooter: '如非本人操作，请忽略本邮件。请勿将验证码告知他人。',
     codeTtlMinutes: 10,
     resendSeconds: 60
@@ -227,7 +228,7 @@ const EmailServiceManager = () => {
                             <input type="email" className="account-api-input" value={settings.fromEmail} onChange={event => update('fromEmail', event.target.value)} placeholder="noreply@mail.mcgo.app" />
                         </Field>
                         <Field label="发件人名称">
-                            <input className="account-api-input" value={settings.fromName} onChange={event => update('fromName', event.target.value)} placeholder="MarchCenter" />
+                            <input className="account-api-input" value={settings.fromName} onChange={event => update('fromName', event.target.value)} placeholder={BRAND_NAME} />
                         </Field>
                         <Field label="回复邮箱" hint="可留空；留空时邮件不设置 Reply-To">
                             <input type="email" className="account-api-input" value={settings.replyTo} onChange={event => update('replyTo', event.target.value)} placeholder="support@your-domain.com" />

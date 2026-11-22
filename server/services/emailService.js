@@ -1,18 +1,19 @@
 import pool from '../config/db.js';
 import { decodeStoredConfig, encodeStoredConfig } from '../utils/configSecrets.js';
+import { BRAND_NAME, normalizeBrandText } from '../../src/constants/brand.js';
 
 export const EMAIL_CONFIG_KEY = 'email_service';
 export const DEFAULT_EMAIL_SETTINGS = Object.freeze({
     provider: 'resend',
     enabled: false,
     fromEmail: '',
-    fromName: 'MarchCenter',
+    fromName: BRAND_NAME,
     replyTo: '',
     resendApiKey: '',
     hasResendApiKey: false,
-    verificationSubject: 'MarchCenter 登录验证码',
-    verificationHeading: 'MarchCenter 登录验证码',
-    verificationIntro: '您正在登录 MarchCenter，请使用下方验证码完成身份校验。',
+    verificationSubject: `${BRAND_NAME} 登录验证码`,
+    verificationHeading: `${BRAND_NAME} 登录验证码`,
+    verificationIntro: `您正在登录 ${BRAND_NAME}，请使用下方验证码完成身份校验。`,
     verificationFooter: '如非本人操作，请忽略本邮件。请勿将验证码告知他人。',
     codeTtlMinutes: 10,
     resendSeconds: 60
@@ -23,6 +24,9 @@ const clampInteger = (value, fallback, min, max) => {
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
 };
 
+const normalizeTemplateText = (value, fallback, maxLength) =>
+    normalizeBrandText(String(value || fallback).trim()).slice(0, maxLength) || fallback;
+
 export function normalizeEmailSettings(value = {}) {
     const settings = value && typeof value === 'object' ? value : {};
     const resendApiKey = String(settings.resendApiKey || '').trim().slice(0, 512);
@@ -30,14 +34,14 @@ export function normalizeEmailSettings(value = {}) {
         provider: 'resend',
         enabled: Boolean(settings.enabled),
         fromEmail: String(settings.fromEmail || '').trim().slice(0, 254),
-        fromName: String(settings.fromName || DEFAULT_EMAIL_SETTINGS.fromName).trim().slice(0, 80) || DEFAULT_EMAIL_SETTINGS.fromName,
+        fromName: normalizeTemplateText(settings.fromName, DEFAULT_EMAIL_SETTINGS.fromName, 80),
         replyTo: String(settings.replyTo || '').trim().slice(0, 254),
         resendApiKey,
         hasResendApiKey: Boolean(resendApiKey || settings.hasResendApiKey),
-        verificationSubject: String(settings.verificationSubject || DEFAULT_EMAIL_SETTINGS.verificationSubject).trim().slice(0, 160) || DEFAULT_EMAIL_SETTINGS.verificationSubject,
-        verificationHeading: String(settings.verificationHeading || DEFAULT_EMAIL_SETTINGS.verificationHeading).trim().slice(0, 120) || DEFAULT_EMAIL_SETTINGS.verificationHeading,
-        verificationIntro: String(settings.verificationIntro || DEFAULT_EMAIL_SETTINGS.verificationIntro).trim().slice(0, 500) || DEFAULT_EMAIL_SETTINGS.verificationIntro,
-        verificationFooter: String(settings.verificationFooter || DEFAULT_EMAIL_SETTINGS.verificationFooter).trim().slice(0, 500) || DEFAULT_EMAIL_SETTINGS.verificationFooter,
+        verificationSubject: normalizeTemplateText(settings.verificationSubject, DEFAULT_EMAIL_SETTINGS.verificationSubject, 160),
+        verificationHeading: normalizeTemplateText(settings.verificationHeading, DEFAULT_EMAIL_SETTINGS.verificationHeading, 120),
+        verificationIntro: normalizeTemplateText(settings.verificationIntro, DEFAULT_EMAIL_SETTINGS.verificationIntro, 500),
+        verificationFooter: normalizeTemplateText(settings.verificationFooter, DEFAULT_EMAIL_SETTINGS.verificationFooter, 500),
         codeTtlMinutes: clampInteger(settings.codeTtlMinutes, DEFAULT_EMAIL_SETTINGS.codeTtlMinutes, 5, 30),
         resendSeconds: clampInteger(settings.resendSeconds, DEFAULT_EMAIL_SETTINGS.resendSeconds, 30, 300)
     };
@@ -245,9 +249,9 @@ export async function sendRegistrationCodeEmail({ settings, to, username, code }
         to,
         username,
         code,
-        subject: 'MarchCenter 注册验证码',
+        subject: `${BRAND_NAME} 注册验证码`,
         heading: '验证您的注册邮箱',
-        intro: '您正在创建 MarchCenter 教师账号，请使用下方验证码完成邮箱验证。',
+        intro: `您正在创建 ${BRAND_NAME} 教师账号，请使用下方验证码完成邮箱验证。`,
         footer: `验证码在 ${normalized.codeTtlMinutes} 分钟内有效。如非本人操作，请忽略本邮件。`
     }));
 }
@@ -258,9 +262,9 @@ export async function sendPasswordResetCodeEmail({ settings, to, username, code 
         to,
         username,
         code,
-        subject: 'MarchCenter 密码重置验证码',
+        subject: `${BRAND_NAME} 密码重置验证码`,
         heading: '重置您的访问密码',
-        intro: '您正在通过绑定邮箱重置 MarchCenter 访问密码，请使用下方验证码完成身份校验。',
+        intro: `您正在通过绑定邮箱重置 ${BRAND_NAME} 访问密码，请使用下方验证码完成身份校验。`,
         footer: `验证码在 ${normalized.codeTtlMinutes} 分钟内有效。如非本人操作，请忽略本邮件并及时检查账号安全。`
     }));
 }
@@ -269,9 +273,9 @@ export async function sendTestEmail({ settings, to }) {
     const normalized = normalizeEmailSettings(settings);
     return sendWithResend(normalized, emailPayload(normalized, {
         to,
-        subject: 'MarchCenter 邮件服务测试',
+        subject: `${BRAND_NAME} 邮件服务测试`,
         heading: '邮件服务连接成功',
-        intro: '这是一封由 MarchCenter 系统管理后台发送的测试邮件。',
+        intro: `这是一封由 ${BRAND_NAME} 系统管理后台发送的测试邮件。`,
         footer: '收到此邮件表示邮件服务、发件域名与当前配置均可正常工作。'
     }));
 }
