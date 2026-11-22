@@ -476,3 +476,38 @@ for (const [name, corruptTheme] of [
         await context.close();
     });
 }
+
+test('the default brand renders as a theme-aware vector wordmark with a one-time entrance', async () => {
+    for (const scheme of ['light', 'dark']) {
+        const context = await browser.newContext({ viewport: { width: 1200, height: 800 }, colorScheme: scheme });
+        try {
+            const page = await context.newPage();
+            await page.route('**/api/config/site', route => route.fulfill({ json: { loginBrandName: 'mcgo.app', globalTheme: { effectMode: 'default', lightDark: scheme } } }));
+            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+            const brand = page.locator('.login-navbar-brand');
+            const wordmark = brand.locator('svg.brand-wordmark');
+            await wordmark.waitFor();
+            assert.equal(await wordmark.getAttribute('aria-label'), 'mcgo.app');
+            assert.match(await brand.getAttribute('class'), /brand-intro/, 'the first render plays the entrance');
+            const parts = await wordmark.evaluate(svg => [...svg.querySelectorAll('.brand-wordmark-part')].map(part => ({
+                id: part.getAttribute('class').match(/--(\w+)$/)[1],
+                pathLength: part.querySelector('path').getAttribute('d').length,
+                animations: part.getAnimations().map(animation => animation.animationName)
+            })));
+            assert.deepEqual(parts.map(part => part.id), ['mc', 'go', 'app']);
+            for (const part of parts) {
+                assert.ok(part.pathLength > 1000, `${part.id} has traced outlines`);
+                assert.equal(part.animations.length, 1, `${part.id} makes an entrance`);
+            }
+            const mcTop = await wordmark.evaluate(svg => getComputedStyle(svg.querySelector('.brand-wordmark-stop--mc-top')).stopColor);
+            if (scheme === 'dark') {
+                const [r, g, b] = mcTop.match(/\d+/g).map(Number);
+                assert.ok(0.299 * r + 0.587 * g + 0.114 * b > 200, `"mc" is light in dark mode (${mcTop})`);
+            } else {
+                assert.equal(mcTop, 'rgb(20, 23, 61)', '"mc" keeps the original navy in light mode');
+            }
+        } finally {
+            await context.close();
+        }
+    }
+});

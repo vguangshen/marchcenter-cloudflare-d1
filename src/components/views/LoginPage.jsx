@@ -10,6 +10,7 @@ import { api } from '../../utils/api';
 import { mark, measure, logStartupPerfSummary } from '../../utils/startupPerf';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
 import BrandName from '../branding/BrandName';
+import { useBrandIntro } from '../branding/brandIntro';
 import CdnIndicator from './login/CdnIndicator'; // 👈 确保这个路径正确
 import { inferLoginErrorField, LoginFieldError } from './login/LoginFieldError';
 
@@ -25,6 +26,7 @@ const LoginPage = ({
     onUnlockTransitionEnd,
     systemEffects = DEFAULT_SYSTEM_EFFECTS
 }) => {
+    const brandIntro = useBrandIntro();
     const [activeModal, setActiveModal] = useState(null);
     const [loginMethod, setLoginMethod] = useState('password');
     const [username, setUsername] = useState("");
@@ -627,8 +629,8 @@ const LoginPage = ({
                 ) onUnlockTransitionEnd?.();
             }}>
                 <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-                    <div className="login-navbar-brand flex min-w-0 items-center gap-3">
-                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${brandLogoHasTile(config) ? `bg-gradient-to-tr ${defaultTheme.gradient} shadow-lg ${defaultTheme.shadow}` : ''}`}>
+                    <div className={`login-navbar-brand ${brandIntro ? 'brand-intro' : ''} flex min-w-0 items-center gap-3`}>
+                        <div className={`brand-mark grid h-10 w-10 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${brandLogoHasTile(config) ? `bg-gradient-to-tr ${defaultTheme.gradient} shadow-lg ${defaultTheme.shadow}` : ''}`}>
                             <BrandLogo
                                 type={config.navbarLogoType || 'Trophy'}
                                 url={config.navbarLogoUrl || ''}

@@ -7,6 +7,7 @@ import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
 import BrandName from '../branding/BrandName';
+import { useBrandIntro } from '../branding/brandIntro';
 
 const CHRISTMAS_ORNAMENTS = [{ icon: '🎀', left: '10%', speed: '3.5s', length: 12 }, { icon: '🔔', left: '25%', speed: '4s', length: 16 }, { icon: '🎁', left: '40%', speed: '3s', length: 10 }, { icon: '🧦', left: '55%', speed: '4.5s', length: 18 }, { icon: '🍪', left: '70%', speed: '3.2s', length: 14 }, { icon: '🦌', left: '85%', speed: '3.8s', length: 12 }];
 const LUNAR_ORNAMENTS = [{ icon: '🏮', left: '8%', speed: '4s', length: 20, size: 'text-3xl' }, { icon: '🧧', left: '22%', speed: '3s', length: 10, size: 'text-xl' }, { icon: '🏮', left: '35%', speed: '4.5s', length: 15, size: 'text-2xl' }, { icon: '✨', left: '50%', speed: '3s', length: 8, size: 'text-lg' }, { icon: '🏮', left: '65%', speed: '4s', length: 18, size: 'text-2xl' }, { icon: '🧧', left: '80%', speed: '3.5s', length: 12, size: 'text-xl' }, { icon: '🏮', left: '92%', speed: '5s', length: 22, size: 'text-3xl' }];
@@ -38,6 +39,7 @@ const Navbar = ({
     const navbarTheme = THEMES[activeThemeColor] || THEMES.blue;
 
     const logoTile = brandLogoHasTile(siteConfig);
+    const brandIntro = useBrandIntro();
     const searchPlaceholder = siteConfig?.searchPlaceholder || '搜索竞赛或类目...';
     const renderNavbarLogo = () => {
         const logoType = siteConfig?.navbarLogoType || siteConfig?.loginLogoType || 'Trophy';
@@ -131,13 +133,13 @@ const Navbar = ({
                     {isQingming && <><div className="absolute -top-2 -left-2 text-2xl z-20 filter drop-shadow-sm rotate-[-10deg] opacity-80">🪁</div><div className="absolute -bottom-1 -right-1 text-xl z-20 filter drop-shadow-sm opacity-80">🌧️</div></>}
 
                     {/* Logo */}
-                    <button type="button" className="dashboard-navbar-brand flex min-w-0 items-center gap-3 cursor-pointer group z-10" onClick={() => setActivePage('dashboard')} aria-label="返回竞赛首页">
-                        <div className={`navbar-brand-mark relative flex h-10 w-10 items-center justify-center rounded-xl ${logoTile ? `bg-gradient-to-tr ${navbarTheme.gradient} ${navbarTheme.shadow} shadow-lg` : ''} transition-transform duration-300 group-hover:scale-105`}>
+                    <button type="button" className={`dashboard-navbar-brand ${brandIntro ? 'brand-intro' : ''} flex min-w-0 items-center gap-3 cursor-pointer group z-10`} onClick={() => setActivePage('dashboard')} aria-label="返回竞赛首页">
+                        <div className={`navbar-brand-mark brand-mark relative flex h-10 w-10 items-center justify-center rounded-xl ${logoTile ? `bg-gradient-to-tr ${navbarTheme.gradient} ${navbarTheme.shadow} shadow-lg` : ''} transition-transform duration-300 group-hover:scale-105`}>
                             {renderNavbarLogo()}
                             {isChristmas && <span className="absolute -top-3 -right-2 text-xl filter drop-shadow-sm rotate-12">🎅</span>}
                         </div>
                         <span className="hidden min-w-0 sm:block">
-                            <BrandName name={getSafeTitle()} imageUrl={siteConfig?.loginBrandImageUrl} className={`block truncate bg-clip-text text-lg font-black tracking-tight text-transparent
+                            <BrandName name={getSafeTitle()} imageUrl={siteConfig?.loginBrandImageUrl} onDark={isHalloween || isMidAutumn} className={`block truncate bg-clip-text text-lg font-black tracking-tight text-transparent
                             ${isLunar ? 'bg-gradient-to-r from-red-800 to-orange-700' : ''}
                             ${isHalloween ? 'bg-gradient-to-r from-orange-400 to-purple-400' : ''}
                             ${isMidAutumn ? 'bg-gradient-to-r from-yellow-100 to-blue-200' : ''}

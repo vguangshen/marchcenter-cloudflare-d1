@@ -4435,3 +4435,84 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .layered-scene--playing .layered-scene-track-image { animation: none; }
 }
+
+/* ── Brand: vector wordmark + entrance ───────────────────────────────────────
+   The mcgo.app wordmark is traced vector art whose gradient stops come from
+   these variables: the original colours in the light theme, and a light "mc"
+   with brighter accents in dark mode or on dark holiday navbars. */
+.brand-wordmark {
+  --wm-mc-top: #14173d;
+  --wm-mc-bottom: #0d1237;
+  --wm-go-top: #f77213;
+  --wm-go-bottom: #f56d0b;
+  --wm-app-top: #6f7f99;
+  --wm-app-bottom: #5f7088;
+  display: block;
+  width: auto;
+  height: 1.75rem;
+  max-width: min(100%, 12rem);
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.dark .brand-wordmark,
+.brand-wordmark--on-dark {
+  --wm-mc-top: #eef2ff;
+  --wm-mc-bottom: #c7d2fe;
+  --wm-go-top: #ff8a2a;
+  --wm-go-bottom: #f97316;
+  --wm-app-top: #b4c0d6;
+  --wm-app-bottom: #94a3bd;
+}
+
+.brand-wordmark-stop--mc-top { stop-color: var(--wm-mc-top); }
+.brand-wordmark-stop--mc-bottom { stop-color: var(--wm-mc-bottom); }
+.brand-wordmark-stop--go-top { stop-color: var(--wm-go-top); }
+.brand-wordmark-stop--go-bottom { stop-color: var(--wm-go-bottom); }
+.brand-wordmark-stop--app-top { stop-color: var(--wm-app-top); }
+.brand-wordmark-stop--app-bottom { stop-color: var(--wm-app-bottom); }
+
+/* Entrance (once per page load): the logo tile pops in with a slight turn,
+   then "mc", "go" and ".app" rise in turn from below the wordmark's baseline,
+   "go" with a small overshoot. `backwards` keeps them hidden until their turn
+   but releases the final state, so hover effects keep working. */
+.brand-intro .brand-mark {
+  animation: brand-mark-in 720ms cubic-bezier(.34, 1.56, .64, 1) 80ms backwards;
+}
+
+.brand-intro .brand-wordmark-part {
+  animation: brand-wordmark-rise 760ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+
+.brand-intro .brand-wordmark-part--mc { animation-delay: 260ms; }
+
+.brand-intro .brand-wordmark-part--go {
+  animation-delay: 370ms;
+  animation-timing-function: cubic-bezier(.34, 1.45, .64, 1);
+}
+
+.brand-intro .brand-wordmark-part--app {
+  animation-name: brand-wordmark-rise-fade;
+  animation-delay: 480ms;
+}
+
+@keyframes brand-mark-in {
+  from { opacity: 0; transform: scale(.4) rotate(-20deg); }
+  55% { opacity: 1; }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes brand-wordmark-rise {
+  from { transform: translate3d(0, 210px, 0); }
+  to { transform: none; }
+}
+
+@keyframes brand-wordmark-rise-fade {
+  from { opacity: 0; transform: translate3d(0, 210px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-intro .brand-mark,
+  .brand-intro .brand-wordmark-part { animation: none; }
+}
