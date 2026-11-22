@@ -51,14 +51,24 @@ export default function LayeredSvgScene({ sceneKey, source = null, url = null, a
             style={{ ...rootProps.style, '--scene-focus-y': focusY }}
         >
             {layers.map((layer, index) => (
-                <img
-                    key={`${index}-${layer.role}`}
-                    src={layer.url}
-                    alt=""
-                    draggable="false"
-                    decoding="async"
-                    className={`layered-scene-layer layered-scene-layer--${layer.role}`}
-                />
+                // The track is revealed by a moving window: the outer box slides
+                // up while the image inside slides down by the same amount, so
+                // the artwork stays put and only its visible area grows from the
+                // near end toward the stadium. Both moves are plain transforms.
+                layer.role === 'track' ? (
+                    <div key={`${index}-${layer.role}`} className="layered-scene-layer layered-scene-layer--track">
+                        <img src={layer.url} alt="" draggable="false" decoding="async" className="layered-scene-track-image" />
+                    </div>
+                ) : (
+                    <img
+                        key={`${index}-${layer.role}`}
+                        src={layer.url}
+                        alt=""
+                        draggable="false"
+                        decoding="async"
+                        className={`layered-scene-layer layered-scene-layer--${layer.role}`}
+                    />
+                )
             ))}
         </div>
     );

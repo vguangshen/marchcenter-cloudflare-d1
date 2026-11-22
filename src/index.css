@@ -4383,3 +4383,55 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .layered-scene--playing .layered-scene-layer { animation: none; }
 }
+
+/* Track reveal: a matte wipe that runs from the near end of the track up to
+   the stadium. The window (outer box) slides up from below while the image
+   inside slides down by the same distance, so the artwork never moves and
+   only its visible area grows; the feathered top edge of the window gives
+   the soft leading edge of an AE track matte. The window only travels to 58%
+   (just past the top of the track), so the whole duration is spent revealing
+   it; resting at transform: none afterwards looks identical. Transform-only. */
+.layered-scene-layer--track {
+  --scene-name: layered-scene-track-window;
+  --scene-duration: 1700ms;
+  --scene-delay: 400ms;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 8%);
+}
+
+.layered-scene-track-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center var(--scene-focus-y, 50%);
+  user-select: none;
+}
+
+.layered-scene--playing .layered-scene-layer--track,
+.layered-scene--playing .layered-scene-track-image {
+  animation-timing-function: cubic-bezier(.33, 0, .2, 1);
+}
+
+.layered-scene--playing .layered-scene-track-image {
+  will-change: transform;
+  animation: layered-scene-track-image 1700ms cubic-bezier(.33, 0, .2, 1)
+    calc(400ms + var(--scene-offset, 0ms)) both;
+}
+
+@keyframes layered-scene-track-window {
+  from { transform: translate3d(0, 100%, 0); }
+  to { transform: translate3d(0, 58%, 0); }
+}
+
+@keyframes layered-scene-track-image {
+  from { transform: translate3d(0, -100%, 0); }
+  to { transform: translate3d(0, -58%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layered-scene--playing .layered-scene-track-image { animation: none; }
+}

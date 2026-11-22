@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 // Shared machinery for the layered scene entrances (default skyline, holiday
 // scenes, theme-colour track). Scenes are split into depth layers that share
 // a small set of roles; CSS gives each role its own entrance.
-export const SCENE_ROLES = ['sky', 'celestial', 'far', 'mid', 'focal', 'front', 'details'];
+export const SCENE_ROLES = ['sky', 'celestial', 'far', 'mid', 'focal', 'front', 'track', 'details'];
 export const SCENE_INTRO_MS = 2300;
 
 // Each scene plays once per page load. A remount part-way through (login →

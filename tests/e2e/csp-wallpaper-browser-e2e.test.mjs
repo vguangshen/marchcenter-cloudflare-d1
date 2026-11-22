@@ -226,10 +226,10 @@ test('a cold default scene renders only the confirmed day or night artwork', asy
         confirmConfig();
         const night = page.locator('.default-scene[data-scene-mode="night"]');
         await night.waitFor();
-        const layers = night.locator('img.layered-scene-layer');
+        const layers = night.locator('.layered-scene-layer');
         await layers.first().waitFor();
-        assert.equal(await layers.count(), 6);
-        await layers.evaluateAll(images => Promise.all(images.map(image => image.decode())));
+        assert.equal(await layers.count(), 8, 'sky, far, mid, focal, front, track, front, details');
+        await night.locator('img').evaluateAll(images => Promise.all(images.map(image => image.decode())));
         assert.equal(await page.locator('.default-scene[data-scene-mode="dawn"]').count(), 0);
         assert.equal(await night.locator('.layered-scene').getAttribute('data-scene-phase'), 'static', 'reduced motion shows the finished scene');
         assert.deepEqual(requests, [], 'the layered scene ships with the app and needs no image request');
@@ -241,7 +241,7 @@ test('a cold default scene renders only the confirmed day or night artwork', asy
 
 const SCENE_CASES = [
     { name: 'default skyline', theme: { effectMode: 'default', lightDark: 'light' }, scene: 'competition',
-        roles: ['sky', 'far', 'mid', 'focal', 'front', 'details'] },
+        roles: ['sky', 'far', 'mid', 'focal', 'front', 'track', 'front', 'details'] },
     { name: 'mid-autumn holiday scene', theme: { effectMode: 'immersive', immersive: 'mid_autumn', lightDark: 'dark' }, scene: 'immersive:mid_autumn',
         roles: ['sky', 'celestial', 'far', 'mid', 'focal', 'front', 'details'] },
     { name: 'theme-colour track', theme: { effectMode: 'color', manualColor: 'blue', lightDark: 'light' }, scene: 'accent',
@@ -267,7 +267,26 @@ for (const sceneCase of SCENE_CASES) {
             assert.deepEqual(animations.map(entry => entry.role), sceneCase.roles);
             for (const entry of animations) {
                 assert.equal(entry.names.length, 1, `${entry.role} animates`);
-                assert.deepEqual([...new Set(entry.props)].sort(), ['opacity', 'transform'], `${entry.role} only animates transform/opacity`);
+                assert.deepEqual([...new Set(entry.props)].sort(), entry.role === 'track' ? ['transform'] : ['opacity', 'transform'], `${entry.role} only animates transform/opacity`);
+            }
+            if (sceneCase.roles.includes('track')) {
+                // Mid-wipe the window has moved up from below while the artwork inside stays exactly in place.
+                const wipe = await scene.evaluate(root => {
+                    const window = root.querySelector('.layered-scene-layer--track');
+                    const image = window.querySelector('.layered-scene-track-image');
+                    const animations = [...window.getAnimations(), ...image.getAnimations()];
+                    animations.forEach(animation => { animation.pause(); animation.currentTime = 1200; });
+                    const result = {
+                        windowTop: window.getBoundingClientRect().top,
+                        imageTop: image.getBoundingClientRect().top,
+                        imageAnimation: image.getAnimations().map(animation => animation.animationName)
+                    };
+                    animations.forEach(animation => animation.play());
+                    return result;
+                });
+                assert.deepEqual(wipe.imageAnimation, ['layered-scene-track-image']);
+                assert.ok(wipe.windowTop > 50, `window is part-way up (${wipe.windowTop}px)`);
+                assert.ok(Math.abs(wipe.imageTop) < 1, `artwork stays in place (${wipe.imageTop}px)`);
             }
             await page.locator(`.layered-scene--static[data-scene="${sceneCase.scene}"]`).waitFor({ timeout: 5000 });
             assert.equal(await scene.evaluate(root => root.querySelector('.layered-scene-layer').getAnimations().length), 0, 'hints are dropped after the intro');
