@@ -924,7 +924,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                 themeSettings={uiThemeSettings}
                             />
 
-                            <header className={`mb-8 relative flex flex-col ${dashboardAlignClass}`}>
+                            <header className={`mb-8 relative flex flex-col ${dashboardAlignClass} ${isNavbarTransitioning ? 'dashboard-hero-entering' : ''}`}>
                                 <LoadErrorNotice message={contentLoadError || studentAccountsLoadError} onRetry={() => { fetchSharedContent(); fetchStudentAccounts(); }} compact />
                                 {siteConfig.dailyQuote && (
                                     <div className="inline-flex items-center gap-2 px-3 py-1 mb-3 rounded-full bg-indigo-50/50 border border-indigo-100/50 backdrop-blur-sm w-fit animate-in fade-in slide-in-from-top-2">

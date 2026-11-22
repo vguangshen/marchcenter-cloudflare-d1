@@ -90,6 +90,14 @@ const LoginPage = ({
         return () => window.cancelAnimationFrame(frame);
     }, []);
 
+    // The docking transition commits the swap; if it never fires (transitions
+    // disabled, tab throttled), continue anyway.
+    useEffect(() => {
+        if (!isUnlocking) return undefined;
+        const timer = window.setTimeout(() => onUnlockTransitionEnd?.(), 900);
+        return () => window.clearTimeout(timer);
+    }, [isUnlocking, onUnlockTransitionEnd]);
+
     useEffect(() => {
         const controller = new AbortController();
         // 登录表单不等待 setup-status：请求在后台并行进行，
@@ -604,15 +612,17 @@ const LoginPage = ({
             <header className={`login-portal-header fixed inset-x-0 top-0 z-[70] ${
                 isUnlocking ? 'login-portal-header-unlocking' : ''
             }`} onTransitionEnd={(event) => {
+                // The brand's glide into the docked bar is the last transform
+                // to finish; its end commits the swap to the dashboard.
                 if (
                     isUnlocking
-                    && event.target === event.currentTarget
+                    && event.target.classList?.contains('login-navbar-brand')
                     && event.propertyName === 'transform'
                 ) onUnlockTransitionEnd?.();
             }} onTransitionCancel={(event) => {
                 if (
                     isUnlocking
-                    && event.target === event.currentTarget
+                    && event.target.classList?.contains('login-navbar-brand')
                     && event.propertyName === 'transform'
                 ) onUnlockTransitionEnd?.();
             }}>

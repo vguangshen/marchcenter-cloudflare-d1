@@ -91,6 +91,17 @@ export default function SystemBackgroundLayers({
                         onLoad={onWallpaperLoad}
                         onError={onWallpaperError}
                     />
+                    {/* Pre-blurred copy for the login screen. Signing in only
+                        fades its opacity, so the blur is rasterised once
+                        instead of being recomputed on every animation frame. */}
+                    <img
+                        key={`${wallpaperUrl}-soft`}
+                        src={wallpaperUrl}
+                        decoding="async"
+                        alt=""
+                        aria-hidden="true"
+                        className="wallpaper-soft-copy absolute inset-0 h-full w-full object-cover"
+                    />
                     <div className={`absolute inset-0 ${isDarkMode ? 'bg-slate-950/45' : 'bg-slate-950/20'}`}/>
                     <div className={`wallpaper-login-scrim absolute inset-0 ${isDarkMode ? 'bg-slate-950/25' : 'bg-white/20'} ${isWallpaperSoftened ? 'opacity-100' : (isDarkMode ? 'opacity-40' : 'opacity-55')}`}/>
                     <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-slate-950/15"/>

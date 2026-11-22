@@ -1242,11 +1242,8 @@ body {
 }
 /* MarchCenter horizontal sign-in card */
 .wallpaper-background-layer {
-  transform-origin: center;
+  overflow: hidden;
   animation: wallpaper-layer-enter 420ms ease-out both;
-  transition:
-    filter 1250ms cubic-bezier(.22, 1, .36, 1),
-    transform 1250ms cubic-bezier(.22, 1, .36, 1);
 }
 
 @keyframes wallpaper-layer-enter {
@@ -1254,14 +1251,19 @@ body {
   to { opacity: 1; }
 }
 
-.wallpaper-background-layer--login {
+/* Login softening is a static, pre-blurred copy on top of the sharp image.
+   Leaving the login screen cross-fades it away (opacity only, composited);
+   the old version animated a full-screen blur radius frame by frame. */
+.wallpaper-soft-copy {
   filter: blur(16px) saturate(.82) brightness(.94);
   transform: scale(1.055);
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity 900ms cubic-bezier(.4, 0, .2, 1);
 }
 
-.wallpaper-background-layer--dashboard {
-  filter: none;
-  transform: none;
+.wallpaper-background-layer--login .wallpaper-soft-copy {
+  opacity: 1;
 }
 
 .wallpaper-login-scrim {
@@ -1273,7 +1275,7 @@ body {
 }
 
 .login-auth-card.glass-motion-surface {
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 .login-auth-card.login-wallpaper-glass {
@@ -1309,21 +1311,22 @@ body {
     linear-gradient(140deg, rgba(30, 27, 75, .52) 0%, rgba(15, 23, 42, .68) 60%, rgba(30, 41, 59, .55) 100%);
 }
 
+/* The card leaves with transform + opacity only. Animating `filter: blur()`
+   on a glass surface re-renders its backdrop every frame and was the main
+   source of stutter. */
 .login-auth-card-unlocking {
-  animation: login-card-unlock 720ms cubic-bezier(.22, 1, .36, 1) forwards !important;
+  animation: login-card-unlock 340ms cubic-bezier(.4, 0, .2, 1) forwards !important;
   pointer-events: none;
 }
 
 @keyframes login-card-unlock {
   from {
     opacity: 1;
-    filter: blur(0);
     transform: translate3d(0, 0, 0) scale(1);
   }
   to {
     opacity: 0;
-    filter: blur(7px);
-    transform: translate3d(0, -12px, 0) scale(.982);
+    transform: translate3d(0, -10px, 0) scale(.965);
   }
 }
 
@@ -1557,31 +1560,54 @@ body {
   --login-navbar-dock-side: 16px;
   --login-navbar-inner-edge: 0px;
   --login-navbar-content-shift: max(0px, calc(var(--login-navbar-dock-side) - var(--login-navbar-inner-edge)));
+  /* Measured dashboard navbar geometry: content sits 1px inside its border,
+     the surface is 66px tall (70px from md, where the search field appears). */
+  --login-navbar-dock-y: 17px;
+  --login-navbar-dock-bottom: -18px;
+}
+
+/* The bar's chrome lives on two static layers: the full-width login bar
+   (::before) and the floating dashboard pill (::after, already at the exact
+   dashboard geometry). Docking only cross-fades their opacity and slides the
+   content with transform, so nothing is clipped, re-rounded or re-blurred
+   per frame. */
+.login-portal-header::before,
+.login-portal-header::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  transition: opacity 520ms cubic-bezier(.4, 0, .2, 1);
+}
+
+.login-portal-header::before {
+  inset: 0;
   border-bottom: 1px solid rgba(226, 232, 240, .75);
   background: rgba(255, 255, 255, .72);
   box-shadow: 0 8px 30px rgba(15, 23, 42, .04);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  isolation: isolate;
-  transform: translate3d(0, 0, 0);
-  clip-path: inset(0 0 0 0 round 0px);
-  -webkit-clip-path: inset(0 0 0 0 round 0px);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  will-change: transform, clip-path, border-radius, border-color, box-shadow;
-  transition:
-    transform 840ms cubic-bezier(.22, 1, .36, 1),
-    clip-path 840ms cubic-bezier(.22, 1, .36, 1),
-    border-radius 620ms 140ms cubic-bezier(.22, 1, .36, 1),
-    border-color 420ms ease-out,
-    box-shadow 700ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.login-portal-header::after {
+  top: 16px;
+  bottom: var(--login-navbar-dock-bottom);
+  left: var(--login-navbar-dock-side);
+  right: var(--login-navbar-dock-side);
+  border: 1px solid rgba(255, 255, 255, .5);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .7);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  opacity: 0;
 }
 
 .login-navbar-brand,
 .login-navbar-login-actions {
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
-  transition: transform 840ms cubic-bezier(.22, 1, .36, 1);
+  transition:
+    transform 620ms cubic-bezier(.22, 1, .36, 1),
+    opacity 280ms ease-out;
 }
 
 .brand-name-image {
@@ -1594,9 +1620,16 @@ body {
   object-fit: contain;
 }
 
-.dark .login-portal-header {
+.dark .login-portal-header::before {
   border-bottom-color: rgba(51, 65, 85, .6);
   background: rgba(15, 23, 42, .7);
+}
+
+.dark .login-portal-header::after {
+  border-color: #334155;
+  background: rgba(30, 41, 59, .7);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .dashboard-navbar-surface {
@@ -1615,38 +1648,48 @@ body {
   backdrop-filter: none !important;
 }
 
-/* Login shell -> dashboard floating navigation. The login bar first docks at
-   the exact dashboard geometry. React then swaps in a pixel-aligned surface;
-   only the newly introduced controls animate, using compositor-stable
-   opacity/translation so every browser follows the same rendering path. */
+/* Login shell -> dashboard floating navigation, compositor-only:
+   - the card fades out with transform/opacity (no animated blur);
+   - the wallpaper cross-fades from its pre-blurred copy to the sharp image;
+   - the full-width bar layer fades out while the floating pill layer (already
+     at the exact dashboard geometry) fades in, and the brand/actions slide to
+     their docked positions with transform;
+   - when the brand's transform ends React swaps in the pixel-aligned
+     dashboard navbar, whose new controls only fade in. */
 .login-portal-header-unlocking {
   pointer-events: none;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  transform: translate3d(0, 16px, 0);
-  clip-path: inset(0 var(--login-navbar-dock-side) 0 var(--login-navbar-dock-side) round 16px);
-  -webkit-clip-path: inset(0 var(--login-navbar-dock-side) 0 var(--login-navbar-dock-side) round 16px);
-  border: 1px solid rgba(255, 255, 255, .56);
-  border-radius: 16px;
-  box-shadow: 0 14px 38px rgba(15, 23, 42, .11);
 }
 
+.login-portal-header-unlocking::before { opacity: 0; }
+.login-portal-header-unlocking::after { opacity: 1; }
+
 .login-portal-header-unlocking .login-navbar-brand {
-  transform: translate3d(var(--login-navbar-content-shift), 0, 0);
+  transform: translate3d(calc(var(--login-navbar-content-shift) + 1px), var(--login-navbar-dock-y), 0);
 }
 
 .login-portal-header-unlocking .login-navbar-login-actions {
-  transform: translate3d(calc(0px - var(--login-navbar-content-shift)), 0, 0);
+  opacity: 0;
+  transform: translate3d(calc(-1px - var(--login-navbar-content-shift)), var(--login-navbar-dock-y), 0);
 }
 
-.dark .login-portal-header-unlocking {
-  border-color: rgba(71, 85, 105, .72);
-  box-shadow: 0 16px 42px rgba(2, 6, 23, .34);
+/* Below sm the dashboard navbar shows only the logo, so the name fades out
+   while docking instead of disappearing at the swap. */
+@media (max-width: 639px) {
+  .login-portal-header-unlocking .login-navbar-brand > :not(:first-child) {
+    opacity: 0;
+    transition: opacity 280ms ease-out;
+  }
 }
 
 @media (min-width: 640px) {
   .login-portal-header { --login-navbar-dock-side: 24px; }
+}
+
+@media (min-width: 768px) {
+  .login-portal-header {
+    --login-navbar-dock-y: 19px;
+    --login-navbar-dock-bottom: -22px;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1657,11 +1700,11 @@ body {
 }
 
 .dashboard-navbar-entering .dashboard-navbar-search {
-  animation: dashboard-navbar-control-in 460ms 110ms cubic-bezier(.22, 1, .36, 1) backwards;
+  animation: dashboard-navbar-control-in 420ms 80ms cubic-bezier(.22, 1, .36, 1) backwards;
 }
 
 .dashboard-navbar-entering .dashboard-navbar-actions {
-  animation: dashboard-navbar-control-in 520ms 190ms cubic-bezier(.22, 1, .36, 1) backwards;
+  animation: dashboard-navbar-control-in 460ms 160ms cubic-bezier(.22, 1, .36, 1) backwards;
 }
 
 @keyframes dashboard-navbar-control-in {
@@ -1669,12 +1712,26 @@ body {
   to { opacity: 1; }
 }
 
+.dashboard-hero-entering {
+  animation: dashboard-hero-in 520ms 60ms cubic-bezier(.22, 1, .36, 1) backwards;
+}
+
+@keyframes dashboard-hero-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .login-portal-header-unlocking,
+  .login-portal-header::before,
+  .login-portal-header::after,
   .login-navbar-brand,
-  .login-navbar-login-actions,
+  .login-navbar-login-actions {
+    transition-duration: 1ms !important;
+  }
+
   .dashboard-navbar-entering .dashboard-navbar-search,
-  .dashboard-navbar-entering .dashboard-navbar-actions {
+  .dashboard-navbar-entering .dashboard-navbar-actions,
+  .dashboard-hero-entering {
     animation: none !important;
   }
 }
@@ -3715,6 +3772,7 @@ body {
 }
 
 .wallpaper-background-layer--no-transition,
+.wallpaper-background-layer--no-transition .wallpaper-soft-copy,
 .wallpaper-background-layer--no-transition .wallpaper-login-scrim {
   transition-duration: 1ms !important;
 }

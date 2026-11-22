@@ -29,20 +29,29 @@ test('moving glass surfaces use isolated compositor hints without removing their
     assert.match(announcement, /role="group"[\s\S]*打开公告链接[\s\S]*aria-label="关闭公告"/);
 });
 
-test('login header keeps its docking animation on transform and clipping instead of layout edges', () => {
-    assert.match(loginPage, /event\.propertyName === 'transform'/);
+function ruleBody(selector) {
+    const start = styles.indexOf(`${selector} {`);
+    assert.notEqual(start, -1, `${selector} rule exists`);
+    return styles.slice(start, styles.indexOf('}', start));
+}
+
+test('login bar docks by cross-fading two static layers and sliding content, never clipping per frame', () => {
+    // The brand's transform transition commits the swap, with a timer fallback.
+    assert.match(loginPage, /classList\?\.contains\('login-navbar-brand'\)[\s\S]*event\.propertyName === 'transform'[\s\S]*onUnlockTransitionEnd/);
     assert.match(loginPage, /onTransitionCancel/);
-    assert.doesNotMatch(authSession, /unlockTimerRef|setTimeout\(completeLoginTransition|1400/);
+    assert.match(loginPage, /if \(!isUnlocking\) return undefined;[\s\S]*setTimeout\(\(\) => onUnlockTransitionEnd\?\.\(\), 900\)/);
+    assert.doesNotMatch(authSession, /unlockTimerRef|setTimeout\(completeLoginTransition|startViewTransition/);
     assert.match(authSession, /document\.visibilityState !== 'hidden'/);
-    assert.match(styles, /\.login-portal-header \{[\s\S]*transform: translate3d\(0, 0, 0\)[\s\S]*clip-path: inset\(0 0 0 0 round 0px\)[\s\S]*transition:[\s\S]*transform 840ms[\s\S]*clip-path 840ms/);
-    assert.doesNotMatch(styles, /\.login-portal-header \{[\s\S]*\btop 840ms/);
-    assert.doesNotMatch(styles, /\.login-portal-header \{[\s\S]*\bleft 840ms/);
-    assert.doesNotMatch(styles, /\.login-portal-header \{[\s\S]*\bright 840ms/);
-    assert.match(styles, /\.login-portal-header-unlocking \{[\s\S]*top: 0 !important[\s\S]*left: 0 !important[\s\S]*right: 0 !important[\s\S]*transform: translate3d\(0, 16px, 0\)[\s\S]*clip-path: inset\(0 var\(--login-navbar-dock-side\) 0 var\(--login-navbar-dock-side\) round 16px\)/);
-    assert.match(loginPage, /login-navbar-login-actions flex shrink-0 items-center gap-2/);
-    assert.match(styles, /\.login-navbar-brand,[\s\S]*\.login-navbar-login-actions \{[\s\S]*transition: transform 840ms/);
-    assert.match(styles, /\.login-portal-header-unlocking \.login-navbar-brand \{[\s\S]*translate3d\(var\(--login-navbar-content-shift\), 0, 0\)/);
-    assert.match(styles, /\.login-portal-header-unlocking \.login-navbar-login-actions \{[\s\S]*translate3d\(calc\(0px - var\(--login-navbar-content-shift\)\), 0, 0\)/);
+    // Nothing on the bar animates clip-path, radius, shadow or blur.
+    assert.doesNotMatch(ruleBody('.login-portal-header'), /transition|clip-path|will-change|backdrop-filter/);
+    assert.match(styles, /\.login-portal-header::before,\s*\.login-portal-header::after \{[^}]*transition: opacity 520ms/);
+    assert.match(styles, /\.login-portal-header::after \{\s*top: 16px;[^}]*left: var\(--login-navbar-dock-side\)[^}]*border-radius: 16px[^}]*opacity: 0;/);
+    assert.match(styles, /\.login-portal-header-unlocking::before \{ opacity: 0; \}/);
+    assert.match(styles, /\.login-portal-header-unlocking::after \{ opacity: 1; \}/);
+    // Docked geometry matches the measured dashboard navbar, so the swap has no jump.
+    assert.match(styles, /\.login-portal-header-unlocking \.login-navbar-brand \{[\s\S]*translate3d\(calc\(var\(--login-navbar-content-shift\) \+ 1px\), var\(--login-navbar-dock-y\), 0\)/);
+    assert.match(styles, /\.login-portal-header-unlocking \.login-navbar-login-actions \{[\s\S]*translate3d\(calc\(-1px - var\(--login-navbar-content-shift\)\), var\(--login-navbar-dock-y\), 0\)/);
+    assert.match(styles, /@media \(min-width: 768px\) \{\s*\.login-portal-header \{\s*--login-navbar-dock-y: 19px;\s*--login-navbar-dock-bottom: -22px;/);
 });
 
 test('dashboard navbar uses CSS animation and clears its one-shot entry state from animationend', () => {
@@ -54,10 +63,15 @@ test('dashboard navbar uses CSS animation and clears its one-shot entry state fr
     assert.match(navbar, /event\.animationName === 'dashboard-navbar-control-in'[\s\S]*onEntryTransitionEnd\?\.\(\)/);
 });
 
-test('login auth glass card keeps its arrival and unlock motion while using a stable layer', () => {
+test('login card and wallpaper leave with compositor-only motion', () => {
     assert.match(loginPage, /login-auth-card glass-motion-surface w-full rounded-3xl transition-all duration-500/);
-    assert.match(styles, /\.login-auth-card\.glass-motion-surface[\s\S]*will-change:\s*transform, opacity, filter/);
+    assert.match(ruleBody('.login-auth-card.glass-motion-surface'), /will-change:\s*transform, opacity;/);
     assert.match(styles, /@keyframes login-card-arrive[\s\S]*translateY\(18px\) scale\(\.985\)[\s\S]*translateY\(0\) scale\(1\)/);
-    assert.match(styles, /@keyframes login-card-unlock[\s\S]*filter: blur\(0\)[\s\S]*translate3d\(0, 0, 0\) scale\(1\)[\s\S]*filter: blur\(7px\)[\s\S]*translate3d\(0, -12px, 0\) scale\(\.982\)/);
-    assert.match(styles, /\.login-auth-card-unlocking \{[\s\S]*animation: login-card-unlock 720ms cubic-bezier\(\.22, 1, \.36, 1\)/);
+    const unlock = styles.match(/@keyframes login-card-unlock \{[\s\S]*?\r?\n\}/)?.[0] || '';
+    assert.match(unlock, /translate3d\(0, 0, 0\) scale\(1\)[\s\S]*translate3d\(0, -10px, 0\) scale\(\.965\)/);
+    assert.doesNotMatch(unlock, /filter/);
+    assert.match(styles, /\.login-auth-card-unlocking \{[\s\S]*animation: login-card-unlock 340ms/);
+    // The wallpaper never animates its blur radius: a pre-blurred copy fades out.
+    assert.doesNotMatch(ruleBody('.wallpaper-background-layer'), /filter|transition/);
+    assert.match(ruleBody('.wallpaper-soft-copy'), /filter: blur\(16px\)[\s\S]*transition: opacity 900ms/);
 });

@@ -18,8 +18,22 @@ import { notify } from './utils/uiFeedback';
 import { CACHED_SITE_CONFIG_KEY, normalizeUiThemeSettings, patchUiThemeSettings, readStoredJson } from './utils/uiThemeSettings';
 import { mark, measure } from './utils/startupPerf';
 
-const loadDashboard = () => import('./Dashboard.jsx');
-const Dashboard = lazy(loadDashboard);
+// Once the chunk has loaded, render the component directly: React.lazy would
+// still suspend for one tick and flash the loading card right after the login
+// bar has docked.
+let LoadedDashboard = null;
+const loadDashboard = () => import('./Dashboard.jsx').then(module => {
+    LoadedDashboard = module.default;
+    return module;
+});
+const LazyDashboard = lazy(loadDashboard);
+
+// Picks the component once per mount so it never switches type (which would
+// remount the whole dashboard) when the chunk finishes loading later.
+function DashboardHost(props) {
+    const [View] = useState(() => LoadedDashboard || LazyDashboard);
+    return <View {...props} />;
+}
 
 export default function App() {
     const auth = useAuthSession();
@@ -243,7 +257,7 @@ export default function App() {
     return (
         <>
             <Suspense fallback={renderLoading('正在加载工作台…')}>
-                <Dashboard auth={auth}
+                <DashboardHost auth={auth}
                     site={{ siteConfig, siteConfigLoadError, fetchSiteConfig, persistSiteConfig }}
                     appearance={{ isDarkMode, uiThemeSettings, effectiveLightDark, saveUiThemeSettings,
                         activeThemeColor, activeImmersive, systemEffects, accentStyle, renderBackground }} />
