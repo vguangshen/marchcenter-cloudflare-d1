@@ -74,10 +74,14 @@ export const DEFAULT_SITE_CONFIG = {
     footerVisibility: "all",
     navbarLogoType: 'Trophy',
     navbarLogoUrl: '',
+    navbarLogoBackground: 'theme',
     homeWelcomeTitle: { text: "Hello, {username}", align: "left", fontSize: "4xl" },
     homeSubtitle: { text: "\"Talk is cheap, show me the code.\"", align: "left", fontSize: "lg" },
-    searchPlaceholder: "搜索竞赛或考点..."
+    searchPlaceholder: "搜索竞赛或类目..."
 };
+
+// Older saves stored this unused default; the navbar always showed 类目.
+const LEGACY_SEARCH_PLACEHOLDER = '搜索竞赛或考点...';
 
 export function normalizeSiteConfig(value = {}) {
     const config = value && typeof value === 'object' ? value : {};
@@ -86,7 +90,11 @@ export function normalizeSiteConfig(value = {}) {
         ...config,
         loginBrandName: config.loginBrandName || DEFAULT_SITE_CONFIG.loginBrandName,
         navbarLogoType: config.navbarLogoType || DEFAULT_SITE_CONFIG.navbarLogoType,
-        navbarLogoUrl: config.navbarLogoUrl ?? DEFAULT_SITE_CONFIG.navbarLogoUrl
+        navbarLogoUrl: config.navbarLogoUrl ?? DEFAULT_SITE_CONFIG.navbarLogoUrl,
+        navbarLogoBackground: config.navbarLogoBackground === 'none' ? 'none' : 'theme',
+        searchPlaceholder: !config.searchPlaceholder || config.searchPlaceholder === LEGACY_SEARCH_PLACEHOLDER
+            ? DEFAULT_SITE_CONFIG.searchPlaceholder
+            : config.searchPlaceholder
     };
 }
 

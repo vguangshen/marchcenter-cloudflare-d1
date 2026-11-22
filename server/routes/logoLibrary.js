@@ -41,6 +41,25 @@ router.get('/', authMiddleware, adminOnly, async (_req, res) => {
     res.json(rows);
 });
 
+// Public, read-only image bytes for a library logo so the navbar and login
+// page (shown before sign-in) can reference an uploaded logo by URL instead
+// of embedding a data URL in the site config. Rows are never rewritten, so a
+// given id always serves the same bytes and can be cached for good.
+router.get('/:id/image', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(404).json({ error: 'Logo 不存在' });
+    const [[row]] = await pool.query('SELECT data_url AS dataUrl FROM logo_library WHERE id = ? LIMIT 1', [id]);
+    const match = row ? LOGO_DATA_URL.exec(String(row.dataUrl || '')) : null;
+    if (!match) return res.status(404).json({ error: 'Logo 不存在' });
+    const binary = atob(match[2]);
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    res.setHeader('Content-Type', `image/${match[1]}`);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    return res.send(bytes);
+});
+
 router.post('/', authMiddleware, adminOnly, async (req, res) => {
     const dataUrl = validateLogo(req.body?.dataUrl);
     const contentHash = await sha256(dataUrl);

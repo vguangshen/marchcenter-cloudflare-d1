@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     AlignCenter, AlignLeft, AlignRight, Check, CheckCircle2, ChevronRight,
-    Eye, Image as ImageIcon, LayoutDashboard, LockKeyhole, MessageSquare,
-    Mail, Monitor, MousePointer2, Pencil, Quote, RotateCcw, Save, User,
+    Eye, Image as ImageIcon, LayoutDashboard, Loader2, LockKeyhole, MessageSquare,
+    Mail, Monitor, MousePointer2, Pencil, Quote, RotateCcw, Save, Search, Upload, User,
     ShieldCheck, Sparkles, X
 } from 'lucide-react';
-import { DEFAULT_SITE_CONFIG, GLASS_INPUT, PRIMARY_BTN } from '../../../constants/config';
-import BrandLogo, { BRAND_LOGO_PRESETS } from '../../branding/BrandLogo';
+import { DEFAULT_SITE_CONFIG, GLASS_INPUT, PRIMARY_BTN, normalizeSiteConfig } from '../../../constants/config';
+import BrandLogo, { BRAND_LOGO_PRESETS, brandLogoHasTile } from '../../branding/BrandLogo';
+import { api } from '../../../utils/api';
+import { libraryLogoUrl, prepareLogoDataUrl } from '../../../utils/logoUpload';
 
 const VISUAL_CENTER_PRESETS = [
     { id: 'trophy', value: '🏆', label: '奖杯' },
@@ -33,8 +35,7 @@ const FIELD_META = {
     loginPasswordPlaceholder: ['密码输入提示', '密码输入框中的占位提示。'],
     loginCodeLabel: ['验证码字段名称', '验证码输入框上方的标签。'],
     loginCodeSendText: ['发送验证码按钮', '获取邮箱验证码的按钮文案。'],
-    loginCodeHint: ['验证码可用提示', '邮件服务启用后显示的辅助说明。', true],
-    loginCodeDisabledHint: ['验证码待配置提示', '邮件服务尚未配置时显示的说明。', true],
+    loginCodeHint: ['验证码发送提示', '点击发送验证码后，在验证码输入框下方显示的说明。', true],
     loginSubmitText: ['登录按钮', '密码登录的主操作按钮。'],
     loginCodeSubmitText: ['验证码登录按钮', '验证码登录的主操作按钮。'],
     loginLoadingText: ['登录校验状态', '登录请求进行中显示的按钮文案。'],
@@ -54,6 +55,7 @@ const FIELD_META = {
     welcomeTitle: ['主页欢迎标题', '登录后首页的欢迎语，支持 {username} 变量。'],
     welcomeSubtitle: ['主页欢迎说明', '首页欢迎标题下方的辅助说明。'],
     dailyQuote: ['每日一句', '首页顶部展示的短句。', true],
+    searchPlaceholder: ['搜索框提示', '登录后顶部栏搜索框中的占位提示。'],
     footerText: ['页脚版权', '登录页与登录后首页共用的版权文案。']
 };
 
@@ -146,13 +148,13 @@ function BrandLogoPreview({ data, selected, onSelect }) {
                     onSelect('__navbarLogo');
                 }
             }}
-            className={`content-preview-brand-mark content-logo-target ${selected ? 'is-selected' : ''}`}
+            className={`content-preview-brand-mark content-logo-target ${brandLogoHasTile(data) ? '' : 'is-plain'} ${selected ? 'is-selected' : ''}`}
         >
             <BrandLogo
                 type={data.navbarLogoType || 'Trophy'}
                 url={data.navbarLogoUrl || ''}
                 className="h-5 w-5 text-white"
-                imageClassName="h-6 w-6 object-contain"
+                imageClassName={brandLogoHasTile(data) ? 'h-6 w-6 object-contain' : 'h-10 w-10 object-contain'}
             />
             <span className="content-edit-pencil"><Pencil /></span>
         </div>
@@ -241,7 +243,7 @@ function LoginCardPreview({ data, selectedKey, selectField, codeMode = false }) 
                                 <span className="content-preview-placeholder">请输入 6 位验证码</span>
                                 <EditableText field="loginCodeSendText" value={get('loginCodeSendText', '获取验证码')} selected={selectedKey === 'loginCodeSendText'} onSelect={selectField} className="content-preview-send" />
                             </div>
-                            <EditableText field="loginCodeDisabledHint" value={get('loginCodeDisabledHint', '邮件服务尚未配置，配置完成后即可使用。')} selected={selectedKey === 'loginCodeDisabledHint'} onSelect={selectField} className="content-preview-hint" />
+                            <EditableText field="loginCodeHint" value={get('loginCodeHint', '验证码将发送到账号绑定邮箱，10 分钟内有效。')} selected={selectedKey === 'loginCodeHint'} onSelect={selectField} className="content-preview-hint" />
                         </div>
                     ) : (
                         <div className="content-preview-password-field">
@@ -265,6 +267,10 @@ function LoginCardPreview({ data, selectedKey, selectField, codeMode = false }) 
                     onSelect={selectField}
                     className="content-preview-submit"
                 />
+                <div className="content-preview-loading-note">
+                    <span>提交中显示</span>
+                    <EditableText field="loginLoadingText" value={get('loginLoadingText', '正在安全校验...')} selected={selectedKey === 'loginLoadingText'} onSelect={selectField} />
+                </div>
 
                 <div className="content-preview-register">
                     <EditableText field="loginRegisterLead" value={get('loginRegisterLead', '还没有账号？')} selected={selectedKey === 'loginRegisterLead'} onSelect={selectField} />
@@ -405,7 +411,10 @@ function DashboardPreview({ data, selectedKey, selectField }) {
                 <EditableText field="dailyQuote" value={get('dailyQuote', '保持热爱，奔赴下一场挑战。')} selected={selectedKey === 'dailyQuote'} onSelect={selectField} className="content-dashboard-quote" />
                 <EditableText field="welcomeTitle" value={get('welcomeTitle', 'Hello, {username} 👋')} selected={selectedKey === 'welcomeTitle'} onSelect={selectField} as="h2" className="content-dashboard-title" />
                 <EditableText field="welcomeSubtitle" value={get('welcomeSubtitle', '准备好开始今天的挑战了吗？')} selected={selectedKey === 'welcomeSubtitle'} onSelect={selectField} className="content-dashboard-subtitle" />
-                <div className="content-dashboard-search">搜索竞赛或考点...</div>
+                <div className="content-dashboard-search">
+                    <Search />
+                    <EditableText field="searchPlaceholder" value={get('searchPlaceholder', '搜索竞赛或类目...')} selected={selectedKey === 'searchPlaceholder'} onSelect={selectField} />
+                </div>
             </div>
             <div className="content-dashboard-cards">
                 {[1, 2, 3].map(item => <div key={item}><span /><strong>竞赛工具</strong><small>统一入口与训练资源</small></div>)}
@@ -497,7 +506,7 @@ function LoginPageCanvas({ scene, codeMode, data, selectedKey, selectField, moda
 }
 
 const ContentManager = ({ config, onSave }) => {
-    const normalizedConfig = useMemo(() => ({ ...DEFAULT_SITE_CONFIG, ...(config || {}) }), [config]);
+    const normalizedConfig = useMemo(() => normalizeSiteConfig(config || {}), [config]);
     const [formData, setFormData] = useState(normalizedConfig);
     const [scene, setScene] = useState('login');
     const [codeMode, setCodeMode] = useState(false);
@@ -505,16 +514,60 @@ const ContentManager = ({ config, onSave }) => {
     const [selectedKey, setSelectedKey] = useState('loginWelcomeTitle');
     const [saved, setSaved] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [logoUploading, setLogoUploading] = useState(false);
+    const [logoError, setLogoError] = useState('');
+    const [logoLibrary, setLogoLibrary] = useState([]);
     const editorRef = useRef(null);
+    const logoInputRef = useRef(null);
+    const syncedConfigRef = useRef(normalizedConfig);
 
+    // A refreshed site config only replaces the form when nothing is being
+    // edited; unsaved work is never overwritten by a background reload.
     useEffect(() => {
-        setFormData(normalizedConfig);
+        const previous = JSON.stringify(syncedConfigRef.current);
+        syncedConfigRef.current = normalizedConfig;
+        setFormData(current => (JSON.stringify(current) === previous ? normalizedConfig : current));
     }, [normalizedConfig]);
 
     const dirty = useMemo(
         () => JSON.stringify(formData) !== JSON.stringify(normalizedConfig),
         [formData, normalizedConfig]
     );
+
+    useEffect(() => {
+        if (!dirty) return undefined;
+        const warn = event => { event.preventDefault(); event.returnValue = ''; };
+        window.addEventListener('beforeunload', warn);
+        return () => window.removeEventListener('beforeunload', warn);
+    }, [dirty]);
+
+    // Recently uploaded logos, so a logo can be reused without uploading again.
+    useEffect(() => {
+        if (selectedKey !== '__navbarLogo') return undefined;
+        const controller = new AbortController();
+        api.get('/logo-library', { signal: controller.signal, retry: 0 })
+            .then(items => setLogoLibrary(Array.isArray(items) ? items.slice(0, 12) : []))
+            .catch(() => {});
+        return () => controller.abort();
+    }, [selectedKey]);
+
+    const handleLogoFile = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file || logoUploading) return;
+        setLogoError('');
+        setLogoUploading(true);
+        try {
+            const dataUrl = await prepareLogoDataUrl(file);
+            const item = await api.post('/logo-library', { dataUrl }, { retry: 0, fallback: 'Logo 上传失败' });
+            setLogoLibrary(previous => [item, ...previous.filter(entry => entry.id !== item.id)].slice(0, 12));
+            handlePatch({ navbarLogoType: 'custom', navbarLogoUrl: libraryLogoUrl(item.id) });
+        } catch (error) {
+            setLogoError(error.message || 'Logo 上传失败');
+        } finally {
+            setLogoUploading(false);
+        }
+    };
 
     const handlePatch = patch => {
         setSaved(false);
@@ -527,6 +580,17 @@ const ContentManager = ({ config, onSave }) => {
 
     const selectField = key => {
         setSelectedKey(key);
+    };
+
+    // Fields that only exist in one login mode; switching mode must not leave
+    // the inspector editing something the preview no longer shows.
+    const PASSWORD_ONLY = ['loginUsernameLabel', 'loginUsernamePlaceholder', 'loginPasswordLabel', 'loginPasswordPlaceholder', 'loginForgotText', 'loginSubmitText'];
+    const CODE_ONLY = ['loginCodeAccountLabel', 'loginCodeAccountPlaceholder', 'loginCodeLabel', 'loginCodeSendText', 'loginCodeHint', 'loginCodeSubmitText'];
+    const switchLoginMode = nextCodeMode => {
+        setCodeMode(nextCodeMode);
+        if ((nextCodeMode ? PASSWORD_ONLY : CODE_ONLY).includes(selectedKey)) {
+            setSelectedKey(nextCodeMode ? 'loginCodeTabText' : 'loginPasswordTabText');
+        }
     };
 
     const handleSave = async () => {
@@ -587,6 +651,7 @@ const ContentManager = ({ config, onSave }) => {
                             onClick={() => {
                                 setScene(item.id);
                                 setModalState('form');
+                                if (item.id === 'login') setSelectedKey('loginWelcomeTitle');
                                 if (item.id === 'forgot') setSelectedKey('forgotTitle');
                                 if (item.id === 'register') setSelectedKey('registerTitle');
                                 if (item.id === 'dashboard') setSelectedKey('welcomeTitle');
@@ -602,8 +667,8 @@ const ContentManager = ({ config, onSave }) => {
                 {scene === 'login' && (
                     <div className="flex items-center gap-2">
                         <div className="content-mode-toggle">
-                            <button type="button" className={!codeMode ? 'active' : ''} onClick={() => setCodeMode(false)}>密码</button>
-                            <button type="button" className={codeMode ? 'active' : ''} onClick={() => setCodeMode(true)}>验证码</button>
+                            <button type="button" className={!codeMode ? 'active' : ''} onClick={() => switchLoginMode(false)}>密码</button>
+                            <button type="button" className={codeMode ? 'active' : ''} onClick={() => switchLoginMode(true)}>验证码</button>
                         </div>
                     </div>
                 )}
@@ -734,7 +799,47 @@ const ContentManager = ({ config, onSave }) => {
                                 <span><strong>顶部栏 Logo</strong><small>登录页顶部与登录后导航栏共用</small></span>
                             </div>
                             <div className="content-inspector-field">
-                                <span>预设 Logo</span>
+                                <span>自定义图片</span>
+                                <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" className="hidden" onChange={handleLogoFile} />
+                                <button
+                                    type="button"
+                                    className={`content-logo-upload ${formData.navbarLogoType === 'custom' && formData.navbarLogoUrl ? 'has-image' : ''}`}
+                                    onClick={() => logoInputRef.current?.click()}
+                                    disabled={logoUploading}
+                                >
+                                    <span className="content-logo-upload-thumb">
+                                        {logoUploading ? <Loader2 className="animate-spin" />
+                                            : formData.navbarLogoType === 'custom' && formData.navbarLogoUrl
+                                                ? <img src={formData.navbarLogoUrl} alt="" />
+                                                : <Upload />}
+                                    </span>
+                                    <span>
+                                        <strong>{logoUploading ? '正在上传…' : formData.navbarLogoType === 'custom' && formData.navbarLogoUrl ? '更换 Logo 图片' : '上传 Logo 图片'}</strong>
+                                        <small>PNG、JPEG、WebP、GIF、AVIF；超过 100KB 会自动压缩</small>
+                                    </span>
+                                </button>
+                                {logoError && <small className="content-logo-error" role="alert">{logoError}</small>}
+                            </div>
+                            {logoLibrary.length > 0 && (
+                                <div className="content-inspector-field">
+                                    <span>最近上传</span>
+                                    <div className="content-logo-library">
+                                        {logoLibrary.map(item => {
+                                            const url = libraryLogoUrl(item.id);
+                                            const active = formData.navbarLogoType === 'custom' && formData.navbarLogoUrl === url;
+                                            return (
+                                                <button type="button" key={item.id} title="使用这张图片" className={active ? 'active' : ''}
+                                                    onClick={() => handlePatch({ navbarLogoType: 'custom', navbarLogoUrl: url })}>
+                                                    <img src={item.dataUrl} alt="" />
+                                                    {active && <Check className="content-logo-choice-check" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="content-inspector-field">
+                                <span>预设图标</span>
                                 <div className="content-logo-grid">
                                     {BRAND_LOGO_PRESETS.map(item => (
                                         <button
@@ -751,13 +856,24 @@ const ContentManager = ({ config, onSave }) => {
                                     ))}
                                 </div>
                             </div>
+                            {formData.navbarLogoType === 'custom' && formData.navbarLogoUrl && (
+                                <div className="content-inspector-field">
+                                    <span>图片背景</span>
+                                    <div className="content-segmented-picker">
+                                        {[['theme', '主题色底板'], ['none', '原图无底板']].map(([id, label]) => (
+                                            <button type="button" key={id} onClick={() => handleChange('navbarLogoBackground', id)} className={(formData.navbarLogoBackground || 'theme') === id ? 'active' : ''}>{label}</button>
+                                        ))}
+                                    </div>
+                                    <small>彩色或带底色的 Logo 建议选择“原图无底板”。</small>
+                                </div>
+                            )}
                             <label className="content-inspector-field">
-                                <span>自定义 Logo 图片 URL</span>
+                                <span>或使用图片链接</span>
                                 <input
                                     className={GLASS_INPUT}
-                                    value={formData.navbarLogoUrl || ''}
+                                    value={formData.navbarLogoUrl?.startsWith('/api/logo-library/') ? '' : formData.navbarLogoUrl || ''}
                                     onChange={event => {
-                                        const value = event.target.value;
+                                        const value = event.target.value.trim();
                                         handlePatch({
                                             navbarLogoUrl: value,
                                             navbarLogoType: value
@@ -765,16 +881,17 @@ const ContentManager = ({ config, onSave }) => {
                                                 : formData.navbarLogoType === 'custom' ? DEFAULT_SITE_CONFIG.navbarLogoType : formData.navbarLogoType
                                         });
                                     }}
-                                    placeholder="https://..."
+                                    placeholder="https://example.com/logo.png"
                                 />
-                                <small>建议使用透明背景的正方形 PNG、WebP 或 SVG。</small>
+                                <small>仅支持 https:// 链接；外部图片失效时 Logo 会无法显示，建议优先上传。</small>
                             </label>
                             <button
                                 type="button"
                                 className="content-reset-field"
                                 onClick={() => handlePatch({
                                     navbarLogoType: DEFAULT_SITE_CONFIG.navbarLogoType,
-                                    navbarLogoUrl: DEFAULT_SITE_CONFIG.navbarLogoUrl
+                                    navbarLogoUrl: DEFAULT_SITE_CONFIG.navbarLogoUrl,
+                                    navbarLogoBackground: DEFAULT_SITE_CONFIG.navbarLogoBackground
                                 })}
                             >
                                 <RotateCcw />恢复默认 Logo

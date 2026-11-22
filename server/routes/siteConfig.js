@@ -24,7 +24,7 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set([
     'forgotCloseText', 'registerTitle', 'registerSubtitle', 'registerSubmitText',
     'registerSuccessTitle', 'registerSuccessSubtitle', 'welcomeTitle', 'welcomeSubtitle',
     'dailyQuote', 'dashboardTextAlign', 'footerText', 'footerSize', 'footerVisibility',
-    'navbarLogoType', 'navbarLogoUrl', 'loginLogoType', 'customLogoUrl', 'homeWelcomeTitle',
+    'navbarLogoType', 'navbarLogoUrl', 'navbarLogoBackground', 'loginLogoType', 'customLogoUrl', 'homeWelcomeTitle',
     'homeSubtitle', 'searchPlaceholder', 'globalTheme'
 ]);
 const ALLOWED_THEME_KEYS = new Set([
@@ -43,6 +43,20 @@ const BACKGROUND_MODES = new Set(['default', 'bing', 'wallpaper']);
 const TEXT_ALIGNMENTS = new Set(['left', 'center', 'right']);
 const FOOTER_SIZES = new Set(['small', 'medium', 'large']);
 const FOOTER_VISIBILITIES = new Set(['all', 'login_only', 'dashboard_only', 'none']);
+const LOGO_BACKGROUNDS = new Set(['theme', 'none']);
+// Image fields render as <img src>. Allow HTTPS links and logos uploaded to
+// this site's own library; reject http:, data:, javascript: and the like.
+const IMAGE_URL_KEYS = ['navbarLogoUrl', 'customLogoUrl', 'loginVisualCenterImageUrl'];
+const LIBRARY_LOGO_PATH = /^\/api\/logo-library\/[1-9]\d{0,9}\/image$/;
+
+function isAllowedImageUrl(value) {
+    if (value === '' || LIBRARY_LOGO_PATH.test(value)) return true;
+    try {
+        return new URL(value).protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
 
 function isPlainObject(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -103,6 +117,15 @@ function validateSiteConfig(value) {
     }
     if (value.footerVisibility != null && !FOOTER_VISIBILITIES.has(value.footerVisibility)) {
         throw Object.assign(new Error('页脚显示范围无效'), { status: 400 });
+    }
+    if (value.navbarLogoBackground != null && !LOGO_BACKGROUNDS.has(value.navbarLogoBackground)) {
+        throw Object.assign(new Error('Logo 背景样式无效'), { status: 400 });
+    }
+    for (const key of IMAGE_URL_KEYS) {
+        if (value[key] == null) continue;
+        if (typeof value[key] !== 'string' || !isAllowedImageUrl(value[key].trim())) {
+            throw Object.assign(new Error('图片地址必须是 https:// 链接或已上传的 Logo'), { status: 400 });
+        }
     }
     if (value.globalTheme != null) {
         validateObjectShape(value.globalTheme, { allowedKeys: ALLOWED_THEME_KEYS, label: '主题配置', depth: 1 });

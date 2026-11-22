@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
-import BrandLogo from '../branding/BrandLogo';
+import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
 
 const CHRISTMAS_ORNAMENTS = [{ icon: '🎀', left: '10%', speed: '3.5s', length: 12 }, { icon: '🔔', left: '25%', speed: '4s', length: 16 }, { icon: '🎁', left: '40%', speed: '3s', length: 10 }, { icon: '🧦', left: '55%', speed: '4.5s', length: 18 }, { icon: '🍪', left: '70%', speed: '3.2s', length: 14 }, { icon: '🦌', left: '85%', speed: '3.8s', length: 12 }];
 const LUNAR_ORNAMENTS = [{ icon: '🏮', left: '8%', speed: '4s', length: 20, size: 'text-3xl' }, { icon: '🧧', left: '22%', speed: '3s', length: 10, size: 'text-xl' }, { icon: '🏮', left: '35%', speed: '4.5s', length: 15, size: 'text-2xl' }, { icon: '✨', left: '50%', speed: '3s', length: 8, size: 'text-lg' }, { icon: '🏮', left: '65%', speed: '4s', length: 18, size: 'text-2xl' }, { icon: '🧧', left: '80%', speed: '3.5s', length: 12, size: 'text-xl' }, { icon: '🏮', left: '92%', speed: '5s', length: 22, size: 'text-3xl' }];
@@ -36,6 +36,8 @@ const Navbar = ({
     const suspendAmbientMotion = activePage === 'settings';
     const navbarTheme = THEMES[activeThemeColor] || THEMES.blue;
 
+    const logoTile = brandLogoHasTile(siteConfig);
+    const searchPlaceholder = siteConfig?.searchPlaceholder || '搜索竞赛或类目...';
     const renderNavbarLogo = () => {
         const logoType = siteConfig?.navbarLogoType || siteConfig?.loginLogoType || 'Trophy';
         const logoUrl = siteConfig?.navbarLogoUrl || siteConfig?.customLogoUrl;
@@ -44,7 +46,7 @@ const Navbar = ({
                 type={logoType}
                 url={logoUrl}
                 className="h-7 w-7 text-white"
-                imageClassName="h-7 w-7 object-contain"
+                imageClassName={logoTile ? 'h-7 w-7 object-contain' : 'h-10 w-10 object-contain'}
             />
         );
     };
@@ -129,7 +131,7 @@ const Navbar = ({
 
                     {/* Logo */}
                     <button type="button" className="dashboard-navbar-brand flex min-w-0 items-center gap-3 cursor-pointer group z-10" onClick={() => setActivePage('dashboard')} aria-label="返回竞赛首页">
-                        <div className={`navbar-brand-mark relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr ${navbarTheme.gradient} ${navbarTheme.shadow} shadow-lg transition-transform duration-300 group-hover:scale-105`}>
+                        <div className={`navbar-brand-mark relative flex h-10 w-10 items-center justify-center rounded-xl ${logoTile ? `bg-gradient-to-tr ${navbarTheme.gradient} ${navbarTheme.shadow} shadow-lg` : ''} transition-transform duration-300 group-hover:scale-105`}>
                             {renderNavbarLogo()}
                             {isChristmas && <span className="absolute -top-3 -right-2 text-xl filter drop-shadow-sm rotate-12">🎅</span>}
                         </div>
@@ -169,7 +171,7 @@ const Navbar = ({
                                     ${isQingming ? 'focus:border-slate-300 focus:bg-slate-100/50 placeholder-slate-400 text-slate-700' : ''}
                                     ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'focus:border-indigo-200 focus:bg-white' : ''}
                                 `}
-                                placeholder="搜索竞赛或类目..."
+                                placeholder={searchPlaceholder}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -297,9 +299,9 @@ const Navbar = ({
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
                             type="search"
-                            aria-label="搜索竞赛或类目"
+                            aria-label={searchPlaceholder}
                             className={`w-full rounded-xl border border-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-indigo-200 ${GLASS_INPUT}`}
-                            placeholder="搜索竞赛或类目..."
+                            placeholder={searchPlaceholder}
                             value={searchTerm}
                             onChange={event => setSearchTerm(event.target.value)}
                         />

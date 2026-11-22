@@ -6,7 +6,7 @@ import {
 import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../constants/themes';
 import { api } from '../../utils/api';
 import { mark, measure, logStartupPerfSummary } from '../../utils/startupPerf';
-import BrandLogo from '../branding/BrandLogo';
+import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
 import CdnIndicator from './login/CdnIndicator'; // 👈 确保这个路径正确
 import { inferLoginErrorField, LoginFieldError } from './login/LoginFieldError';
 
@@ -615,12 +615,12 @@ const LoginPage = ({
             }}>
                 <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
                     <div className="login-navbar-brand flex min-w-0 items-center gap-3">
-                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-tr ${defaultTheme.gradient} text-lg font-black text-white shadow-lg ${defaultTheme.shadow}`}>
+                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${brandLogoHasTile(config) ? `bg-gradient-to-tr ${defaultTheme.gradient} shadow-lg ${defaultTheme.shadow}` : ''}`}>
                             <BrandLogo
                                 type={config.navbarLogoType || 'Trophy'}
                                 url={config.navbarLogoUrl || ''}
                                 className="h-6 w-6 text-white"
-                                imageClassName="h-7 w-7 object-contain"
+                                imageClassName={brandLogoHasTile(config) ? 'h-7 w-7 object-contain' : 'h-10 w-10 object-contain'}
                             />
                         </div>
                         <span className={`truncate text-lg font-black tracking-tight ${styles.title}`}>

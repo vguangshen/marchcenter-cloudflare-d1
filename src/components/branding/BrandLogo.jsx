@@ -17,9 +17,15 @@ const BRAND_LOGO_ICON_MAP = Object.fromEntries(
     BRAND_LOGO_PRESETS.map(item => [item.id, item.icon])
 );
 
+// A custom image can opt out of the theme-coloured tile so a full-colour logo
+// is shown as-is. Preset icons are white glyphs and always keep the tile.
+export function brandLogoHasTile(config) {
+    return !(config?.navbarLogoType === 'custom' && config?.navbarLogoUrl && config?.navbarLogoBackground === 'none');
+}
+
 const BrandLogo = ({ type = 'Trophy', url = '', className = '', imageClassName = '' }) => {
     if (type === 'custom' && url) {
-        return <img src={url} alt="" className={imageClassName || className} />;
+        return <img src={url} alt="" draggable="false" className={imageClassName || className} />;
     }
     const Icon = BRAND_LOGO_ICON_MAP[type] || Trophy;
     return <Icon className={className} aria-hidden="true" />;
