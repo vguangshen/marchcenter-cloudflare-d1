@@ -54,7 +54,13 @@ window.__agentResult = mode === 'agent-modules' ? { status: 'completed', score: 
 window.__failRefresh = scenario.get('rejectRefresh') === '1';
 window.__profileUser = {
     id: 7, username: 'fixture-user', role: mode === 'maintenance' ? 'super_admin' : 'student',
-    avatarDataUrl: avatar, passwordChangeRecommended: scenario.get('mustChange') === '1'
+    avatarDataUrl: avatar,
+    // remind=1: an administrator-created account inside its 7-day reminder
+    // period, without an email. mustChange=1: the period has already ended.
+    email: scenario.get('remind') === '1' ? null : 'fixture-user@example.invalid',
+    passwordChangeRecommended: scenario.get('mustChange') === '1' || scenario.get('remind') === '1',
+    passwordChangeDeadline: scenario.get('remind') === '1'
+        ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 - 60_000).toISOString() : null
 };
 window.__testApi = async (method, url, body, requestToken) => {
     window.__calls.push({ method, url, body });
@@ -69,8 +75,12 @@ window.__testApi = async (method, url, body, requestToken) => {
         window.__profileUser = { ...window.__profileUser, ...body };
         return { success: true, user: window.__profileUser };
     }
+    if (method === 'PATCH' && url === '/users/me/email') {
+        window.__profileUser = { ...window.__profileUser, email: body.email.toLowerCase() };
+        return { user: window.__profileUser };
+    }
     if (method === 'POST' && url === '/auth/change-password') {
-        if (scenario.get('mustChange') !== '1') return { success: true };
+        if (scenario.get('mustChange') !== '1' && scenario.get('remind') !== '1') return { success: true };
         window.__profileUser = { ...window.__profileUser, passwordChangeRecommended: false };
         return { success: true, token: 'rotated-token' };
     }

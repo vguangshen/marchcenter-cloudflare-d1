@@ -734,7 +734,7 @@ router.post('/password-reset/confirm', async (req, res) => {
         const revokedAt = new Date();
         await pool.batch([
             [`UPDATE users
-              SET password_hash = ?, password_change_recommended = 0,
+              SET password_hash = ?, password_change_recommended = 0, password_change_deadline = NULL,
                   session_revoke_before = ?,
                   session_revoke_at = ?
               WHERE id = ?`, [passwordHash, revokedAt, revokedAt, user.id]],
@@ -800,7 +800,7 @@ router.post('/change-password', authMiddleware, async (req, res) => {
         const revokedAt = new Date();
         const [result] = await pool.query(
             `UPDATE users
-             SET password_hash = ?, password_change_recommended = 0,
+             SET password_hash = ?, password_change_recommended = 0, password_change_deadline = NULL,
                  session_revoke_before = ?, session_revoke_at = ?
              WHERE id = ? AND password_hash = ?`,
             [passwordHash, revokedAt, revokedAt, req.user.id, storedUser.password_hash]

@@ -2,6 +2,8 @@ import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import LoginPage from './components/views/LoginPage';
 import PasswordChangeReminder from './components/views/PasswordChangeReminder';
+import AccountSecurityReminder from './components/views/AccountSecurityReminder';
+import { isPasswordChangeEnforced, passwordChangeDue } from './components/views/accountSecurity';
 import FeedbackCenter from './components/feedback/FeedbackCenter';
 import LoadErrorNotice from './components/feedback/LoadErrorNotice';
 import SystemBackgroundLayers from './components/layouts/SystemBackgroundLayers';
@@ -106,6 +108,22 @@ export default function App() {
 
     useEffect(() => { fetchSiteConfig(); }, [fetchSiteConfig]);
 
+    // The reminder becomes a lock when the grace period ends, even mid-session.
+    const [securityClock, setSecurityClock] = useState(() => Date.now());
+    const passwordDue = passwordChangeDue(currentUser, securityClock);
+    const passwordChangeEnforced = isPasswordChangeEnforced(currentUser, securityClock);
+    useEffect(() => {
+        if (passwordDue === null || passwordChangeEnforced) return undefined;
+        const timer = window.setTimeout(() => setSecurityClock(Date.now()),
+            Math.min(Math.max(passwordDue - Date.now(), 0) + 500, 2 ** 31 - 1));
+        return () => window.clearTimeout(timer);
+    }, [passwordDue, passwordChangeEnforced]);
+    const { updateCurrentUser } = auth;
+    const handleSecurityProfileUpdated = useCallback(user => {
+        if (user) updateCurrentUser(user);
+        notify('邮箱已绑定', 'success');
+    }, [updateCurrentUser]);
+
     const paletteTheme = THEMES[activeThemeColor] || THEMES.blue;
     const currentTheme = (
         effectMode === 'wallpaper'
@@ -179,15 +197,16 @@ export default function App() {
         );
     }
 
-    // An administrator-reset account must choose a new password before the
-    // workbench (and every request it makes) is allowed to load.
-    if (currentUser.passwordChangeRecommended) {
+    // After the reminder period, an administrator-chosen password must be
+    // replaced before the workbench (and every request it makes) can load.
+    if (passwordChangeEnforced) {
         return (
             <div className={`${isDarkMode ? 'dark' : ''} min-h-screen w-full relative`} style={accentStyle}>
                 <FeedbackCenter />
                 {renderBackground()}
                 <PasswordChangeReminder
-                    username={currentUser.username}
+                    user={currentUser}
+                    onUserUpdated={handleSecurityProfileUpdated}
                     onLogout={auth.handleLogout}
                     onComplete={() => notify('密码已更新，欢迎回来', 'success')}
                 />
@@ -196,11 +215,20 @@ export default function App() {
     }
 
     return (
-        <Suspense fallback={renderLoading('正在加载工作台…')}>
-            <Dashboard auth={auth}
-                site={{ siteConfig, siteConfigLoadError, fetchSiteConfig, persistSiteConfig }}
-                appearance={{ isDarkMode, uiThemeSettings, effectiveLightDark, saveUiThemeSettings,
-                    activeThemeColor, activeImmersive, systemEffects, accentStyle, renderBackground }} />
-        </Suspense>
+        <>
+            <Suspense fallback={renderLoading('正在加载工作台…')}>
+                <Dashboard auth={auth}
+                    site={{ siteConfig, siteConfigLoadError, fetchSiteConfig, persistSiteConfig }}
+                    appearance={{ isDarkMode, uiThemeSettings, effectiveLightDark, saveUiThemeSettings,
+                        activeThemeColor, activeImmersive, systemEffects, accentStyle, renderBackground }} />
+            </Suspense>
+            <AccountSecurityReminder
+                key={currentUser.id}
+                user={currentUser}
+                isDarkMode={isDarkMode}
+                onUserUpdated={handleSecurityProfileUpdated}
+                onPasswordChanged={() => notify('密码已更新', 'success')}
+            />
+        </>
     );
 }

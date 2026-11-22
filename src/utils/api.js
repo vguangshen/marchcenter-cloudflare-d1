@@ -355,6 +355,14 @@ export const changePassword = async (body) => {
     }
 };
 
+/** Bind an email to an account created without one; returns the updated profile. */
+export const bindMyEmail = async (email) => {
+    const data = await apiRequest('/users/me/email', {
+        method: 'PATCH', body: JSON.stringify({ email }), retry: 0, fallback: '邮箱绑定失败'
+    });
+    return data?.user;
+};
+
 /** Best-effort server-side sign-out for the given token. */
 export const revokeSession = (token) => {
     if (!token) return Promise.resolve();

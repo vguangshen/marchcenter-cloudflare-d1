@@ -55,22 +55,41 @@ test('bootstrap secret and default reset password require a password change befo
             token: adminToken,
             body: {
                 username: 'temporary-user',
-                email: 'temporary-user@example.invalid',
                 password: 'Original-password-1',
                 role: 'teacher'
             }
         });
-        assert.equal(created.status, 200);
+        assert.equal(created.status, 200, 'administrators may create an account without an email');
 
         const oldLogin = await request(harness, '/api/auth/login', {
             body: { username: 'temporary-user', password: 'Original-password-1' }
         });
         assert.equal(oldLogin.status, 200);
+        assert.equal(oldLogin.data.user.email, null);
         assert.equal(oldLogin.data.user.passwordChangeRecommended, true,
-            'an administrator-chosen initial password must be replaced on first sign-in');
-        const createdBlocked = await request(harness, '/api/competitions', { token: oldLogin.data.token });
-        assert.equal(createdBlocked.status, 403);
-        assert.equal(createdBlocked.data.code, 'password_change_required');
+            'an administrator-chosen initial password is flagged for change');
+        const createdDeadline = Date.parse(oldLogin.data.user.passwordChangeDeadline);
+        assert.ok(Math.abs(createdDeadline - (Date.now() + 7 * 24 * 60 * 60 * 1000)) < 60_000, 'seven-day reminder period');
+        assert.equal((await request(harness, '/api/competitions', { token: oldLogin.data.token })).status, 200,
+            'the reminder period does not block the workbench');
+
+        const badEmail = await request(harness, '/api/users/me/email', {
+            token: oldLogin.data.token, method: 'PATCH', body: { email: 'not-an-email' }
+        });
+        assert.equal(badEmail.status, 400);
+        const takenEmail = await request(harness, '/api/users/me/email', {
+            token: oldLogin.data.token, method: 'PATCH', body: { email: 'FIRST-ADMIN@example.invalid' }
+        });
+        assert.equal(takenEmail.status, 409, 'another account already uses this email');
+        const bound = await request(harness, '/api/users/me/email', {
+            token: oldLogin.data.token, method: 'PATCH', body: { email: ' Temporary-User@Example.invalid ' }
+        });
+        assert.equal(bound.status, 200, bound.text);
+        assert.equal(bound.data.user.email, 'temporary-user@example.invalid');
+        const rebind = await request(harness, '/api/users/me/email', {
+            token: oldLogin.data.token, method: 'PATCH', body: { email: 'other@example.invalid' }
+        });
+        assert.equal(rebind.status, 409, 'a bound email can only be changed by an administrator');
 
         const reset = await request(harness, `/api/users/${created.data.id}/reset-password`, {
             token: adminToken,
@@ -93,7 +112,12 @@ test('bootstrap secret and default reset password require a password change befo
         });
         assert.equal(resetPasswordLogin.status, 200);
         assert.equal(resetPasswordLogin.data.user.passwordChangeRecommended, true);
+        assert.equal(resetPasswordLogin.data.user.passwordChangeDeadline, reset.data.passwordChangeDeadline);
+        assert.equal((await request(harness, '/api/competitions', { token: resetPasswordLogin.data.token })).status, 200,
+            'a reset is also only a reminder during the grace period');
 
+        await harness.database.prepare('UPDATE users SET password_change_deadline = ? WHERE id = ?')
+            .bind(new Date(Date.now() - 1000).toISOString(), created.data.id).run();
         for (const [pathname, method] of [['/api/competitions', 'GET'], ['/api/users/me/theme', 'GET'], ['/api/content/updates', 'GET']]) {
             const blocked = await request(harness, pathname, { token: resetPasswordLogin.data.token, method });
             assert.equal(blocked.status, 403, pathname);

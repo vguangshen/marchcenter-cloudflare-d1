@@ -25,6 +25,7 @@ before(async () => {
             if (previous && data?.token) window.dispatchEvent(new CustomEvent('fixture-token-rotated', { detail: { previous, token: data.token } }));
             return data;
         };
+        export const bindMyEmail = async email => (await request('PATCH', '/users/me/email', { email }))?.user;
         export const onTokenRotated = listener => { window.addEventListener('fixture-token-rotated', listener); return () => window.removeEventListener('fixture-token-rotated', listener); };
         export const revokeSession = async token => { (window.__revokedSessions ||= []).push(token); };
     `;
@@ -531,6 +532,39 @@ test('a reset account must change its password before the workbench loads', asyn
         await page.getByRole('button', { name: '打开个人资料', exact: true }).waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), 'rotated-token');
         assert.equal(await page.evaluate(() => window.__calls.filter(call => call.url === '/auth/change-password').length), 1);
+    } finally { await page.close(); }
+});
+
+test('during the reminder period the workbench loads with a bottom-right card for email and password', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=app&remind=1`);
+        await page.getByRole('button', { name: '打开个人资料', exact: true }).waitFor();
+        assert.equal(await page.getByRole('dialog', { name: '请先修改登录密码' }).count(), 0, 'no lock before the deadline');
+        const card = page.getByRole('region', { name: '完善账号安全', exact: true });
+        await card.waitFor();
+        await card.getByText('剩余 3 天', { exact: true }).waitFor();
+        const box = await card.boundingBox();
+        const viewport = page.viewportSize();
+        assert.ok(box.x + box.width > viewport.width - 40 && box.y + box.height > viewport.height - 40, 'card sits in the bottom-right corner');
+
+        await card.getByRole('button', { name: '收起提醒', exact: true }).click();
+        await page.getByRole('button', { name: /账号安全待完善 · 剩余 3 天/ }).click();
+        await card.waitFor();
+
+        await card.getByLabel('绑定邮箱', { exact: true }).fill('bad');
+        await card.getByRole('button', { name: '绑定', exact: true }).click();
+        await card.getByText('请输入有效的邮箱地址', { exact: true }).waitFor();
+        await card.getByLabel('绑定邮箱', { exact: true }).fill('Fixture@Example.invalid');
+        await card.getByRole('button', { name: '绑定', exact: true }).click();
+        await card.getByLabel('绑定邮箱', { exact: true }).waitFor({ state: 'detached' });
+
+        await card.getByLabel('新密码', { exact: true }).fill('Chosen-Password-2026');
+        await card.getByLabel('确认新密码', { exact: true }).fill('Chosen-Password-2026');
+        await card.getByRole('button', { name: '保存新密码', exact: true }).click();
+        await card.waitFor({ state: 'detached' });
+        assert.equal(await page.evaluate(() => localStorage.getItem('authToken')), 'rotated-token');
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('authUser')).user.email), 'fixture@example.invalid');
     } finally { await page.close(); }
 });
 

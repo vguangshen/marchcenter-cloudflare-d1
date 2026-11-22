@@ -23,7 +23,7 @@ const DEFAULT_BATCH_FORM = {
     startNum: 1,
     count: 20,
     password: '',
-    emailSuffix: '@student.com'
+    emailSuffix: ''
 };
 
 const AddUserModal = ({ isOpen, onClose, onAdd, currentUser, classes = [], allLinks = [], agentPlatforms = [] }) => {
@@ -65,16 +65,16 @@ const AddUserModal = ({ isOpen, onClose, onAdd, currentUser, classes = [], allLi
         const start = Number.parseInt(batchForm.startNum, 10);
         const count = Number.parseInt(batchForm.count, 10);
         const rawSuffix = batchForm.emailSuffix.trim();
-        if (!prefix || !Number.isInteger(start) || start < 0 || !Number.isInteger(count) || count < 1 || count > 200 || !rawSuffix) return [];
+        if (!prefix || !Number.isInteger(start) || start < 0 || !Number.isInteger(count) || count < 1 || count > 200) return [];
 
-        const suffix = rawSuffix.startsWith('@') ? rawSuffix : `@${rawSuffix}`;
+        const suffix = !rawSuffix ? '' : rawSuffix.startsWith('@') ? rawSuffix : `@${rawSuffix}`;
         const last = start + count - 1;
         const digits = Math.max(2, String(last).length);
         return Array.from({ length: count }, (_, offset) => {
             const username = `${prefix}${String(start + offset).padStart(digits, '0')}`;
             return {
                 username,
-                email: `${username.toLowerCase()}${suffix}`,
+                email: suffix ? `${username.toLowerCase()}${suffix}` : null,
                 password: batchForm.password,
                 valid: true
             };
@@ -105,16 +105,16 @@ const AddUserModal = ({ isOpen, onClose, onAdd, currentUser, classes = [], allLi
         try {
             let usersToAdd;
             if (mode === 'single') {
-                if (!singleForm.username.trim() || !singleForm.password || !singleForm.email.trim()) throw new Error('请填写完整信息');
+                if (!singleForm.username.trim() || !singleForm.password) throw new Error('请填写用户名和初始密码');
                 if (singleForm.password.length < 6) throw new Error('密码至少需要 6 位');
                 usersToAdd = [{
                     username: singleForm.username.trim(),
-                    email: singleForm.email.trim(),
+                    email: singleForm.email.trim() || null,
                     password: singleForm.password,
                     ...(selectedRole === 'teacher' ? { permissions: permissionIds, timeRules: permissionTimeRules } : {})
                 }];
             } else {
-                if (!batchPreview.length) throw new Error('请检查账号前缀、起始编号、生成数量和邮箱后缀');
+                if (!batchPreview.length) throw new Error('请检查账号前缀、起始编号和生成数量');
                 if (batchForm.password.length < 6) throw new Error('统一密码至少需要 6 位');
                 usersToAdd = batchPreview.map(user => ({
                     ...user,
@@ -237,8 +237,8 @@ const AddUserModal = ({ isOpen, onClose, onAdd, currentUser, classes = [], allLi
                                     <input className="mc-input" value={singleForm.username} onChange={event => updateSingle('username', event.target.value)} placeholder={selectedRole === 'teacher' ? '例如：teacher01' : selectedRole === 'admin' ? '例如：admin01' : '例如：student01'} autoFocus />
                                 </div>
                                 <div>
-                                    <label className="mb-1.5 ml-1 block text-xs font-bold text-slate-500">登录邮箱</label>
-                                    <input type="email" className="mc-input" value={singleForm.email} onChange={event => updateSingle('email', event.target.value)} placeholder="user@example.com" />
+                                    <label className="mb-1.5 ml-1 block text-xs font-bold text-slate-500">登录邮箱 <span className="font-medium text-slate-400">（选填）</span></label>
+                                    <input type="email" className="mc-input" value={singleForm.email} onChange={event => updateSingle('email', event.target.value)} placeholder="留空则由用户登录后自行绑定" />
                                 </div>
                             </div>
                             <div>
@@ -278,8 +278,8 @@ const AddUserModal = ({ isOpen, onClose, onAdd, currentUser, classes = [], allLi
                             </div>
 
                             <div>
-                                <label className="mb-1.5 ml-1 block text-xs font-bold text-slate-500">邮箱后缀</label>
-                                <input className="mc-input" value={batchForm.emailSuffix} onChange={event => updateBatch('emailSuffix', event.target.value)} placeholder="@student.com" />
+                                <label className="mb-1.5 ml-1 block text-xs font-bold text-slate-500">邮箱后缀 <span className="font-medium text-slate-400">（选填）</span></label>
+                                <input className="mc-input" value={batchForm.emailSuffix} onChange={event => updateBatch('emailSuffix', event.target.value)} placeholder="例如 @student.com，留空则由用户自行绑定" />
                             </div>
 
                             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-xs text-indigo-800">

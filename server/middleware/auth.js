@@ -5,22 +5,25 @@ import { canManageUsers, isSuperAdmin, normalizeRole } from "../utils/roleAccess
 import { sessionTokenHash, verifyToken } from "../utils/token.js";
 import { waitUntil } from "../config/runtime.js";
 import { createLastSeenWriteTracker } from "../utils/lastSeenWriteTracker.js";
+import { isPasswordChangeEnforced } from "../utils/password.js";
 
 const lastSeenWriteTracker = createLastSeenWriteTracker();
 
-// While an administrator reset is pending, the session may only read its own
-// profile, set a new password or sign out. Everything else waits until then.
+// Once the grace period for an administrator-chosen password has ended, the
+// session may only read its own profile, bind an email, set a new password or
+// sign out. Everything else waits until the password is changed.
 const PASSWORD_CHANGE_ALLOWED = new Set([
     'GET /api/auth/me',
     'HEAD /api/auth/me',
     'POST /api/auth/change-password',
+    'PATCH /api/users/me/email',
     'POST /api/auth/logout'
 ]);
 
 async function readSessionUser(userId, token) {
     const select = signedOut => `SELECT u.id, u.username, u.role, u.is_disabled, u.class_id,
                 u.session_revoke_at, u.session_revoke_before,
-                u.password_change_recommended,
+                u.password_change_recommended, u.password_change_deadline,
                 c.name AS class_name, t.username AS class_teacher_username,
                 ${signedOut} AS session_signed_out
          FROM users u
@@ -70,7 +73,8 @@ export const authMiddleware = async (req, res, next) => {
         if (Number(user.session_signed_out)) {
             return res.status(401).json({ error: "登录会话已退出，请重新登录" });
         }
-        if (Number(user.password_change_recommended) && !PASSWORD_CHANGE_ALLOWED.has(`${req.method} ${req.path}`)) {
+        if (isPasswordChangeEnforced(user.password_change_recommended, user.password_change_deadline)
+            && !PASSWORD_CHANGE_ALLOWED.has(`${req.method} ${req.path}`)) {
             return res.status(403).json({ error: "请先修改登录密码", code: 'password_change_required' });
         }
         req.sessionToken = { value: token, expiresAt: Number(payload.exp) * 1000 };

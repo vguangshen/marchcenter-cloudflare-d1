@@ -6,7 +6,9 @@ import {
     assignableRoles, canManageRole, canSeeUser, normalizeRole, ROLES
 } from "../utils/roleAccess.js";
 import { canSeeUserInClass, getActorWithClass } from "../utils/classAccess.js";
-import { ADMIN_RESET_DEFAULT_PASSWORD, hashPassword } from "../utils/password.js";
+import {
+    ADMIN_RESET_DEFAULT_PASSWORD, PASSWORD_CHANGE_GRACE_DAYS, hashPassword, passwordChangeDeadline
+} from "../utils/password.js";
 import { CONTENT_TYPES } from '../utils/contentRevision.js';
 import { extractGeoFromRequest } from '../utils/geolocation.js';
 import { normalizeAvatarDataUrl, readUserProfile } from '../utils/userProfile.js';
@@ -28,6 +30,40 @@ router.patch('/me/profile', authMiddleware, async (req, res) => {
     } catch (error) {
         console.error('Profile update failed:', error.message);
         return res.status(500).json({ error: '个人资料保存失败，请稍后重试' });
+    }
+});
+
+// Accounts created without an email can bind one themselves. Changing an
+// address that is already bound stays with administrators, so a borrowed
+// session cannot redirect password-reset and code-login mail.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+router.patch('/me/email', authMiddleware, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!EMAIL_PATTERN.test(email) || email.length > 254) {
+        return res.status(400).json({ error: '请输入有效的邮箱地址' });
+    }
+    try {
+        const [[current]] = await pool.query('SELECT email FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+        if (!current) return res.status(404).json({ error: '用户不存在' });
+        if (String(current.email || '').trim()) {
+            return res.status(409).json({ error: '账号已绑定邮箱，如需更换请联系管理员' });
+        }
+        const [taken] = await pool.query(
+            'SELECT id FROM users WHERE id <> ? AND (lower(email) = lower(?) OR lower(username) = lower(?)) LIMIT 1',
+            [req.user.id, email, email]
+        );
+        if (taken.length) return res.status(409).json({ error: '该邮箱已被其他账号使用' });
+        const [result] = await pool.query(
+            "UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR trim(email) = '')",
+            [email, req.user.id]
+        );
+        if (!result.affectedRows) return res.status(409).json({ error: '邮箱状态已更新，请刷新后重试' });
+        res.setHeader('Cache-Control', 'no-store');
+        return res.json({ user: await readUserProfile(req.user.id) });
+    } catch (error) {
+        if (/UNIQUE/i.test(error.message || '')) return res.status(409).json({ error: '该邮箱已被其他账号使用' });
+        console.error('Email binding failed:', error.message);
+        return res.status(500).json({ error: '邮箱绑定失败，请稍后重试' });
     }
 });
 
@@ -235,14 +271,16 @@ async function createUsersBatch(actorUser, inputUsers) {
         item.timeRules = normalizedRules;
     }
     const passwordHashes = await Promise.all(normalizedUsers.map(item => hashPassword(item.password)));
+    const changeDeadline = passwordChangeDeadline();
     const statements = [];
     normalizedUsers.forEach((item, index) => {
-        // The creator knows the initial password, so the new owner must replace
-        // it on first sign-in, exactly like an administrator reset.
+        // The creator knows the initial password, so the new owner is reminded
+        // to replace it and is locked once the grace period ends, like a reset.
         statements.push([
-            `INSERT INTO users (username, email, password_hash, role, class_id, password_change_recommended, created_at)
-             VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
-            [item.username, item.email, passwordHashes[index], item.role, item.classId]
+            `INSERT INTO users (username, email, password_hash, role, class_id,
+                                password_change_recommended, password_change_deadline, created_at)
+             VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)`,
+            [item.username, item.email, passwordHashes[index], item.role, item.classId, changeDeadline]
         ]);
         if (item.role === ROLES.TEACHER) {
             statements.push([
@@ -793,23 +831,26 @@ router.patch("/:id/reset-password", authMiddleware, userManagerOnly, async (req,
         const revokeAt = new Date(revokeBefore.getTime() + RESET_REVOKE_DELAYS_MS[revokeMode]);
         const resetPassword = ADMIN_RESET_DEFAULT_PASSWORD;
         const hashedPassword = await hashPassword(resetPassword);
+        const changeDeadline = passwordChangeDeadline(revokeBefore.getTime());
         await pool.query(
             `UPDATE users
              SET password_hash = ?, session_revoke_before = ?, session_revoke_at = ?,
-                 password_change_recommended = 1
+                 password_change_recommended = 1, password_change_deadline = ?
              WHERE id = ?`,
-            [hashedPassword, revokeBefore, revokeAt, req.params.id]
+            [hashedPassword, revokeBefore, revokeAt, changeDeadline, req.params.id]
         );
+        const changeNotice = `用户需在 ${PASSWORD_CHANGE_GRACE_DAYS} 天内修改密码，逾期后必须修改才能继续使用`;
         res.setHeader('Cache-Control', 'no-store');
         res.json({
             success: true,
             message: revokeMode === 'immediate'
-                ? '密码已重置为 123456，旧登录已立即撤销；用户登录后必须先修改密码'
-                : `密码已重置为 123456，旧登录将在 ${revokeMode === '1d' ? '1 天' : '7 天'}后撤销；用户登录后必须先修改密码`,
+                ? `密码已重置为 123456，旧登录已立即撤销；${changeNotice}`
+                : `密码已重置为 123456，旧登录将在 ${revokeMode === '1d' ? '1 天' : '7 天'}后撤销；${changeNotice}`,
             resetPassword,
             revokeMode,
             revokeAt: revokeAt.toISOString(),
-            passwordChangeRecommended: true
+            passwordChangeRecommended: true,
+            passwordChangeDeadline: changeDeadline
         });
     } catch (err) {
         console.error(err);

@@ -21,7 +21,7 @@ export function normalizeAvatarDataUrl(value) {
 export async function readUserProfile(userId) {
     const [rows] = await pool.query(
         `SELECT u.id, u.username, u.email, u.role, u.class_id, u.avatar_data_url,
-                u.password_change_recommended,
+                u.password_change_recommended, u.password_change_deadline,
                 c.name AS class_name, t.username AS class_teacher_username
          FROM users u LEFT JOIN classes c ON c.id = u.class_id
          LEFT JOIN users t ON t.id = c.teacher_user_id WHERE u.id = ? LIMIT 1`,
@@ -38,6 +38,7 @@ export async function readUserProfile(userId) {
         className: user.class_name || null,
         classTeacherUsername: user.class_teacher_username || null,
         avatarDataUrl: user.avatar_data_url || null,
-        passwordChangeRecommended: Boolean(user.password_change_recommended)
+        passwordChangeRecommended: Boolean(user.password_change_recommended),
+        passwordChangeDeadline: user.password_change_recommended ? user.password_change_deadline || null : null
     };
 }

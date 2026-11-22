@@ -1,8 +1,21 @@
 import { getEnv } from '../config/runtime.js';
 
-// Administrator resets set this well-known password; accounts holding it must
-// change it before doing anything else (see authMiddleware).
+// Administrator resets set this well-known password. Accounts holding an
+// administrator-chosen password (reset or initial) are reminded to change it
+// and are locked once the grace period ends (see authMiddleware).
 export const ADMIN_RESET_DEFAULT_PASSWORD = '123456';
+export const PASSWORD_CHANGE_GRACE_DAYS = 7;
+
+export function passwordChangeDeadline(now = Date.now()) {
+    return new Date(now + PASSWORD_CHANGE_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+// A flagged account without a recorded deadline is enforced immediately.
+export function isPasswordChangeEnforced(recommended, deadline, now = Date.now()) {
+    if (!Number(recommended)) return false;
+    const due = deadline ? Date.parse(deadline) : NaN;
+    return !Number.isFinite(due) || now >= due;
+}
 
 const encoder = new TextEncoder();
 const DEFAULT_ITERATIONS = 100_000;
