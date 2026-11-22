@@ -5,6 +5,7 @@ import {
     MonitorPlay, LayoutDashboard, PanelTop, Image
 } from 'lucide-react';
 import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../../constants/themes';
+import { IMMERSIVE_WALLPAPERS } from '../../../constants/immersiveWallpapers';
 import WallpaperManager from './WallpaperManager';
 
 const EFFECT_MODES = [
@@ -259,18 +260,27 @@ const AppearanceManager = ({ settings, onSave, token, effectiveLightDark }) => {
                                     key={item.id}
                                     type="button"
                                     onClick={() => updateSettings({ immersive: item.id })}
-                                    className={`rounded-xl border p-3 text-left transition ${
+                                    aria-pressed={active}
+                                    className={`group relative isolate overflow-hidden rounded-xl border bg-slate-800 p-3 text-left transition ${
                                         active
-                                            ? 'border-white bg-white/10 text-white shadow-lg'
-                                            : 'border-white/5 text-slate-400 hover:border-white/30 hover:bg-white/5'
+                                            ? 'border-white text-white shadow-lg'
+                                            : 'border-white/20 text-slate-200 hover:border-white/60'
                                     }`}
                                 >
+                                    <img
+                                        src={IMMERSIVE_WALLPAPERS[item.id]}
+                                        alt=""
+                                        loading="lazy"
+                                        decoding="async"
+                                        className="pointer-events-none absolute inset-0 -z-20 h-full w-full object-cover object-[center_68%]"
+                                    />
+                                    <span className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-slate-950/50 to-slate-950/85" aria-hidden="true"/>
                                     <div className="flex items-center justify-between">
                                         <item.icon className="h-5 w-5"/>
                                         {active && <span className="h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"/>}
                                     </div>
                                     <div className="mt-3 text-xs font-bold text-slate-100">{item.label}</div>
-                                    <div className="mt-0.5 text-[10px] opacity-60">{item.desc}</div>
+                                    <div className="mt-0.5 text-[10px] text-slate-200">{item.desc}</div>
                                 </button>
                             );
                         })}

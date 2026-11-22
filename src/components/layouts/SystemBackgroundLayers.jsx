@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { THEMES } from '../../constants/themes';
+import { IMMERSIVE_WALLPAPERS } from '../../constants/immersiveWallpapers';
 import { prefersReducedMotion } from '../../utils/motionPreferences';
 
 const IMMERSIVE_EFFECT_COMPONENTS = Object.freeze({
@@ -26,7 +27,10 @@ export default function SystemBackgroundLayers({
     onWallpaperLoad,
     onWallpaperError
 }) {
-    const ActiveImmersiveEffect = activeImmersive && !suspendImmersive && !prefersReducedMotion()
+    const immersiveWallpaper = effectMode === 'immersive' && Object.hasOwn(IMMERSIVE_WALLPAPERS, activeImmersive)
+        ? IMMERSIVE_WALLPAPERS[activeImmersive]
+        : null;
+    const ActiveImmersiveEffect = immersiveWallpaper && !suspendImmersive && !prefersReducedMotion()
         ? IMMERSIVE_EFFECT_COMPONENTS[activeImmersive]
         : null;
     const isWallpaperSoftened = !currentUser && !isUnlocking;
@@ -44,6 +48,14 @@ export default function SystemBackgroundLayers({
             )}
             {showNeutral && (
                 <div className={`neutral-system-background pointer-events-none fixed inset-0 z-0 ${isDarkMode ? 'neutral-system-background--dark' : ''}`}/>
+            )}
+            {immersiveWallpaper && (
+                <div
+                    aria-hidden="true"
+                    className={`immersive-wallpaper-layer pointer-events-none fixed inset-0 z-0 overflow-hidden ${currentUser && !suspendImmersive ? 'immersive-wallpaper-layer--dashboard' : ''}`}
+                >
+                    <img key={immersiveWallpaper} src={immersiveWallpaper} alt="" decoding="async" className="h-full w-full object-cover object-[center_55%]"/>
+                </div>
             )}
             {showAfterRain && (
                 <div className={`after-rain-background pointer-events-none fixed inset-0 z-0 overflow-hidden ${isDarkMode ? 'after-rain-background--dark' : ''}`}>

@@ -4,6 +4,7 @@ import {
     Eye, EyeOff, X, ShieldCheck, CheckCircle2, Mail, Ban
 } from 'lucide-react';
 import { DEFAULT_SYSTEM_EFFECTS, THEMES } from '../../constants/themes';
+import { IMMERSIVE_WALLPAPERS } from '../../constants/immersiveWallpapers';
 import { api } from '../../utils/api';
 import { mark, measure, logStartupPerfSummary } from '../../utils/startupPerf';
 import BrandLogo, { brandLogoHasTile } from '../branding/BrandLogo';
@@ -933,7 +934,7 @@ const LoginPage = ({
             </main>
 
             {showFooter && (
-                <footer className={`text-center font-bold opacity-80 ${footerSizeClass} ${styles.footer}`}>
+                <footer className={`text-center font-bold ${footerSizeClass} ${Object.hasOwn(IMMERSIVE_WALLPAPERS, immersiveMode) ? 'text-slate-100' : `opacity-80 ${styles.footer}`}`}>
                     {text('footerText', '© 2026 MarchCenter. All rights reserved.')}
                 </footer>
             )}

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#211323"/>
+      <stop offset=".54" stop-color="#3b1d2b"/>
+      <stop offset="1" stop-color="#703b33"/>
+    </linearGradient>
+    <radialGradient id="ember" cx=".58" cy=".68" r=".51">
+      <stop stop-color="#c37a4b" stop-opacity=".27"/>
+      <stop offset="1" stop-color="#a7664f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ridge" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#49232e"/>
+      <stop offset="1" stop-color="#6b3736"/>
+    </linearGradient>
+    <linearGradient id="water" x1=".44" y1="0" x2=".77" y2="1">
+      <stop stop-color="#84503d"/>
+      <stop offset=".54" stop-color="#63383a"/>
+      <stop offset="1" stop-color="#2b1b2c"/>
+    </linearGradient>
+    <linearGradient id="reflection" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#d68e56" stop-opacity=".62"/>
+      <stop offset="1" stop-color="#ae5a42" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="tile" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#623031"/>
+      <stop offset="1" stop-color="#3d202b"/>
+    </linearGradient>
+    <linearGradient id="light" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#edba73"/>
+      <stop offset="1" stop-color="#a95140"/>
+    </linearGradient>
+    <g id="roof">
+      <path d="M-102-3c29 0 51-15 65-31 22 4 52 4 74 0C51-18 73-3 102-3 92 2 75 6 62 6H-62C-75 6-92 2-102-3z" fill="url(#tile)"/>
+      <path d="M-95-2c24 0 45-11 59-26 24 3 48 3 72 0C50-13 71-2 95-2M-68 4H68" fill="none" stroke="#a66045" stroke-opacity=".72" stroke-width="1.5"/>
+      <path d="M-37-33h74m-39 7v21m-22-20c-4 9-9 15-18 19m63-19c4 9 9 15 18 19m-78-18c-7 8-15 14-27 19m105-19c7 8 15 14 27 19" fill="none" stroke="#bf7c52" stroke-opacity=".4" stroke-width="1.25"/>
+      <path d="M-37-33c-7-2-8-7-6-9m80 9c7-2 8-7 6-9M-102-3c-7-3-11-7-11-11m215 11c7-3 11-7 11-11" fill="none" stroke="#bd7652" stroke-width="2" stroke-linecap="round"/>
+    </g>
+    <g id="house">
+      <path d="M-27-20h54v32h-54z" fill="#542d32"/>
+      <path d="M27-20 41-27v32l-14 7z" fill="#41232d"/>
+      <path d="m-42-19 20-17 27 3 16-10 24 17-16 10c-17-1-35-4-50-1-9 1-18 1-21-2z" fill="url(#tile)"/>
+      <path d="M-41-20c9-2 15-8 20-15 14 2 31 7 42-7m7 25 15-9" fill="none" stroke="#a35e45" stroke-width="1.6"/>
+      <path d="M-19-8h8V3h-8zm14 0h8V3h-8zm16 0h8V3h-8z" fill="url(#light)"/>
+      <path d="M-15-7v9m14-9v9m16-9v9" fill="none" stroke="#57302d" stroke-width="1.3"/>
+    </g>
+    <g id="cypress">
+      <path d="M0 2c2-32 2-52 1-72M1-51C-5-65-17-73-25-73m26 33c9-14 16-19 27-19M1-22c-10-14-19-17-31-18" fill="none" stroke="#2a1c29" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-27-67c-4-5 2-14 16-15 9-11 30-6 28 4C14-67-7-64-27-67zm20 16c2-8 14-17 28-16 8-1 17 2 16 9-2 9-21 14-44 7zm-31 11c1-8 9-13 19-13 14-1 24 4 23 12-5 10-29 11-42 1z" fill="currentColor"/>
+    </g>
+  </defs>
+
+  <path d="M0 0h1600v900H0z" fill="url(#sky)"/>
+  <path d="M0 0h1600v900H0z" fill="url(#ember)"/>
+  <path d="M-40 378c186 40 387 56 578 31 183-24 332-58 544-36 148 15 394 46 559 12v24c-205 35-397 13-559-10-219-31-385 13-524 30-199 25-416 13-598-28z" fill="#bf846b" opacity=".047"/>
+  <path d="M-10 452c185 36 265 22 444 11s327-38 530-22c252 19 443 35 651 4" fill="none" stroke="#c88c72" stroke-opacity=".12" stroke-width="2"/>
+
+  <!-- Distant hills, roofline and the far bank of the city. -->
+  <path d="M0 535c113-52 170-107 254-96 61 8 109 75 183 69 86-8 126-57 204-56 54 0 106 59 189 57 67-2 116-48 173-41 93 10 155 55 228 25 72-30 115-99 183-90 74 11 116 80 186 106v154H0z" fill="#43242f"/>
+  <path d="M0 578c112-43 197-31 261-54 74-27 135-40 208-18 63 19 115 43 179 29 48-10 106-43 152-30 57 17 115 53 183 45 98-11 146-56 211-56 55 0 118 48 197 45 86-4 138-32 209-6v163H0z" fill="url(#ridge)"/>
+  <path d="M0 572c113-31 177-28 253-50m43-11c69-19 114-16 175 3m133 28c67 1 102-29 162-41m255 48c81-15 124-43 171-50m194 48c84 4 111-20 214-14" fill="none" stroke="#b37b60" stroke-opacity=".23" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M0 622c102-16 161-49 272-47 126 3 209 33 306 37 61 2 133-20 224-16 73 4 137 33 219 20 81-13 181-41 285-34 101 7 205 49 294 38v115H0z" fill="#5d3336"/>
+  <path d="M107 623h63v-12h19l12-10 17 10h15v14h28v-25h15l16-15 21 15h18v26h42v-12h34v-11l17-14 21 14h14v26h48v-18h27l12-11 13 11h23v16h40v-12h46v29H92zm971 6h53v-21h18l22-16 24 16h21v16h23v-27h32l16-13 16 13h17v26h49v-15h25l18-13 13 13h22v28h58v17h-422z" fill="#482731"/>
+  <path d="M156 625v-7m24 4v-7m24 6v-7m81 2v-9m17 9v-9m19 9v-9m75 17v-7m25 2v-7m15 7v-7m104 10v-8m32 10v-7m609-9v-8m17 7v-7m15 8v-8m84-5v-8m19 9v-8m101 21v-9m16 12v-8" fill="none" stroke="#ce8657" stroke-opacity=".67" stroke-width="2.3"/>
+
+  <!-- The river is broad in front and disappears toward the central bridge. -->
+  <path d="M0 683c189-18 339-25 489-28 115-2 179 14 315 12 113-1 237-24 385-17 136 6 299 35 411 27v223H0z" fill="url(#water)"/>
+  <path d="M764 685c108-22 235-30 374-15 113 12 195 37 271 58-146 4-277-21-400-6-123 15-207 53-252 85-32 22 12 49 65 93H565c-19-44-20-75 16-99 41-27 121-58 256-82 100-18 203-24 275-29-129-13-246 4-351 12z" fill="url(#reflection)" opacity=".57"/>
+  <path d="M0 680c133-13 248-15 330-16 90-2 180-15 269-5 61 7 103 15 192 16 115 1 219-29 344-23 187 9 324 41 465 25" fill="none" stroke="#ab7154" stroke-opacity=".57" stroke-width="2"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M272 706h151m64 11h89m44-10h73m91 19h134m89 8h113m-409 16h77m93 20h146m-362 12h81m-99 36h144m-237 23h62m73 8h154m-329 27h146m206-163h123m71 9h105" stroke="#d38c5e" stroke-opacity=".41" stroke-width="2"/>
+    <path d="M500 700h75m170 11h42m17 23h63m-144 18h64m-134 23h41m8 29h110m-191 65h68m359-148h72m38 30h35" stroke="#edb67e" stroke-opacity=".36" stroke-width="1.5"/>
+    <path d="M334 753c141 5 190-8 269-5m311-2c86-21 151-21 226-12m-873 54c169-14 257-24 370-10m297 24c158-31 281-29 416 1m-1200 38c116 3 234-24 341-22" stroke="#d5a082" stroke-opacity=".21" stroke-width="1.5"/>
+  </g>
+  <path d="M644 699c77 1 98-31 143-35 49-3 77 32 152 37l-4 17c-75-8-111-30-146-29-44 2-82 28-145 25z" fill="#512c32"/>
+  <path d="M644 698c73-1 102-33 143-36 55-4 87 32 152 38m-283-2c3 8 1 12 1 15m30-20c3 6 0 11 0 15m28-24c3 7 4 9 4 16m27-28c3 4 5 11 5 16m25-24c2 4 2 9 2 14m30-14c-2 4-3 9-2 15m25-9c-1 5-1 10-2 14m24-5c-1 4-3 10-3 14m26-2-4 13m25-6-3 12" fill="none" stroke="#b9805c" stroke-opacity=".62" stroke-width="1.8"/>
+
+  <!-- Central gate and lit front of the courtyard. -->
+  <path d="M693 669h192l34 18H671z" fill="#6a3c3a"/>
+  <path d="M675 669h224m-228 8h240m-244 8h249" fill="none" stroke="#ad7256" stroke-opacity=".57" stroke-width="2"/>
+  <path d="M726 608h126v62H726z" fill="#673431"/>
+  <path d="M733 617h112v53H733z" fill="#41232a"/>
+  <path d="M742 634h24v30h-24zm35-7h24v37h-24zm35 7h24v30h-24z" fill="url(#light)"/>
+  <path d="M750 633v31m8-31v31m27-37v37m8-37v37m27-31v31m8-31v31m-85-21h21m14-5h21m14 5h21m-91 8h21m14-5h21m14 5h21" fill="none" stroke="#60302d" stroke-width="1.5"/>
+  <path d="M728 610h7v60h-7zm41 5h6v55h-6zm34 0h6v55h-6zm41-5h7v60h-7z" fill="#86473f"/>
+  <path d="M733 612v55m40-49v48m34-48v48m41-54v55" fill="none" stroke="#ac6650" stroke-width="1.5"/>
+  <use href="#roof" transform="translate(789 607) scale(1 .78)"/>
+  <path d="M756 580h65v21h-65z" fill="#713a36"/>
+  <path d="M766 585h46v11h-46z" fill="#9b6047"/>
+  <path d="M775 586v9m9-9v9m9-9v9m9-9v9" fill="none" stroke="#61332e" stroke-width="2"/>
+  <use href="#roof" transform="translate(789 580) scale(.69 .67)"/>
+  <path d="M699 657h26m129 0h28m-184-4v17m17-16v16m151-16v16m17-16v16" fill="none" stroke="#c0815e" stroke-opacity=".53" stroke-width="2"/>
+  <use href="#house" transform="translate(661 661) scale(.67)"/>
+  <use href="#house" transform="translate(920 662) scale(.7)"/>
+  <use href="#house" transform="translate(970 656) scale(.52)"/>
+  <use href="#house" transform="translate(1009 668) scale(.75)"/>
+  <use href="#house" transform="translate(607 668) scale(.74)"/>
+
+  <!-- The two banks rise to layered side courtyards. -->
+  <path d="M0 693c86-46 203-61 305-54 64 5 124 29 172 43 48 14 86 14 126 40l-141 22c-80 22-131 58-211 68H0z" fill="#482832"/>
+  <path d="M1600 686c-115-48-231-77-324-43-58 21-116 57-180 64-60 6-102 16-131 34l154 19c76 20 133 53 216 54h265z" fill="#472631"/>
+  <path d="M0 715c142-37 232-45 360-15 80 19 141 26 194 22m498 12c102-2 151-43 244-59 118-19 215 10 304 49" fill="none" stroke="#aa6e55" stroke-opacity=".5" stroke-width="2"/>
+  <use href="#house" transform="translate(266 675) scale(.76)"/>
+  <use href="#house" transform="translate(364 699) scale(.94)"/>
+  <use href="#house" transform="translate(428 703) scale(.82)"/>
+  <use href="#house" transform="translate(479 715) scale(.65)"/>
+  <use href="#house" transform="translate(1118 714) scale(.78)"/>
+  <use href="#house" transform="translate(1180 705) scale(.93)"/>
+  <use href="#house" transform="translate(1346 695) scale(.89)"/>
+  <use href="#house" transform="translate(1426 695) scale(.97)"/>
+  <path d="M153 630h108v65H153zm1101-11h130v77h-130z" fill="#5b2c33"/>
+  <path d="M157 640h98v54h-98zm1104-12h116v68h-116z" fill="#321f2c"/>
+  <path d="M166 650h16v34h-16zm24 0h16v34h-16zm24 0h16v34h-16zm24 0h10v34h-10zm1032-11h20v46h-20zm27 0h20v46h-20zm27 0h20v46h-20zm27 0h18v46h-18z" fill="url(#light)"/>
+  <path d="M174 649v34m24-34v34m24-34v34m21-34v34m1028-31h94m-94 13h94m-84-26v46m27-46v46m27-46v46m25-46v46" fill="none" stroke="#5d302e" stroke-width="1.5"/>
+  <path d="M156 632v64m51-63v63m48-64v64m1002-75v75m62-75v75m61-75v75" fill="none" stroke="#875044" stroke-width="4"/>
+  <use href="#roof" transform="translate(206 630) scale(.83 .89)"/>
+  <use href="#roof" transform="translate(1319 617) scale(1.02 .85)"/>
+  <path d="M1281 590h77v19h-77z" fill="#643233"/>
+  <use href="#roof" transform="translate(1319 590) scale(.73 .7)"/>
+  <path d="M155 697h108m-120 6h132m973-6h141m-150 8h159" fill="none" stroke="#b77955" stroke-opacity=".55" stroke-width="2"/>
+
+  <!-- Cypress silhouettes and stone steps at the near corners. -->
+  <path d="M0 758c116-31 241-14 333 23 68 27 143 39 230 42-73 18-122 40-152 77H0z" fill="#342331"/>
+  <path d="M1600 751c-99-23-185-1-254 38-73 42-149 55-227 50 59 17 97 40 113 61h368z" fill="#342233"/>
+  <g color="#39232e">
+    <use href="#cypress" transform="translate(96 719) scale(1.55)"/><use href="#cypress" transform="translate(300 748) scale(.86)"/>
+    <use href="#cypress" transform="translate(494 774) scale(.86)"/><use href="#cypress" transform="translate(1126 770) scale(.8)"/>
+    <use href="#cypress" transform="translate(1453 734) scale(1.1)"/><use href="#cypress" transform="translate(1524 736) scale(1.57)"/>
+  </g>
+  <path d="M0 779c125-30 211 4 283 38 44 21 104 41 156 50l-27 33H0zm1600 13c-124-28-213 12-284 48-37 18-71 31-105 39l21 21h368z" fill="#291e2e"/>
+  <path d="M0 783c125-30 219 9 277 35 45 21 102 41 159 50m-436-60c116-22 210 13 271 40 39 17 97 35 151 42m1178-93c-113-20-207 11-280 45-40 19-78 32-108 39m388-53c-113-19-191 17-265 49-22 10-52 17-76 23" fill="none" stroke="#a76b54" stroke-opacity=".49" stroke-width="2"/>
+  <path d="M0 776v-14m64 4v-16m66 14v-13m66 27v-15m71 43v-14m71 43v-15m1262-34v-14m-66 3v-16m-69 22v-15m-83 40v-13m-60 40v-15m-64 40v-16" fill="none" stroke="#ab735c" stroke-opacity=".64" stroke-width="2.5"/>
+</svg>

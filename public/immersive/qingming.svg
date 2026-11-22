@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+  <title>清明雨上 · 烟雨石桥</title>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#718c8c"/>
+      <stop offset=".5" stop-color="#b9cbc1"/>
+      <stop offset=".72" stop-color="#d5dfcf"/>
+      <stop offset="1" stop-color="#758e80"/>
+    </linearGradient>
+    <radialGradient id="mist">
+      <stop stop-color="#f3ead2" stop-opacity=".66"/>
+      <stop offset=".65" stop-color="#dce1cb" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#c4d3bb" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="far" x2="0" y2="1">
+      <stop stop-color="#577476"/>
+      <stop offset="1" stop-color="#b6c9b8"/>
+    </linearGradient>
+    <linearGradient id="bank" x2="0" y2="1">
+      <stop stop-color="#617e72"/>
+      <stop offset="1" stop-color="#4b625e"/>
+    </linearGradient>
+    <linearGradient id="river" x2="0" y2="1">
+      <stop stop-color="#c6d1bb"/>
+      <stop offset=".43" stop-color="#8da99b"/>
+      <stop offset="1" stop-color="#405f63"/>
+    </linearGradient>
+    <linearGradient id="bridge" x2="0" y2="1">
+      <stop stop-color="#8a9581"/>
+      <stop offset="1" stop-color="#586b65"/>
+    </linearGradient>
+    <g id="reeds" fill="none" stroke-linecap="round">
+      <path d="M0 0Q-2-34-26-63M7 0Q10-56 31-87M-6 0Q-8-42-4-92M-12 0Q-29-27-50-33M14 0Q25-29 57-44" stroke="#608074" stroke-width="2"/>
+      <path d="M-26-63l-4-8m61-16 5-9m-40 4-1-9" stroke="#b3af8d" stroke-width="4"/>
+      <path d="M0 0Q15-28 49-36M0 0Q-11-37-48-53M-16 2Q-15-29-24-39" stroke="#354f49" stroke-width="2.6"/>
+    </g>
+  </defs>
+
+  <path d="M0 0h1600v900H0z" fill="url(#sky)"/>
+  <ellipse cx="845" cy="518" rx="798" ry="312" fill="url(#mist)"/>
+  <path d="M0 425c121-12 182-42 280-39 38 1 82 10 126 22 63 18 110 17 176 10 141-15 234-40 361-22 82 12 175 21 249 11 107-13 234-30 408 14v40H0z" fill="#c2d2c4" opacity=".33"/>
+  <path d="M0 531l59-40 70-30 54-51 39 10 48-43 37 21 42 40 57 7 35 31 69 25 61 16 72 10 67-21 42-18 46 11 61 20 52-28 62-22 43-32 39 9 47-35 30 9 46-41 23 12 49-24 33 14 50 52 56 14 55 37 16 3v136H0z" fill="url(#far)" opacity=".62"/>
+  <g fill="none" stroke="#d5ddcb" opacity=".28" stroke-linecap="round">
+    <path d="M47 511l94-43 45-44 33 12 50-43m38 21 43 39 59 8m615 21 67-19 49-30 39 9 44-35m85-28 47 49 61 16" stroke-width="1.7"/>
+    <path d="M0 549c113-25 209-28 286-15 77 12 134 10 208-6m414 14c102 4 189-8 279-21 128-18 211-7 338 22" stroke-width="2.2"/>
+  </g>
+  <path d="M0 576c82-10 165-13 239-3 66 10 178 12 250-1 81-14 151-15 240-8 145 12 253-4 375-14 184-16 337-14 496-5v81H0z" fill="#e3e4d0" opacity=".54"/>
+  <path d="M0 607l92-35 62-35 39 9 50-26 49 19 51 29 62 7 60 28 78 23 61 11 113-9 85-19 113-11 62-18 55-44 56-7 48-39 34 17 38-10 49 23 57 10 56 33 30 5v135H0z" fill="url(#bank)" opacity=".8"/>
+  <path d="M0 638c104-43 203-51 290-36 101 17 177 51 254 55 124 6 215-27 306-38 140-17 232 4 346-5 152-11 254-49 404-43v329H0z" fill="url(#river)"/>
+
+  <!-- Stone bridge and the arches reflected in the water -->
+  <path d="M573 696c81-17 159-24 212-25 54-2 128 5 205 26-58-6-141-9-200-8-116 3-161 19-217 7z" fill="#779186" opacity=".5"/>
+  <path d="M578 675c48-1 125-49 210-51 89-2 147 42 215 53l-6 13c-42-3-74-15-98-22-14-6-36 1-43 14l-16-1c-5-22-23-37-50-37-28 1-48 17-54 39l-16 2c-6-13-23-19-42-11-22 8-59 21-101 19z" fill="url(#bridge)"/>
+  <path d="M578 675c48-1 125-49 210-51 89-2 147 42 215 53" fill="none" stroke="#d8d6b8" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M643 671v10m32-22v10m35-25v12m39-24v12m42-19v13m43-9v12m38-1v11m42 5v10m35 4v10" fill="none" stroke="#53675e" stroke-width="2" opacity=".65"/>
+  <path d="M740 692q54 40 94-2m-149 6q15 13 31 2m139 1q24 11 43-2" fill="none" stroke="#dce1bd" stroke-width="2" opacity=".37"/>
+
+  <g fill="none" stroke-linecap="round">
+    <path d="M165 675h102m80 16h139m480 0h127m76-15h127M37 724h237m142 12h151m400-8h231m69-12h145m-976 57h219m129-13h93m98 38h251m-410 27h178M324 824h125m30 27h67" stroke="#ecdfba" stroke-width="2" opacity=".3"/>
+    <path d="M104 747h94m193-29h105m202 14h151m230 28h216M597 807h69m87-30h132m-426 94h253m156-13h157" stroke="#455f5b" stroke-width="1.4" opacity=".43"/>
+  </g>
+
+  <path d="M0 580c129 0 204 38 301 49 61 7 112 7 161 22-58 4-119 4-170 45-20 16-52 28-102 31L0 754z" fill="#536c60"/>
+  <path d="M0 610c142-11 187 19 295 35 36 5 68 5 102 7-92 20-150 51-238 54L0 735z" fill="#6f8370"/>
+  <path d="M1600 590c-83-3-148 10-202 25-86 25-140 41-233 41 50 9 102 37 165 44 89 10 185 11 270 34z" fill="#4a675e"/>
+  <path d="M1600 617c-106-4-153 15-211 32-61 17-100 18-144 19 51 19 94 28 177 27 70-1 129 13 178 18z" fill="#6d8370"/>
+
+  <!-- A roadside rain shelter -->
+  <g transform="translate(1224 552)">
+    <path d="M-62 57h138l15 9H-72z" fill="#8a9880"/>
+    <path d="M-43 10h103v47H-43z" fill="#b3aa88"/>
+    <path d="M-34 15h13v42h-13zm33-1H12v43H-1zm35-1h12v44H34z" fill="#53655a"/>
+    <path d="M-72 12c30-7 47-20 59-39 15 2 25 2 41 0C43-6 67 5 91 12c-22 6-48 7-81 7-36 0-63-3-82-7z" fill="#364e4d"/>
+    <path d="M-62 12c29-3 55-3 78 1 25-3 46-4 68-1M-24-13c10 2 21 2 31 1 13 1 24 1 35-1" fill="none" stroke="#819685" stroke-width="1.3"/>
+    <path d="M-10 27h9v17h-9zm58 0h8v17h-8z" fill="#d7bd81" opacity=".7"/>
+  </g>
+
+  <!-- Willows and foreground reeds frame the open river -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M96 673q15-111-22-184-26-48-73-67m97 217q12-88 60-141l57-30M78 524l-74-44m153 17 10-97m-22 103q-1-36-32-67" stroke="#344e4e" stroke-width="8"/>
+    <path d="M0 436c43 12 60 76 72 113m-62-99c21 17 35 49 34 82m-15-85c40 24 58 84 49 123m82-95c-27 17-39 54-47 95m64-102c-25 31-23 52-30 72m46-63c-31 30-33 73-37 100m21-139c-19 32-19 62-22 88" stroke="#718a70" stroke-width="2.6"/>
+    <path d="M33 478c20 40 21 79 19 91m151-101c-10 22-20 56-22 89m-76-112q29 50 27 100" stroke="#a1a487" stroke-width="1.5" opacity=".76"/>
+  </g>
+  <path d="M0 822c111-30 208-18 319 10 60 15 158 24 217 68H0zm1600-30c-95 0-185 22-258 47-57 19-90 41-126 61h384z" fill="#314a48"/>
+  <path d="M0 849c123-19 231-2 323 21l115 30H0zm1600-26c-85 6-175 35-257 77h257z" fill="#273f41"/>
+  <use href="#reeds" transform="translate(58 846) scale(1.13)"/>
+  <use href="#reeds" transform="translate(160 859) scale(.85)"/>
+  <use href="#reeds" transform="translate(286 878) scale(.71)"/>
+  <use href="#reeds" transform="translate(1425 875) scale(.88)"/>
+  <use href="#reeds" transform="translate(1528 846) scale(1.1)"/>
+  <path d="M72 842c25-7 55-9 78-4m49 16c16-1 37 1 49 4m1180-17c37-11 67-14 101-14m-72 32c29-8 61-13 97-15" fill="none" stroke="#8c9d82" stroke-width="1.3" opacity=".56"/>
+</svg>

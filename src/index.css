@@ -3494,6 +3494,17 @@ body {
     linear-gradient(180deg, #080c14 0%, #0b101a 100%);
 }
 
+.immersive-wallpaper-layer::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, transparent 65%, rgb(3 10 23 / .43));
+}
+
+.immersive-wallpaper-layer--dashboard::after {
+  background: linear-gradient(180deg, rgb(3 10 23 / .62), rgb(3 10 23 / .57) 30%, transparent 72%, rgb(3 10 23 / .56));
+}
+
 .after-rain-background {
   background:
     linear-gradient(112deg, rgba(255, 255, 255, .2) 0 12%, transparent 31% 68%, rgba(255, 255, 255, .12) 88%),

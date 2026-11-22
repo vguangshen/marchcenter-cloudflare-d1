@@ -22,6 +22,7 @@ import {
     DEFAULT_AI_CONFIG, INK_TEXT_SHADOW
 } from './constants/config';
 import { THEMES } from './constants/themes';
+import { IMMERSIVE_WALLPAPERS } from './constants/immersiveWallpapers';
 import { prefersReducedMotion } from './utils/motionPreferences';
 import { useCompetitionActions } from './hooks/useCompetitionActions';
 import { useCompetitionCatalog } from './hooks/useCompetitionCatalog';
@@ -768,6 +769,7 @@ export default function Dashboard({ auth, site, appearance }) {
         center: 'text-center items-center',
         right: 'text-right items-end'
     }[siteConfig.dashboardTextAlign || 'left'];
+    const hasImmersiveWallpaper = Object.hasOwn(IMMERSIVE_WALLPAPERS, activeImmersive);
 
     const getFooterSizeClass = () => ({
         small: 'text-[10px] md:text-xs',
@@ -930,11 +932,11 @@ export default function Dashboard({ auth, site, appearance }) {
                                         <span className="text-xs font-bold text-indigo-600/90">{siteConfig.dailyQuote}</span>
                                     </div>
                                 )}
-                                <h1 className={`font-black text-slate-900 dark:text-white text-4xl ${INK_TEXT_SHADOW}`}>
+                                <h1 className={`font-black text-4xl ${hasImmersiveWallpaper ? 'text-white' : 'text-slate-900 dark:text-white'} ${INK_TEXT_SHADOW}`}>
                                     {(siteConfig.welcomeTitle || "Hello, {username} 👋").replace('{username}', currentUser?.username || 'User')}
                                 </h1>
                                 {siteConfig.welcomeSubtitle && (
-                                    <p className="mt-2 text-slate-500 dark:text-slate-400 font-medium">
+                                    <p className={`mt-2 font-medium ${hasImmersiveWallpaper ? 'text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
                                         {siteConfig.welcomeSubtitle}
                                     </p>
                                 )}
@@ -1072,7 +1074,7 @@ export default function Dashboard({ auth, site, appearance }) {
 
                 {shouldShowFooter('dashboard') && (
                     <footer className="py-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000 shrink-0">
-                        <p className={`font-bold text-slate-400/80 dark:text-slate-600 ${getFooterSizeClass()}`}>
+                        <p className={`font-bold ${hasImmersiveWallpaper ? 'text-slate-100' : 'text-slate-400/80 dark:text-slate-600'} ${getFooterSizeClass()}`}>
                             {siteConfig.footerText || "© 2025 Competition Hub. All rights reserved."}
                         </p>
                     </footer>
