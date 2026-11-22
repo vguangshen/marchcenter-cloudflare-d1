@@ -237,8 +237,11 @@ async function createUsersBatch(actorUser, inputUsers) {
     const passwordHashes = await Promise.all(normalizedUsers.map(item => hashPassword(item.password)));
     const statements = [];
     normalizedUsers.forEach((item, index) => {
+        // The creator knows the initial password, so the new owner must replace
+        // it on first sign-in, exactly like an administrator reset.
         statements.push([
-            'INSERT INTO users (username, email, password_hash, role, class_id, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+            `INSERT INTO users (username, email, password_hash, role, class_id, password_change_recommended, created_at)
+             VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)`,
             [item.username, item.email, passwordHashes[index], item.role, item.classId]
         ]);
         if (item.role === ROLES.TEACHER) {

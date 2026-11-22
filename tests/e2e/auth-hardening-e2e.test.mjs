@@ -66,6 +66,11 @@ test('bootstrap secret and default reset password require a password change befo
             body: { username: 'temporary-user', password: 'Original-password-1' }
         });
         assert.equal(oldLogin.status, 200);
+        assert.equal(oldLogin.data.user.passwordChangeRecommended, true,
+            'an administrator-chosen initial password must be replaced on first sign-in');
+        const createdBlocked = await request(harness, '/api/competitions', { token: oldLogin.data.token });
+        assert.equal(createdBlocked.status, 403);
+        assert.equal(createdBlocked.data.code, 'password_change_required');
 
         const reset = await request(harness, `/api/users/${created.data.id}/reset-password`, {
             token: adminToken,

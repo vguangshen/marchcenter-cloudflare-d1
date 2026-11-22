@@ -49,7 +49,7 @@ export default function PasswordChangeReminder({ username, onComplete, onLogout 
                 <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-300/40"><KeyRound className="h-7 w-7" /></div>
                 <h1 id="password-reminder-title" className="mt-5 text-center text-xl font-black text-slate-900 dark:text-white">请先修改登录密码</h1>
                 <p id="password-reminder-description" className="mt-2 text-center text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    {username ? `账号 ${username} 的密码已被管理员重置为默认密码。` : '当前账号的密码已被管理员重置为默认密码。'}设置只有你知道的新密码后才能继续使用。
+                    {username ? `账号 ${username} 当前使用的是管理员设置的初始密码或重置密码。` : '当前账号使用的是管理员设置的初始密码或重置密码。'}设置只有你知道的新密码后才能继续使用。
                 </p>
 
                 <form onSubmit={submit} className="mt-6 space-y-4">

@@ -72,6 +72,9 @@ test('a later database write failure rolls back earlier accounts, classes and ac
 });
 
 test('batch access cannot bypass role hierarchy, teacher card scope or teacher time boundaries', async () => {
+    // New accounts must replace their initial password before acting; this
+    // case is about an established teacher who has already done so.
+    await harness.run('UPDATE users SET password_change_recommended = 0 WHERE id = ?', selectedTeacher.id);
     const teacherToken = await harness.issueToken({ id: selectedTeacher.id, username: selectedTeacher.username, role: 'teacher' });
     const headers = { Authorization: `Bearer ${teacherToken}` };
     const student = (username, access = {}) => ({ username, email: `${username}@example.invalid`, password: 'Initial-password-1', role: 'student', ...access });
@@ -96,6 +99,7 @@ test('batch access cannot bypass role hierarchy, teacher card scope or teacher t
     assert.equal(adminFields.status, 400);
     assert.equal((await harness.rows("SELECT id FROM users WHERE username = 'admin-with-whitelist'")).length, 0);
 
+    await harness.run('UPDATE users SET password_change_recommended = 0 WHERE id = ?', created.data.users[0].id);
     const studentToken = await harness.issueToken({ id: created.data.users[0].id, username: 'within-teacher-scope', role: 'student' });
     const denied = await harness.api('/api/users/batch', { headers: { Authorization: `Bearer ${studentToken}` }, body: { users: [student('student-cannot-create')] } });
     assert.equal(denied.status, 403);
