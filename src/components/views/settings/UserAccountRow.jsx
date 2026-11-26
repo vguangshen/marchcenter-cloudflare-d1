@@ -1,5 +1,6 @@
 import React, { useId, useState } from 'react';
-import { ArrowRightLeft, Ban, CheckCircle2, ChevronDown, KeyRound, MapPin, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, ChevronDown, KeyRound, MapPin, Monitor, ShieldCheck, Trash2 } from 'lucide-react';
+import ClassPicker from './ClassPicker';
 
 const ROLE_RANK = { super_admin: 3, admin: 2, teacher: 1, student: 0, user: 0 };
 const ROLE_META = {
@@ -95,16 +96,13 @@ export default function UserAccountRow({ user, currentUser, classes, onLocation,
                             className={`${ACTION_BUTTON} border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300`}>
                             <Trash2 className="h-4 w-4" />{deletingAccountId === user.id ? '正在删除…' : '删除此账号'}
                         </button>}
-                        {canAssignClass && <label className={`${ACTION_BUTTON} relative max-w-full border-slate-200 pr-7 text-slate-700 hover:border-indigo-300 focus-within:border-indigo-400`}>
-                            <ArrowRightLeft aria-hidden="true" className="h-4 w-4 shrink-0" />
-                            调整班级
-                            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
-                            <select aria-label={`调整 ${user.username} 的班级`} className="min-w-0 max-w-32 cursor-pointer appearance-none truncate bg-transparent text-xs font-bold text-indigo-600 outline-none dark:text-indigo-300" value={user.class_id || ''} onChange={e => onClassChange(user, e.target.value)}>
-                                <option value="" disabled>选择班级</option>
-                                {classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                            </select>
-                            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-slate-400" />
-                        </label>}
+                        {canAssignClass && <ClassPicker
+                            classes={classes}
+                            value={user.class_id}
+                            label={`调整 ${user.username} 的班级`}
+                            onChange={classId => onClassChange(user, String(classId))}
+                            className={`${ACTION_BUTTON} max-w-full border-slate-200 text-slate-700 hover:border-indigo-300 aria-expanded:border-indigo-400 aria-expanded:text-indigo-600`}
+                        />}
                     </div>
                 )}
             </div>}

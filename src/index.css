@@ -4517,3 +4517,128 @@ body {
   .brand-intro .brand-mark,
   .brand-intro .brand-wordmark-part { animation: none; }
 }
+
+/* ── Class picker (用户管理 → 调整班级) ───────────────────────────────────────
+   A trigger styled like the row's action buttons and a glass popover list
+   that replaces the native <select> menu. */
+.class-picker-trigger { cursor: pointer; }
+.class-picker-divider {
+  width: 1px;
+  height: 1rem;
+  flex: 0 0 auto;
+  background: #e2e8f0;
+}
+.class-picker-value {
+  min-width: 0;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #4f46e5;
+}
+.dark .class-picker-divider { background: #334155; }
+.dark .class-picker-value { color: #a5b4fc; }
+
+.class-picker-panel {
+  position: fixed;
+  z-index: 400;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .92);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .06);
+  transform-origin: top left;
+  animation: class-picker-in 160ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.class-picker-panel--up { transform-origin: bottom left; }
+.dark .class-picker-panel {
+  border-color: rgba(51, 65, 85, .9);
+  background: rgba(15, 23, 42, .94);
+  box-shadow: 0 18px 48px rgba(2, 6, 23, .55);
+}
+
+@keyframes class-picker-in {
+  from { opacity: 0; transform: translate3d(0, -4px, 0) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+.class-picker-panel--up { animation-name: class-picker-in-up; }
+@keyframes class-picker-in-up {
+  from { opacity: 0; transform: translate3d(0, 4px, 0) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.class-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 4px;
+  padding: 0 10px;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #94a3b8;
+  background: rgba(248, 250, 252, .9);
+}
+.class-picker-search:focus-within { border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(99, 102, 241, .14); }
+.class-picker-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+}
+.dark .class-picker-search { border-color: #334155; background: rgba(30, 41, 59, .7); }
+.dark .class-picker-search input { color: #e2e8f0; }
+
+.class-picker-list {
+  margin: 0;
+  padding: 4px 6px 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  scrollbar-width: thin;
+}
+.class-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+.class-picker-option.is-active { background: #eef2ff; color: #3730a3; }
+.class-picker-option.is-selected { color: #4f46e5; }
+.class-picker-option-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+.class-picker-option-meta {
+  display: block;
+  margin-top: 1px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+}
+.class-picker-empty {
+  padding: 14px 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+}
+.dark .class-picker-option { color: #cbd5e1; }
+.dark .class-picker-option.is-active { background: rgba(99, 102, 241, .18); color: #e0e7ff; }
+.dark .class-picker-option.is-selected { color: #a5b4fc; }
+
+@media (prefers-reduced-motion: reduce) {
+  .class-picker-panel { animation: none; }
+}
