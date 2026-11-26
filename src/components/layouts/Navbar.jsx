@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     LogOut, Plus, Search, LayoutDashboard, Settings,
-    Edit3, Check, Megaphone, LayoutGrid, Bot
+    Edit3, Check, Megaphone, LayoutGrid, Bot, LifeBuoy
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
@@ -26,7 +26,9 @@ const Navbar = ({
     hasActiveAnnouncement, isAnnouncementVisible, onToggleAnnouncement,
     enteringFromLogin = false,
     onEntryTransitionEnd,
-    activeThemeColor = 'blue'
+    activeThemeColor = 'blue',
+    ticketUnread = 0,
+    onOpenTickets
 }) => {
     const isChristmas = immersiveMode === 'christmas';
     const isLunar = immersiveMode === 'lunar_new_year';
@@ -267,6 +269,27 @@ const Navbar = ({
                         {canManageUsers && activePage === 'settings' && (
                             <button onClick={() => setActivePage('dashboard')} className="px-4 py-2 rounded-xl text-xs font-bold flex items-center transition-all bg-slate-800 text-white shadow-lg hover:bg-slate-700">
                                 <LayoutDashboard className="w-3.5 h-3.5 mr-1.5"/> 退出设置
+                            </button>
+                        )}
+
+                        {onOpenTickets && (
+                            <button
+                                type="button"
+                                onClick={onOpenTickets}
+                                title={ticketUnread ? `工单（${ticketUnread} 条新动态）` : '工单'}
+                                aria-label={ticketUnread ? `工单，${ticketUnread} 条新动态` : '工单'}
+                                className={`navbar-ticket-button relative h-9 px-3 rounded-xl text-xs font-bold flex items-center transition-all shadow-sm ${
+                                    isHalloween ? 'bg-slate-800 text-orange-300 border border-purple-500/30 hover:bg-slate-700'
+                                        : isMidAutumn ? 'bg-blue-900/50 text-blue-100 border border-blue-400/30 hover:bg-blue-800'
+                                            : isLunar ? 'bg-white/80 text-red-700 border border-red-200 hover:bg-red-50'
+                                                : 'bg-white/80 text-slate-600 border border-slate-200 hover:bg-white hover:text-indigo-600 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700 dark:hover:text-indigo-300'
+                                }`}
+                            >
+                                <LifeBuoy className="w-3.5 h-3.5 sm:mr-1.5" />
+                                <span className="hidden sm:inline">工单</span>
+                                {ticketUnread > 0 && (
+                                    <span className="navbar-ticket-badge" aria-hidden="true">{ticketUnread > 99 ? '99+' : ticketUnread}</span>
+                                )}
                             </button>
                         )}
 

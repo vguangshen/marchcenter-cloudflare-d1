@@ -72,7 +72,8 @@ const BACKUP_TABLES = [
     'user_competition_expert_accounts', 'user_competition_expert_student_bindings',
     'user_class_removals', 'user_login_locations',
     'paas_v2_platforms', 'paas_v2_catalogs', 'user_agent_task_results',
-    'announcements', 'user_gifts', 'ai_settings'
+    'announcements', 'user_gifts', 'ai_settings',
+    'support_tickets', 'support_ticket_messages', 'support_ticket_attachments'
 ];
 
 router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {

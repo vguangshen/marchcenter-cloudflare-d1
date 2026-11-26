@@ -27,6 +27,7 @@ import { prefersReducedMotion } from './utils/motionPreferences';
 import { useCompetitionActions } from './hooks/useCompetitionActions';
 import { useCompetitionCatalog } from './hooks/useCompetitionCatalog';
 import { useAgentTaskResults } from './hooks/useAgentTaskResults';
+import { useTicketUnread } from './hooks/useTicketUnread';
 import {
     DEFAULT_AGENT_PLATFORMS, normalizeAgentPlatforms, normalizePlatformKey,
     normalizeAgentPlatformTheme, agentPlatformThemeStyle, platformLabel,
@@ -52,6 +53,7 @@ const AiGuideModal = lazy(() => import('./components/modals/AiGuideModal'));
 const GiftModal = lazy(() => import('./components/modals/GiftModal'));
 const EditGiftModal = lazy(() => import('./components/modals/EditGiftModal'));
 const ProfileModal = lazy(() => import('./components/modals/ProfileModal'));
+const TicketCenter = lazy(() => import('./components/tickets/TicketCenter'));
 const ContestCard = lazy(() => import('./components/cards/ContestCard'));
 const AgentTaskCard = lazy(() => import('./components/cards/AgentTaskCard'));
 const CardLoadingNotice = () => <div className="min-h-[190px] rounded-3xl border border-slate-200/60 bg-white/60 p-5 dark:border-slate-700 dark:bg-slate-900/60" role="status" aria-live="polite"><Loader2 className="mx-auto mt-10 h-5 w-5 animate-spin text-slate-400" /><span className="sr-only">正在加载卡片…</span></div>;
@@ -168,6 +170,9 @@ export default function Dashboard({ auth, site, appearance }) {
     const [agentPlatforms, setAgentPlatforms] = useState(DEFAULT_AGENT_PLATFORMS);
     const [agentPlatformsLoadError, setAgentPlatformsLoadError] = useState('');
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+    const [isTicketCenterOpen, setIsTicketCenterOpen] = useState(false);
+    const { count: ticketUnread, refresh: refreshTicketUnread } = useTicketUnread(authStatus === 'authenticated' && Boolean(token));
+    const isTicketStaff = currentUserRole === 'super_admin' || currentUserRole === 'admin';
     const platformRequestRef = useRef(0);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
@@ -436,7 +441,7 @@ export default function Dashboard({ auth, site, appearance }) {
         setDeletedAccountIds(new Set());
         setUsersTotal(0); setUsersTotalPages(1); setUsersAppliedSearch('');
         setUsersLoadError(''); setUsersLoading(false); setUsersPage(1);
-        setSsoConfigs([]); setSsoConfigsLoadError(''); setIsProfileModalOpen(false);
+        setSsoConfigs([]); setSsoConfigsLoadError(''); setIsProfileModalOpen(false); setIsTicketCenterOpen(false);
         setIsModalOpen(false); setIsTaskAppModalOpen(false); setIsPermissionModalOpen(false); setIsAddUserModalOpen(false); setIsDeleteUserModalOpen(false);
         setAnnouncements([]); setGifts([]); setActiveGift(null);
         setAiConfig(DEFAULT_AI_CONFIG);
@@ -849,6 +854,8 @@ export default function Dashboard({ auth, site, appearance }) {
                     enteringFromLogin={isNavbarTransitioning}
                     onEntryTransitionEnd={completeNavbarTransition}
                     activeThemeColor={activeThemeColor}
+                    ticketUnread={ticketUnread}
+                    onOpenTickets={() => setIsTicketCenterOpen(true)}
                 />
 
                 <div className="flex-grow">
@@ -1124,6 +1131,7 @@ export default function Dashboard({ auth, site, appearance }) {
                 {isAiModalOpen && <AiGuideModal isOpen onClose={() => setIsAiModalOpen(false)} link={currentAiLink} aiConfig={aiConfig} />}
                 {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} agentPlatforms={agentPlatforms} currentPermissions={targetUserForPermission?.permissions || []} currentUserTimeRules={targetUserForPermission?.timeRules || {}} onSave={handleSavePermissions} />}
                 {isProfileModalOpen && <ProfileModal isOpen user={currentUser} onClose={() => setIsProfileModalOpen(false)} onSaved={handleProfileSaved} />}
+                {isTicketCenterOpen && <TicketCenter isOpen isStaff={isTicketStaff} currentUserId={currentUserId} cards={links} onClose={() => { setIsTicketCenterOpen(false); refreshTicketUnread(); }} onUnreadChange={refreshTicketUnread} />}
                 {activeGift && !isGiftMinimized && <GiftModal isOpen gift={activeGift} onClose={() => setIsGiftMinimized(true)} onOpenLink={markGiftAsRead} />}
             </Suspense>
 

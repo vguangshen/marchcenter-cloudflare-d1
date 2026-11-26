@@ -23,6 +23,10 @@
     {
       "binding": "WALLPAPERS",
       "bucket_name": "marchcenter-wallpapers"
+    },
+    {
+      "binding": "TICKET_FILES",
+      "bucket_name": "mcgo-ticket-attachments"
     }
   ],
   "triggers": {

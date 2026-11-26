@@ -263,7 +263,10 @@ export async function createProductionHarness(options = {}) {
             ...(options.bindings || {})
         },
         d1Databases: { DB: `e2e-${crypto.randomUUID()}` },
-        r2Buckets: { WALLPAPERS: options.r2BucketName || `e2e-wallpapers-${crypto.randomUUID()}` },
+        r2Buckets: {
+            WALLPAPERS: options.r2BucketName || `e2e-wallpapers-${crypto.randomUUID()}`,
+            TICKET_FILES: `e2e-ticket-files-${crypto.randomUUID()}`
+        },
         outboundService: request => platform.fetch(request),
         log: new CaptureLog(logs),
         ...(options.port ? { host: '127.0.0.1', port: options.port } : {})

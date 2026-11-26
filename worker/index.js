@@ -20,6 +20,7 @@ import wallpaperRoutes from '../server/routes/wallpapers.js';
 import emailSettingsRoutes from '../server/routes/emailSettings.js';
 import paasV2Routes from '../server/routes/paasV2.js';
 import mapRoutes from '../server/routes/map.js';
+import ticketRoutes, { MAX_TICKET_REQUEST_BYTES } from '../server/routes/tickets.js';
 import { syncLatestBingWallpaper } from '../server/services/wallpaperService.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/wallpapers', wallpaperRoutes);
 app.use('/api/email-settings', emailSettingsRoutes);
 app.use('/api/paas-v2', paasV2Routes);
 app.use('/api/map', mapRoutes);
+app.use('/api/tickets', ticketRoutes);
 app.get('/api/health', (_req, res) => res.json({ ok: true, runtime: 'cloudflare-workers', database: 'd1' }));
 app.get('/api/ready', async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -230,11 +232,16 @@ export default {
                 // 上传与替换都允许 13MB（路由内部再按 12MB 图面上限校验）；其余 API 1MB。
                 const isWallpaperUploadOrReplace = url.pathname === '/api/wallpapers/upload'
                     || /^\/api\/wallpapers\/\d+\/replace$/.test(url.pathname);
-                const bodyLimit = isWallpaperUploadOrReplace
-                    ? 13 * 1024 * 1024
-                    : 1024 * 1024;
+                // 工单提交与回复带附件（合计 20MB），同样在路由内边读边限。
+                const isTicketUpload = request.method === 'POST'
+                    && (url.pathname === '/api/tickets' || /^\/api\/tickets\/\d+\/messages$/.test(url.pathname));
+                const bodyLimit = isTicketUpload
+                    ? MAX_TICKET_REQUEST_BYTES
+                    : isWallpaperUploadOrReplace
+                        ? 13 * 1024 * 1024
+                        : 1024 * 1024;
                 if (contentLength > bodyLimit) {
-                    const limitText = bodyLimit > 1024 * 1024 ? '12MB' : '1MB';
+                    const limitText = isTicketUpload ? '20MB' : bodyLimit > 1024 * 1024 ? '12MB' : '1MB';
                     return withSecurityHeaders(Response.json({ error: `请求内容不能超过 ${limitText}` }, { status: 413 }), request, env);
                 }
                 if (origin && !allowedOrigins(env).has(origin)) {

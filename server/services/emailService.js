@@ -279,3 +279,17 @@ export async function sendTestEmail({ settings, to }) {
         footer: '收到此邮件表示邮件服务、发件域名与当前配置均可正常工作。'
     }));
 }
+
+export async function sendTicketReplyEmail({ settings, to, username, subject, ticketId, reply }) {
+    const normalized = normalizeEmailSettings(settings);
+    const preview = String(reply || '').replace(/\s+/g, ' ').trim();
+    const excerpt = preview.length > 140 ? `${preview.slice(0, 140)}…` : preview;
+    return sendWithResend(normalized, emailPayload(normalized, {
+        to,
+        username,
+        subject: `${BRAND_NAME} 工单 #${ticketId} 有新的回复`,
+        heading: `工单「${String(subject || '').slice(0, 60)}」有新的回复`,
+        intro: excerpt ? `管理员回复：${excerpt}` : '管理员更新了你的工单。',
+        footer: `请登录 ${BRAND_NAME}，点击顶部的“工单”查看完整内容并继续沟通。`
+    }));
+}
