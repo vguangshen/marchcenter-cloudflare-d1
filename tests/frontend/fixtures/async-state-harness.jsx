@@ -237,4 +237,7 @@ function UserDirectoryFixture() {
 }
 const fixtures = { profile: ProfileFixture, platform: PlatformFixture, auth: AuthFixture, 'agent-score': AgentScoreFixture, 'user-directory': UserDirectoryFixture };
 const Fixture = fixtures[mode] || App;
+// Tests that must control the very first requests (e.g. background
+// prefetches) install their transport before the page renders.
+if (window.__testApiOverride) window.__testApi = window.__testApiOverride;
 createRoot(document.getElementById('root')).render(<Fixture />);

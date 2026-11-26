@@ -65,10 +65,11 @@ after(async () => {
 test('refreshing page two of a teacher’s students keeps the open action panel and reconciles transfers', async () => {
     const page = await browser.newPage();
     try {
-        await page.goto(`${origin}/?mode=user-directory`);
-        await page.evaluate(() => {
+        // Installed before the first render so the background prefetch of the
+        // teacher's students is served (and counted) by this transport too.
+        await page.addInitScript(() => {
             let requests = 0;
-            window.__testApi = async (_method, path) => {
+            window.__testApiOverride = async (_method, path) => {
                 const pageNumber = Number(new URL(path, location.origin).searchParams.get('page'));
                 const refreshing = ++requests > 2;
                 if (refreshing && pageNumber === 2) await new Promise(resolve => { window.__releaseStudents = resolve; });
@@ -80,6 +81,7 @@ test('refreshing page two of a teacher’s students keeps the open action panel 
                 return { users, totalPages: 2 };
             };
         });
+        await page.goto(`${origin}/?mode=user-directory`);
         await page.getByRole('button', { name: /^展开 Teacher 的学生/ }).click();
         await page.getByRole('button', { name: '加载更多学生' }).click();
         await page.getByRole('button', { name: '管理 Student-52', exact: true }).click();

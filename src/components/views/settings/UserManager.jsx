@@ -1,10 +1,10 @@
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { ChevronRight, Copy, Eye, EyeOff, KeyRound, Search, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { PRIMARY_BTN, GLASS_INPUT } from '../../../constants/config';
 import { api } from '../../../utils/api';
 import { confirmAction, notify } from '../../../utils/uiFeedback';
 import { useModalAccessibility } from '../../../hooks/useModalAccessibility';
-import { usePagedUsers } from '../../../hooks/usePagedUsers';
+import { prefetchUsers, usePagedUsers } from '../../../hooks/usePagedUsers';
 import LoadErrorNotice from '../../feedback/LoadErrorNotice';
 import LoginLocationModal from './LoginLocationModal';
 import UserAccountRow from './UserAccountRow';
@@ -17,9 +17,19 @@ function TeacherGroup({ teacher, appliedSearch, revision, rowProps, deletedAccou
     const count = Number(teacher.studentCount) || 0;
     const matched = appliedSearch ? Number(teacher.matchingStudentCount) || 0 : 0;
     const expanded = count > 0 && (manualExpansion ?? (matched > 0));
-    const query = new URLSearchParams({ teacherId: String(teacher.id), search: matched ? appliedSearch : '' });
-    const { users: members, loading, error, hasMore, loadMore, retry } = usePagedUsers(query.toString(), { enabled: expanded, revision });
+    const queryString = new URLSearchParams({ teacherId: String(teacher.id), search: matched ? appliedSearch : '' }).toString();
+    const { users: members, loading, error, hasMore, loadMore, retry } = usePagedUsers(queryString, { enabled: expanded, revision });
     const students = members.filter(account => !deletedAccountIds.has(account.id));
+    const listRevision = revision ?? 0;
+
+    // Warm each teacher's student list in the background shortly after the
+    // directory renders, so expanding shows the rows at once.
+    useEffect(() => {
+        if (!count) return undefined;
+        const timer = window.setTimeout(() => prefetchUsers(queryString, { revision: listRevision }), 400);
+        return () => window.clearTimeout(timer);
+    }, [count, queryString, listRevision]);
+    const prefetchNow = () => { if (count) prefetchUsers(queryString, { urgent: true, revision: listRevision }); };
 
     return (
         <>
@@ -28,6 +38,7 @@ function TeacherGroup({ teacher, appliedSearch, revision, rowProps, deletedAccou
                     {teacher.class_name && <span className="text-slate-500 [overflow-wrap:anywhere]">{teacher.class_name}</span>}
                     {count ? (
                         <button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => setManualExpansion(!expanded)}
+                            onPointerEnter={prefetchNow} onFocus={prefetchNow}
                             aria-label={`${expanded ? '收起' : '展开'} ${teacher.username} 的学生，${count} 名学生`}
                             className="inline-flex min-h-8 items-center gap-1 whitespace-nowrap rounded-lg bg-indigo-50 px-2 font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:text-indigo-300">
                             <ChevronRight aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
@@ -41,7 +52,7 @@ function TeacherGroup({ teacher, appliedSearch, revision, rowProps, deletedAccou
                     {students.length > 0 && <ul aria-label={`${teacher.username} 的学生`} className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
                         {students.map(student => <li key={student.id}><UserAccountRow user={student} nested {...rowProps} /></li>)}
                     </ul>}
-                    {loading && <p role="status" className="px-5 py-3 text-xs text-slate-500">正在读取学生账号…</p>}
+                    {loading && !students.length && <p role="status" className="px-5 py-3 text-xs text-slate-500">正在读取学生账号…</p>}
                     {error && <div className="p-3"><LoadErrorNotice compact message={error} onRetry={retry} /></div>}
                     {!students.length && !loading && !error && <p className="px-5 py-3 text-xs text-slate-500">没有学生账号</p>}
                     {hasMore && !loading && !error && <div className="px-4 py-3"><button type="button" onClick={loadMore} className={SECONDARY_BUTTON}>加载更多学生</button></div>}
