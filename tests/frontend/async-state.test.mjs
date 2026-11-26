@@ -62,6 +62,38 @@ after(async () => {
     await new Promise(resolve => server?.close(resolve));
 });
 
+test('refreshing page two of a teacher’s students keeps the open action panel and reconciles transfers', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=user-directory`);
+        await page.evaluate(() => {
+            let requests = 0;
+            window.__testApi = async (_method, path) => {
+                const pageNumber = Number(new URL(path, location.origin).searchParams.get('page'));
+                const refreshing = ++requests > 2;
+                if (refreshing && pageNumber === 2) await new Promise(resolve => { window.__releaseStudents = resolve; });
+                let ids = Array.from({ length: 52 }, (_, i) => i + 1);
+                if (refreshing) ids = ids.filter(id => id !== 9);
+                const users = ids.slice((pageNumber - 1) * 50, pageNumber * 50).map(id => ({
+                    id, username: `Student-${id}`, role: 'student', is_disabled: id === 52 && refreshing
+                }));
+                return { users, totalPages: 2 };
+            };
+        });
+        await page.getByRole('button', { name: /^展开 Teacher 的学生/ }).click();
+        await page.getByRole('button', { name: '加载更多学生' }).click();
+        await page.getByRole('button', { name: '管理 Student-52', exact: true }).click();
+        const panel = page.getByRole('group', { name: 'Student-52 的管理操作' });
+        await panel.getByRole('button', { name: '禁用用户' }).click();
+        await page.waitForFunction(() => typeof window.__releaseStudents === 'function');
+        assert.ok(await panel.isVisible());
+        await page.evaluate(() => window.__releaseStudents());
+        await panel.getByRole('button', { name: '启用用户' }).waitFor();
+        assert.equal(await page.getByRole('button', { name: '管理 Student-9', exact: true }).count(), 0);
+        assert.equal(await page.getByRole('list', { name: 'Teacher 的学生' }).getByRole('listitem').count(), 51);
+    } finally { await page.close(); }
+});
+
 test('avatar commit stays successful when synchronization fails, and retry does not write again', async () => {
     const page = await browser.newPage();
     try {

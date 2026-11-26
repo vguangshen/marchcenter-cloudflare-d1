@@ -1,25 +1,61 @@
-import React, { useState } from 'react';
-import {
-    Search, UserPlus, Shield, Smartphone, Globe, MapPin,
-    Trash2, Ban, CheckCircle2, KeyRound, Mail, Copy, Eye, EyeOff, X
-} from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { ChevronRight, Copy, Eye, EyeOff, KeyRound, Search, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { PRIMARY_BTN, GLASS_INPUT } from '../../../constants/config';
 import { api } from '../../../utils/api';
 import { confirmAction, notify } from '../../../utils/uiFeedback';
 import { useModalAccessibility } from '../../../hooks/useModalAccessibility';
+import { usePagedUsers } from '../../../hooks/usePagedUsers';
 import LoadErrorNotice from '../../feedback/LoadErrorNotice';
 import LoginLocationModal from './LoginLocationModal';
+import UserAccountRow from './UserAccountRow';
 
-const ROLE_RANK = { super_admin: 3, admin: 2, teacher: 1, student: 0, user: 0 };
-const ROLE_META = {
-    super_admin: { label: '超级管理员', subtitle: 'Super Administrator', avatar: 'bg-gradient-to-br from-amber-400 to-yellow-600', badge: 'bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border-amber-300' },
-    admin: { label: '管理员', subtitle: 'Administrator', avatar: 'bg-gradient-to-br from-indigo-500 to-purple-600', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-    teacher: { label: '教师', subtitle: 'Teacher', avatar: 'bg-gradient-to-br from-cyan-500 to-blue-600', badge: 'bg-blue-50 text-blue-700 border-blue-200' },
-    student: { label: '学生', subtitle: 'Student', avatar: 'bg-gradient-to-br from-emerald-400 to-teal-600', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    user: { label: '学生', subtitle: 'Student', avatar: 'bg-gradient-to-br from-emerald-400 to-teal-600', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-};
+const SECONDARY_BUTTON = 'inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40';
 
-const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefresh, onToggleStatus, onClassChange, onPermission, loading = false, loadError = '', onRetry, page = 1, total = 0, pageSize = 50, searchTerm = '', onSearchChange = () => {}, onPageChange = () => {} }) => {
+function TeacherGroup({ teacher, appliedSearch, revision, rowProps, deletedAccountIds }) {
+    const groupId = useId();
+    const [manualExpansion, setManualExpansion] = useState(null);
+    const count = Number(teacher.studentCount) || 0;
+    const matched = appliedSearch ? Number(teacher.matchingStudentCount) || 0 : 0;
+    const expanded = count > 0 && (manualExpansion ?? (matched > 0));
+    const query = new URLSearchParams({ teacherId: String(teacher.id), search: matched ? appliedSearch : '' });
+    const { users: members, loading, error, hasMore, loadMore, retry } = usePagedUsers(query.toString(), { enabled: expanded, revision });
+    const students = members.filter(account => !deletedAccountIds.has(account.id));
+
+    return (
+        <>
+            <UserAccountRow user={teacher} {...rowProps}>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    {teacher.class_name && <span className="text-slate-500 [overflow-wrap:anywhere]">{teacher.class_name}</span>}
+                    {count ? (
+                        <button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => setManualExpansion(!expanded)}
+                            aria-label={`${expanded ? '收起' : '展开'} ${teacher.username} 的学生，${count} 名学生`}
+                            className="inline-flex min-h-8 items-center gap-1 whitespace-nowrap rounded-lg bg-indigo-50 px-2 font-bold text-indigo-700 transition-colors hover:bg-indigo-100 dark:text-indigo-300">
+                            <ChevronRight aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                            {matched ? `匹配 ${matched} / ${count} 名学生` : `${count} 名学生`}
+                        </button>
+                    ) : <span className="text-slate-500">0 名学生</span>}
+                </div>
+            </UserAccountRow>
+            <div id={groupId} hidden={!expanded} className="user-student-list border-t border-slate-100 dark:border-slate-800">
+                {expanded && <>
+                    {students.length > 0 && <ul aria-label={`${teacher.username} 的学生`} className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
+                        {students.map(student => <li key={student.id}><UserAccountRow user={student} nested {...rowProps} /></li>)}
+                    </ul>}
+                    {loading && <p role="status" className="px-5 py-3 text-xs text-slate-500">正在读取学生账号…</p>}
+                    {error && <div className="p-3"><LoadErrorNotice compact message={error} onRetry={retry} /></div>}
+                    {!students.length && !loading && !error && <p className="px-5 py-3 text-xs text-slate-500">没有学生账号</p>}
+                    {hasMore && !loading && !error && <div className="px-4 py-3"><button type="button" onClick={loadMore} className={SECONDARY_BUTTON}>加载更多学生</button></div>}
+                </>}
+            </div>
+        </>
+    );
+}
+
+const UserManager = ({
+    users = [], currentUser, classes = [], onAdd, onDelete, onDeleteAccount, deletingAccountId, deletedAccountIds = new Set(), onRefresh, onToggleStatus, onClassChange, onPermission,
+    loading = false, loadError = '', onRetry, page = 1, total = 0, totalPages = 1, appliedSearch = '', listRevision,
+    searchTerm = '', onSearchChange, onPageChange
+}) => {
     const [locationUser, setLocationUser] = useState(null);
     const [resetCredential, setResetCredential] = useState(null);
     const [showResetPassword, setShowResetPassword] = useState(false);
@@ -27,27 +63,6 @@ const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefr
         Boolean(resetCredential),
         () => setResetCredential(null)
     );
-
-    const safeUsers = Array.isArray(users) ? users : [];
-
-    // 用户列表按服务端分页平铺展示，避免教师与学生落在不同页时出现漏人、
-    // 重复或错误的班级展开结果。班级人数使用独立的班级聚合接口数据。
-    const displayUsers = safeUsers;
-
-    const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
-
-    const parseDevice = (info) => {
-        try {
-            if (!info) return { os: '-', browser: '-', res: '-' };
-            const data = typeof info === 'string' ? JSON.parse(info) : info;
-            const ua = data.userAgent || '';
-            let os = 'Other';
-            if (ua.includes('Android')) os = 'Android'; else if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS'; else if (ua.includes('Win')) os = 'Windows'; else if (ua.includes('Mac')) os = 'macOS'; else if (ua.includes('Linux')) os = 'Linux';
-            let browser = 'Other';
-            if (ua.includes('Edg/')) browser = 'Edge'; else if (ua.includes('Chrome')) browser = 'Chrome'; else if (ua.includes('Firefox')) browser = 'Firefox'; else if (ua.includes('Safari')) browser = 'Safari';
-            return { os, browser, res: data.screenResolution || '-' };
-        } catch (e) { return { os: 'Unknown', browser: 'Unknown', res: '-' }; }
-    };
 
     const handleResetPassword = async (user) => {
         if (!await confirmAction({
@@ -64,183 +79,56 @@ const UserManager = ({ users, currentUser, classes = [], onAdd, onDelete, onRefr
         } catch (e) { notify(e.message || '网络错误', 'error'); }
     };
 
+    const rowProps = {
+        currentUser, classes, onLocation: setLocationUser, onReset: handleResetPassword,
+        onPermission, onToggleStatus, onClassChange, onDeleteAccount, deletingAccountId
+    };
+    const visibleUsers = users.filter(account => !deletedAccountIds.has(account.id));
+
     return (
-        <div className="animate-in fade-in duration-500">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-                        <UserPlus className="w-6 h-6 text-indigo-600" /> 用户管理
-                        <span className="text-sm font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{total}</span>
-                    </h2>
-                    <p className="text-slate-500 text-sm mt-1">查看用户状态、重置密码及管理权限。</p>
+        <div className="user-directory animate-in fade-in duration-500">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                <div className="flex items-center gap-2.5">
+                    <Users aria-hidden="true" className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                    <h2 className="text-2xl font-black text-slate-900">用户管理</h2>
                 </div>
-                <div className="flex gap-3 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                        <input type="text" placeholder="搜索用户名 / 邮箱 / IP..." className={`w-full pl-9 pr-4 py-2 rounded-xl text-sm font-bold outline-none border border-transparent focus:border-indigo-500 transition-all ${GLASS_INPUT}`} value={searchTerm} onChange={(e) => onSearchChange(e.target.value)} />
-                    </div>
-                    <button onClick={onAdd} className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center shadow-lg hover:shadow-xl transition-all ${PRIMARY_BTN}`}><UserPlus className="w-4 h-4 mr-2" /> 新增账号</button>
-                    <button onClick={onDelete} className="px-4 py-2 rounded-xl text-sm font-bold flex items-center bg-white border border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-100 transition-all"><Trash2 className="w-4 h-4 mr-2" /> 批量删除</button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={onAdd} className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3.5 text-sm font-bold ${PRIMARY_BTN}`}><UserPlus className="h-4 w-4" />新增账号</button>
+                    <button type="button" onClick={onDelete} className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-bold text-red-600 transition-colors hover:border-red-200 hover:bg-red-50 dark:text-red-300"><Trash2 className="h-4 w-4" />批量删除</button>
                 </div>
             </div>
 
-            <div className="mb-4 space-y-2">
-                <LoadErrorNotice message={loadError} onRetry={onRetry} />
-                {loading && <div className="text-xs font-bold text-slate-400">正在读取用户列表…</div>}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <label className="relative w-full max-w-md">
+                    <span className="sr-only">搜索用户名、邮箱或 IP</span>
+                    <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="search" placeholder="搜索用户名、邮箱或 IP" className={`h-10 w-full rounded-xl pl-9 pr-3 text-sm ${GLASS_INPUT}`} value={searchTerm} onChange={e => onSearchChange(e.target.value)} />
+                </label>
+                <p role="status" className="text-xs font-semibold text-slate-500">{loading ? '正在读取账号…' : `${appliedSearch ? '匹配' : '共'} ${total} 个账号`}</p>
             </div>
+            {loadError && <div className="mb-3"><LoadErrorNotice message={loadError} onRetry={onRetry} /></div>}
 
-            <div className="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
-                <div className="text-sm font-black text-indigo-900">安全密码重置</div>
-                <p className="mt-1 text-xs text-indigo-700/80">密码统一重置为 123456 并撤销旧会话；用户用 123456 登录后会弹出修改密码窗口，修改前无法使用其他功能。</p>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white/90 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700 text-xs uppercase tracking-wider text-slate-500 font-bold">
-                                <th className="p-4 w-16 text-center">头像</th>
-                                <th className="p-4">用户概览</th>
-                                <th className="p-4">网络与状态</th>
-                                <th className="p-4">设备指纹</th>
-                                <th className="p-4">系统权限</th>
-                                <th className="p-4 text-right">管理操作</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {displayUsers.map(user => {
-                                const device = parseDevice(user.device_info);
-                                const lastActiveTime = user.last_active_time || user.last_login_time;
-                                const isOnline = lastActiveTime && (Date.now() - new Date(lastActiveTime).getTime()) < 5 * 60 * 1000;
-                                const roleMeta = ROLE_META[user.role] || ROLE_META.student;
-                                const isSelf = currentUser && user.id === currentUser.id;
-                                const canManage = !isSelf && (ROLE_RANK[currentUser?.role] ?? -1) > (ROLE_RANK[user.role] ?? 0);
-
-                                return (
-                                    <tr key={user.id} className="group hover:bg-indigo-50/30 dark:hover:bg-slate-800/30 transition-colors">
-                                        <td className="p-4 text-center">
-                                            <div className={`w-10 h-10 rounded-full mx-auto flex items-center justify-center text-sm font-black text-white shadow-md ${roleMeta.avatar}`}>
-                                                {user.username ? user.username.substring(0, 2).toUpperCase() : '??'}
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="font-bold text-slate-800 dark:text-white">{user.username}</div>
-                                            <div className="text-xs text-slate-400 font-mono mt-0.5">{roleMeta.subtitle}</div>
-                                            <div className="mt-1 flex max-w-[240px] items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400" title={user.email || '未绑定邮箱'}>
-                                                <Mail className="h-3 w-3 shrink-0" />
-                                                <span className="truncate">{user.email || '未绑定邮箱'}</span>
-                                            </div>
-                                            {user.role === 'teacher' && user.class_id && (
-                                                <div className="mt-1 inline-flex items-center gap-1 rounded-lg border border-cyan-100 bg-cyan-50 px-2 py-1 text-[10px] font-bold text-cyan-700">
-                                                    {user.class_name || user.username}
-                                                    <span className="rounded-full bg-white px-1.5 py-0.5 text-[9px] text-cyan-600">
-                                                        {classes.find(item => Number(item.id) === Number(user.class_id))?.studentCount ?? 0} 名学生
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {['student', 'user'].includes(user.role) && (
-                                                <div className={`mt-1 inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold ${user.class_name ? 'bg-cyan-50 text-cyan-700 border border-cyan-100' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
-                                                    班级：{user.class_name || '未分配'}
-                                                </div>
-                                            )}
-                                            {['super_admin', 'admin'].includes(currentUser?.role) && ['student', 'user'].includes(user.role) && classes.length > 0 && (
-                                                <select
-                                                    className="mt-1 block max-w-[180px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 outline-none focus:border-cyan-400"
-                                                    value={user.class_id || ''}
-                                                    onChange={e => onClassChange(user, e.target.value)}
-                                                >
-                                                    <option value="" disabled>选择班级</option>
-                                                    {classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                                </select>
-                                            )}
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 ring-2 ring-emerald-500/20' : 'bg-slate-300'}`} />
-                                                <span className={`text-xs font-bold ${isOnline ? 'text-emerald-600' : 'text-slate-400'}`}>{isOnline ? '在线' : '离线'}</span>
-                                            </div>
-                                            {user.last_login_ip ? <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-[10px] text-slate-500 font-mono"><Globe className="w-3 h-3" /> {user.last_login_ip}</div> : <span className="text-[10px] text-slate-300">无记录</span>}
-                                            {(user.last_city || user.last_latitude != null) && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setLocationUser(user)}
-                                                    className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-indigo-100 bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300"
-                                                    title="查看登录位置"
-                                                >
-                                                    <MapPin className="w-3 h-3" /> {user.last_city || '查看位置'}
-                                                </button>
-                                            )}
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400"><Smartphone className="w-4 h-4" /></div>
-                                                <div>
-                                                    <div className="text-xs font-bold text-slate-700">{device.os} <span className="text-slate-300">•</span> <span className="text-indigo-600">{device.browser}</span></div>
-                                                    <div className="text-[10px] text-slate-400 font-mono bg-slate-50 px-1 rounded inline-block mt-0.5 border border-slate-100">{device.res}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col items-start gap-1.5">
-                                                <span className={`role-badge role-badge-${user.role} px-2.5 py-1 rounded-lg border text-xs font-bold shadow-sm ${roleMeta.badge}`}>{roleMeta.label}</span>
-                                                {canManage && ['teacher', 'student', 'user'].includes(user.role) && (
-                                                    <button onClick={() => onPermission(user)} className="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 border border-indigo-100 px-2 py-1 rounded hover:bg-indigo-50"><Shield className="w-3 h-3" /> 权限配置</button>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end items-center gap-2">
-
-                                                {canManage && <button onClick={() => handleResetPassword(user)} className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all border border-transparent hover:border-amber-200" title="重置密码">
-                                                    <KeyRound className="w-4 h-4" />
-                                                </button>}
-
-                                                <div className="w-px h-4 bg-slate-200 mx-1"></div>
-
-                                                {canManage && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => onToggleStatus(user)}
-                                                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border p-0 transition-all ${user.is_disabled ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-white text-red-500 border-slate-200 hover:border-red-200 hover:bg-red-50'}`}
-                                                        title={user.is_disabled ? '启用用户' : '禁用用户'}
-                                                        aria-label={user.is_disabled ? `启用用户 ${user.username}` : `禁用用户 ${user.username}`}
-                                                    >
-                                                        {user.is_disabled ? <CheckCircle2 className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+            <div className="user-directory-list rounded-2xl border border-slate-200 bg-white dark:border-slate-700">
+                <div aria-hidden="true" className="user-account-grid user-account-head rounded-t-2xl border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold text-slate-500">
+                    <span>账号与班级</span><span>登录状态与位置</span><span>登录设备</span><span className="text-right">账号操作</span>
                 </div>
-                {total > pageSize && (
-                    <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 px-4 py-3">
-                        <span className="text-xs font-bold text-slate-500">共 {total} 人</span>
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                disabled={page <= 1}
-                                onClick={() => onPageChange(page - 1)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:border-indigo-300 hover:text-indigo-600"
-                            >
-                                上一页
-                            </button>
-                            <span className="text-xs font-bold text-slate-500">第 {page} / {totalPages} 页</span>
-                            <button
-                                type="button"
-                                disabled={page >= totalPages}
-                                onClick={() => onPageChange(page + 1)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:border-indigo-300 hover:text-indigo-600"
-                            >
-                                下一页
-                            </button>
-                        </div>
-                    </div>
+                <ul aria-label="用户账号" aria-busy={loading} className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                    {visibleUsers.map(user => <li key={user.id}>
+                        {user.role === 'teacher'
+                            ? <TeacherGroup key={appliedSearch} teacher={user} appliedSearch={appliedSearch} revision={listRevision} rowProps={rowProps} deletedAccountIds={deletedAccountIds} />
+                            : <UserAccountRow user={user} {...rowProps} />}
+                    </li>)}
+                </ul>
+                {!visibleUsers.length && !loadError && !loading && <div className="flex flex-col items-center gap-3 px-4 py-10 text-sm font-semibold text-slate-500">
+                    {appliedSearch ? '没有找到匹配的账号' : '暂无账号'}
+                    {appliedSearch && <button type="button" onClick={() => onSearchChange('')} className={SECONDARY_BUTTON}>清除搜索</button>}
+                </div>}
+                {totalPages > 1 && (
+                    <nav aria-label="账号分页" className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-3 py-3 text-xs font-semibold text-slate-600 sm:px-4">
+                        <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className={SECONDARY_BUTTON}>上一页</button>
+                        <span>第 {page} / {totalPages} 页</span>
+                        <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className={SECONDARY_BUTTON}>下一页</button>
+                    </nav>
                 )}
             </div>
 

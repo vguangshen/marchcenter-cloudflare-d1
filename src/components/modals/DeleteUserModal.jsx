@@ -3,27 +3,27 @@ import { Loader2, Search, Trash2, X } from 'lucide-react';
 import { GLASS_INPUT } from '../../constants/config';
 import { confirmAction, notify } from '../../utils/uiFeedback';
 import { useModalAccessibility } from '../../hooks/useModalAccessibility';
+import { usePagedUsers } from '../../hooks/usePagedUsers';
 
-const ROLE_RANK = { super_admin: 3, admin: 2, teacher: 1, student: 0, user: 0 };
 const ROLE_LABELS = { admin: '管理员', teacher: '教师', student: '学生', user: '学生' };
 
-const DeleteUserModal = ({ isOpen, onClose, onDelete, users, currentUser }) => {
+const DeleteUserModal = ({ isOpen, onClose, onDelete }) => {
     const [selectedIds, setSelectedIds] = useState([]);
     const [filterText, setFilterText] = useState('');
+    const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const dialogRef = useModalAccessibility(isOpen, onClose);
 
-    const safeUsers = useMemo(() => (Array.isArray(users) ? users : []).filter(user =>
-        Number(user.id) !== Number(currentUser?.id) &&
-        (ROLE_RANK[currentUser?.role] ?? -1) > (ROLE_RANK[user.role] ?? 0)
-    ), [users, currentUser]);
-    const filteredUsers = useMemo(() => {
-        const query = filterText.trim().toLowerCase();
-        if (!query) return safeUsers;
-        return safeUsers.filter(user => `${user.username || ''} ${user.email || ''}`.toLowerCase().includes(query));
-    }, [safeUsers, filterText]);
+    const searchPending = search !== filterText.trim();
+    const page = usePagedUsers(new URLSearchParams({ view: 'candidates', search }).toString(), { enabled: isOpen && !searchPending });
+    const filteredUsers = page.users;
     const filteredIds = useMemo(() => filteredUsers.map(user => user.id), [filteredUsers]);
     const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.includes(id));
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => setSearch(filterText.trim()), 250);
+        return () => window.clearTimeout(timer);
+    }, [filterText]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -39,17 +39,17 @@ const DeleteUserModal = ({ isOpen, onClose, onDelete, users, currentUser }) => {
     });
 
     const handleSubmit = async () => {
-        const targets = safeUsers.filter(user => selectedIds.includes(user.id));
-        if (!targets.length) return notify('请先勾选要删除的账号', 'warning');
+        if (!selectedIds.length) return notify('请先勾选要删除的账号', 'warning');
+        if (selectedIds.length > 200) return notify('每批最多删除 200 个账号', 'warning');
         if (!await confirmAction({
             title: '批量删除账号',
-            message: `即将永久删除 ${targets.length} 个账号及其关联数据，此操作无法恢复。`,
+            message: `即将永久删除 ${selectedIds.length} 个账号及其关联数据，此操作无法恢复。`,
             confirmText: '确认删除'
         })) return;
 
         setLoading(true);
         try {
-            await onDelete(targets.map(user => user.id));
+            await onDelete(selectedIds);
             onClose();
         } catch (error) {
             notify(error.message || '删除失败', 'error');
@@ -102,9 +102,12 @@ const DeleteUserModal = ({ isOpen, onClose, onDelete, users, currentUser }) => {
                                     );
                                 })}
                             </div>
-                        ) : (
-                            <div className="grid h-full place-items-center px-6 text-center text-sm text-slate-400">{safeUsers.length ? '没有匹配的账号' : '当前没有可删除的账号'}</div>
+                        ) : !page.error && !page.loading && !searchPending && (
+                            <div className="grid h-full place-items-center px-6 text-center text-sm text-slate-400">{search ? '没有匹配的账号' : '当前没有可删除的账号'}</div>
                         )}
+                        {(page.loading || searchPending) && <p role="status" className="p-3 text-center text-xs text-slate-500">正在读取账号…</p>}
+                        {page.error && <p role="alert" className="p-3 text-center text-xs text-red-600">{page.error} <button type="button" onClick={page.retry} className="underline">重试</button></p>}
+                        {page.hasMore && !page.loading && <button type="button" onClick={page.loadMore} className="w-full py-3 text-xs font-bold text-indigo-600">加载更多账号</button>}
                     </div>
                     <div className="mt-3 flex items-center justify-between text-xs">
                         <span className="text-slate-400">仅显示您有权限管理的账号</span>

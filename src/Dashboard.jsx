@@ -82,10 +82,14 @@ export default function Dashboard({ auth, site, appearance }) {
 
     // Data
     const [users, setUsers] = useState([]);
+    const [giftUsers, setGiftUsers] = useState([]);
     const [usersLoadError, setUsersLoadError] = useState('');
     const [usersPage, setUsersPage] = useState(1);
     const [usersPageSize] = useState(50);
     const [usersTotal, setUsersTotal] = useState(0);
+    const [usersTotalPages, setUsersTotalPages] = useState(1);
+    const [usersAppliedSearch, setUsersAppliedSearch] = useState('');
+    const [usersListRevision, setUsersListRevision] = useState(0);
     const [usersSearch, setUsersSearch] = useState('');
     const [debouncedUsersSearch, setDebouncedUsersSearch] = useState('');
     const usersRequestIdRef = useRef(0);
@@ -100,8 +104,6 @@ export default function Dashboard({ auth, site, appearance }) {
     const [isPageVisible, setIsPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
 
     // Config
-    const [permissions, setPermissions] = useState({});
-    const [userTimeRules, setUserTimeRules] = useState({});
     const [aiConfig, setAiConfig] = useState(DEFAULT_AI_CONFIG);
 
     const {
@@ -172,6 +174,8 @@ export default function Dashboard({ auth, site, appearance }) {
     const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
     const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
     const [isDeleteUserModalOpen, setIsDeleteUserModalOpen] = useState(false);
+    const [deletingAccountId, setDeletingAccountId] = useState(null);
+    const [deletedAccountIds, setDeletedAccountIds] = useState(() => new Set());
 
     const loadAgentPlatforms = useCallback(async ({ signal } = {}) => {
         if (!token) return [];
@@ -319,8 +323,12 @@ export default function Dashboard({ auth, site, appearance }) {
         setUsersLoading(true);
         setUsersLoadError('');
         try {
-            const query = new URLSearchParams({ page: String(page), pageSize: String(usersPageSize) });
-            if (search.trim()) query.set('search', search.trim());
+            const grouped = settingsTab === 'users';
+            const query = new URLSearchParams({ page: String(grouped ? page : 1), pageSize: String(usersPageSize) });
+            if (grouped) {
+                query.set('view', 'hierarchy');
+                if (search.trim()) query.set('search', search.trim());
+            }
             const data = await api.get(`/users?${query.toString()}`, {
                 fallback: '用户列表读取失败',
                 signal,
@@ -328,11 +336,16 @@ export default function Dashboard({ auth, site, appearance }) {
             });
             if (requestId !== usersRequestIdRef.current) return;
             const list = Array.isArray(data) ? data : (data.users || []);
+            if (!grouped) {
+                setGiftUsers(list);
+                return;
+            }
             setUsers(list);
-            setUsersTotal(Array.isArray(data) ? list.length : Number(data.total) || list.length);
-            setPermissions(Object.fromEntries(list.map(user => [user.id, user.permissions || []])));
-            setUserTimeRules(Object.fromEntries(list.map(user => [user.id, user.timeRules || {}])));
-            if (list.length === 0 && page > 1) setUsersPage(page - 1);
+            setUsersTotal(Number(data.total ?? list.length));
+            setUsersTotalPages(data.totalPages || 1);
+            setUsersAppliedSearch(search.trim());
+            setUsersListRevision(requestId);
+            if (page > data.totalPages) setUsersPage(data.totalPages);
         } catch (e) {
             if (e.name !== 'AbortError' && requestId === usersRequestIdRef.current) {
                 setUsersLoadError(e.message || '用户列表读取失败，请重试');
@@ -340,7 +353,7 @@ export default function Dashboard({ auth, site, appearance }) {
         } finally {
             if (requestId === usersRequestIdRef.current) setUsersLoading(false);
         }
-    }, [debouncedUsersSearch, token, usersPage, usersPageSize]);
+    }, [debouncedUsersSearch, settingsTab, token, usersPage, usersPageSize]);
     const fetchClasses = useCallback(async () => {
         if (!token) return;
         try {
@@ -419,7 +432,9 @@ export default function Dashboard({ auth, site, appearance }) {
         contentRevisionRef.current = { announcements: '', gifts: '' };
         contentRequestRef.current = null;
         usersRequestIdRef.current += 1;
-        setUsers([]); setPermissions({}); setUserTimeRules({}); setClassOptions([]);
+        setUsers([]); setGiftUsers([]); setClassOptions([]);
+        setDeletedAccountIds(new Set());
+        setUsersTotal(0); setUsersTotalPages(1); setUsersAppliedSearch('');
         setUsersLoadError(''); setUsersLoading(false); setUsersPage(1);
         setSsoConfigs([]); setSsoConfigsLoadError(''); setIsProfileModalOpen(false);
         setIsModalOpen(false); setIsTaskAppModalOpen(false); setIsPermissionModalOpen(false); setIsAddUserModalOpen(false); setIsDeleteUserModalOpen(false);
@@ -490,10 +505,10 @@ export default function Dashboard({ auth, site, appearance }) {
     const sentGiftsWithUser = useMemo(() => {
         if (!isAdmin) return [];
         return gifts.map(gift => {
-            const recipient = users.find(u => u.id === gift.targetUserId);
+            const recipient = giftUsers.find(u => u.id === gift.targetUserId);
             return { ...gift, recipientName: gift.recipientName || (recipient ? recipient.username : '未知用户') };
         }).sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
-    }, [gifts, users, isAdmin]);
+    }, [gifts, giftUsers, isAdmin]);
 
     const availableClasses = useMemo(() => {
         if (classOptions.length) return classOptions;
@@ -633,22 +648,40 @@ export default function Dashboard({ auth, site, appearance }) {
         try {
             const result = await api.post('/users/batch', { users: newUsers }, { fallback: '批量创建用户失败', timeoutMs: 60_000, retry: 0 });
             notify(`已成功创建 ${result.count ?? newUsers.length} 个账号`, 'success');
-            await fetchUsers();
+            await Promise.all([fetchUsers(), fetchClasses()]);
             setIsAddUserModalOpen(false);
         } catch (e) { notify(e.message, 'error'); }
     };
     const handleAdminDeleteUser = async (userIds) => {
+        const result = await api.delete('/users/batch', {
+            body: JSON.stringify({ userIds }),
+            fallback: '批量删除用户失败',
+            timeoutMs: 60_000,
+            retry: 0
+        });
+        notify(`已删除 ${result.count ?? userIds.length} 个账号`, 'success');
+        setDeletedAccountIds(previous => new Set([...previous, ...userIds]));
+        await Promise.all([fetchUsers(), fetchClasses()]);
+    };
+    const handleDeleteAccount = async (account) => {
+        if (deletingAccountId != null || !account?.id || Number(account.id) === Number(currentUserId)) return;
+        const confirmed = await confirmAction({
+            title: '删除账号',
+            message: `将永久删除「${account.username}」及其关联数据。此操作无法撤销。`,
+            confirmText: '确认删除'
+        });
+        if (!confirmed) return;
+        setDeletingAccountId(account.id);
         try {
-            const result = await api.delete('/users/batch', {
-                body: JSON.stringify({ userIds }),
-                fallback: '批量删除用户失败',
-                timeoutMs: 60_000,
-                retry: 0
-            });
-            notify(`已删除 ${result.count ?? userIds.length} 个账号`, 'success');
-            await fetchUsers();
-            setIsDeleteUserModalOpen(false);
-        } catch (e) { notify(e.message, 'error'); }
+            await api.delete(`/users/${account.id}`, { fallback: '删除账号失败', retry: 0, timeoutMs: 60_000 });
+            setDeletedAccountIds(previous => new Set(previous).add(account.id));
+            notify(`已删除账号「${account.username}」`, 'success');
+            await Promise.all([fetchUsers(), fetchClasses()]);
+        } catch (error) {
+            notify(error.message || '删除账号失败', 'error');
+        } finally {
+            setDeletingAccountId(null);
+        }
     };
     const toggleUserStatus = async (user) => {
         if (!token) return;
@@ -660,14 +693,12 @@ export default function Dashboard({ auth, site, appearance }) {
     const handleChangeUserClass = async (user, classId) => {
         try {
             await api.patch(`/users/${user.id}/class`, { classId: Number(classId) }, { fallback: '班级调整失败' });
-            await fetchUsers();
+            await Promise.all([fetchUsers(), fetchClasses()]);
         } catch (e) { notify(e.message, 'error'); }
     };
     const handleSavePermissions = async (userId, selectedIds, timeRules) => {
         try {
             await api.patch(`/users/${userId}/permissions`, { permissions: selectedIds, timeRules }, { fallback: '权限保存失败' });
-            setPermissions(prev => ({ ...prev, [userId]: selectedIds }));
-            setUserTimeRules(prev => ({ ...prev, [userId]: timeRules }));
             setIsPermissionModalOpen(false); setTargetUserForPermission(null); notify('权限已更新', 'success');
             await fetchUsers();
         } catch (e) { notify(e.message, 'error'); }
@@ -867,7 +898,9 @@ export default function Dashboard({ auth, site, appearance }) {
                                         classes={availableClasses}
                                         page={usersPage}
                                         total={usersTotal}
-                                        pageSize={usersPageSize}
+                                        totalPages={usersTotalPages}
+                                        appliedSearch={usersAppliedSearch}
+                                        listRevision={usersListRevision}
                                         searchTerm={usersSearch}
                                         onSearchChange={(value) => {
                                             setUsersSearch(value);
@@ -876,6 +909,9 @@ export default function Dashboard({ auth, site, appearance }) {
                                         onPageChange={(nextPage) => setUsersPage(Math.max(1, nextPage))}
                                         onAdd={() => setIsAddUserModalOpen(true)}
                                         onDelete={() => setIsDeleteUserModalOpen(true)}
+                                        onDeleteAccount={handleDeleteAccount}
+                                        deletingAccountId={deletingAccountId}
+                                        deletedAccountIds={deletedAccountIds}
                                         onRefresh={() => {
                                             fetchUsers();
                                             fetchLinks();
@@ -897,7 +933,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                         onRetry={fetchSharedContent}
                                     />
                                 )}
-                                {settingsTab === 'gifts' && <GiftManager giftForm={giftForm} setGiftForm={setGiftForm} onSend={handleSendGift} sentGifts={sentGiftsWithUser} onEdit={(g) => { setEditingGift(g); setIsEditGiftModalOpen(true); }} onDelete={handleDeleteGift} users={users} onSearchUsers={searchUsersForGift} loadError={contentLoadError} onRetry={fetchSharedContent} />}
+                                {settingsTab === 'gifts' && <GiftManager giftForm={giftForm} setGiftForm={setGiftForm} onSend={handleSendGift} sentGifts={sentGiftsWithUser} onEdit={(g) => { setEditingGift(g); setIsEditGiftModalOpen(true); }} onDelete={handleDeleteGift} users={giftUsers} onSearchUsers={searchUsersForGift} loadError={contentLoadError} onRetry={fetchSharedContent} />}
                                 {settingsTab === 'site' && (
                                     <SiteSettings
                                         config={siteConfig}
@@ -1086,7 +1122,7 @@ export default function Dashboard({ auth, site, appearance }) {
                 {isModalOpen && <EditModal isOpen onClose={() => setIsModalOpen(false)} onSave={handleSave} initialData={editingLink} existingCategories={competitionFieldHistory.categories} existingTitles={competitionFieldHistory.titles} ssoConfigs={ssoConfigs} authToken={token} />}
                 {isTaskAppModalOpen && <TaskAppModal isOpen onClose={() => { setIsTaskAppModalOpen(false); setPlatformToEdit(''); }} onSave={async () => { setEditingLink(null); await fetchLinks(); }} onCatalogRefreshed={fetchLinks} onPlatformsChange={async () => { const platforms = await loadAgentPlatforms(); await fetchLinks({ animate: false }); return platforms; }} platforms={agentPlatforms} initialData={editingLink} initialSoftwareUnique={taskAppSoftwareUnique} initialPlatformSoftwareUnique={platformToEdit} ssoConfigs={ssoConfigs} existingLinks={links} />}
                 {isAiModalOpen && <AiGuideModal isOpen onClose={() => setIsAiModalOpen(false)} link={currentAiLink} aiConfig={aiConfig} />}
-                {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} agentPlatforms={agentPlatforms} currentPermissions={targetUserForPermission ? (permissions[targetUserForPermission.id] || []) : []} currentUserTimeRules={targetUserForPermission ? (userTimeRules[targetUserForPermission.id] || {}) : {}} onSave={handleSavePermissions} />}
+                {isPermissionModalOpen && <PermissionModal isOpen onClose={() => setIsPermissionModalOpen(false)} user={targetUserForPermission} allLinks={links} agentPlatforms={agentPlatforms} currentPermissions={targetUserForPermission?.permissions || []} currentUserTimeRules={targetUserForPermission?.timeRules || {}} onSave={handleSavePermissions} />}
                 {isProfileModalOpen && <ProfileModal isOpen user={currentUser} onClose={() => setIsProfileModalOpen(false)} onSaved={handleProfileSaved} />}
                 {activeGift && !isGiftMinimized && <GiftModal isOpen gift={activeGift} onClose={() => setIsGiftMinimized(true)} onOpenLink={markGiftAsRead} />}
             </Suspense>
@@ -1119,7 +1155,7 @@ export default function Dashboard({ auth, site, appearance }) {
                         agentPlatforms={agentPlatforms}
                     />
                 )}
-                {isDeleteUserModalOpen && <DeleteUserModal isOpen onClose={() => setIsDeleteUserModalOpen(false)} onDelete={handleAdminDeleteUser} users={users} currentUser={currentUser} />}
+                {isDeleteUserModalOpen && <DeleteUserModal isOpen onClose={() => setIsDeleteUserModalOpen(false)} onDelete={handleAdminDeleteUser} />}
             </Suspense>
         </div>
     );

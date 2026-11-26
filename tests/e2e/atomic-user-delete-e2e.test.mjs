@@ -140,3 +140,30 @@ test('batch deletion retains self, hierarchy, teacher-class and occupied-class r
     assert.deepEqual(await harness.rows('SELECT id FROM classes WHERE id = 5000'), []);
     assert.equal(await rangeCount('users', 'id', otherStudent, otherStudent), 1);
 });
+
+test('legacy students protect their teacher from single and batch deletion until the class is empty', async () => {
+    const teacherId = 6000;
+    await harness.seedUser({ id: teacherId, username: 'legacy-class-owner', role: 'teacher' });
+    await harness.run("INSERT INTO classes (id, name, teacher_user_id) VALUES (?, 'Legacy class', ?)", teacherId, teacherId);
+    await harness.run('UPDATE users SET class_id = ? WHERE id = ?', teacherId, teacherId);
+    const [studentId] = await seedStudents(6001, 1, teacherId);
+    await harness.run("UPDATE users SET role = 'user' WHERE id = ?", studentId);
+    const previousRevision = await revision();
+
+    const single = await harness.api(`/api/users/${teacherId}`, { method: 'DELETE' });
+    assert.equal(single.status, 409, single.text);
+    const batch = await harness.api('/api/users/batch', { method: 'DELETE', body: { userIds: [teacherId, studentId] } });
+    assert.equal(batch.status, 409, batch.text);
+    assert.match(batch.data.error, /legacy-class-owner/);
+    assert.equal(await rangeCount('users', 'id', teacherId, studentId), 2);
+    assert.equal(await rangeCount('classes', 'id', teacherId, teacherId), 1);
+    assert.equal(await rangeCount('user_gifts', 'target_user_id', studentId, studentId), 1);
+    assert.equal(await revision(), previousRevision);
+
+    const student = await harness.api(`/api/users/${studentId}`, { method: 'DELETE' });
+    assert.equal(student.status, 200, student.text);
+    const teacher = await harness.api(`/api/users/${teacherId}`, { method: 'DELETE' });
+    assert.equal(teacher.status, 200, teacher.text);
+    assert.equal(await rangeCount('classes', 'id', teacherId, teacherId), 0);
+    assert.equal(await revision(), previousRevision + 2);
+});

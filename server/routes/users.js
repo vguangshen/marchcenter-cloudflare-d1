@@ -113,25 +113,21 @@ function userPageParams(query) {
     return { page, pageSize, offset: (page - 1) * pageSize };
 }
 
-function userVisibilityConditions(actor, search) {
-    const conditions = [];
-    const params = [];
+function userVisibility(actor) {
     if (actor.role === ROLES.TEACHER) {
-        conditions.push('(u.id = ? OR (u.role IN (?, ?) AND u.class_id = ?))');
-        params.push(actor.id, ROLES.STUDENT, 'user', actor.class_id ?? null);
-    } else if (actor.role === ROLES.ADMIN) {
-        conditions.push('(u.id = ? OR u.role NOT IN (?, ?))');
-        params.push(actor.id, ROLES.SUPER_ADMIN, ROLES.ADMIN);
+        return { sql: "(u.id = ? OR (u.role IN ('student', 'user') AND u.class_id = ?))", params: [actor.id, actor.class_id] };
     }
+    const hiddenRoles = actor.role === ROLES.ADMIN ? [ROLES.SUPER_ADMIN, ROLES.ADMIN] : [ROLES.SUPER_ADMIN];
+    return { sql: '(u.id = ? OR u.role NOT IN (?))', params: [actor.id, hiddenRoles] };
+}
+
+function userSearch(search) {
     const keyword = String(search || '').trim();
-    if (keyword) {
-        conditions.push('(lower(u.username) LIKE ? OR lower(u.email) LIKE ? OR lower(u.last_ip) LIKE ?)');
-        const pattern = `%${keyword.toLowerCase()}%`;
-        params.push(pattern, pattern, pattern);
-    }
+    if (!keyword) return { sql: '1', params: [] };
+    const pattern = `%${keyword.toLowerCase()}%`;
     return {
-        where: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '',
-        params
+        sql: '(lower(u.username) LIKE ? OR lower(u.email) LIKE ? OR lower(u.last_ip) LIKE ?)',
+        params: [pattern, pattern, pattern]
     };
 }
 
@@ -337,75 +333,115 @@ async function createUsersBatch(actorUser, inputUsers) {
     }));
 }
 
+const USER_LIST_FIELDS = `u.id, u.username, u.email, u.role, u.is_disabled, u.created_at,
+    strftime('%Y-%m-%dT%H:%M:%fZ', u.last_login_at) AS last_login_time,
+    strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(u.last_seen_at, u.last_login_at)) AS last_active_time,
+    u.last_ip AS last_login_ip, u.last_latitude, u.last_longitude, u.last_city, u.last_country_code,
+    u.last_region, u.last_timezone, u.last_organization, u.user_agent, u.screen_resolution,
+    u.device_info, u.class_id, c.name AS class_name, c.teacher_user_id AS class_teacher_id`;
+const USER_LIST_FROM = 'FROM users u LEFT JOIN classes c ON c.id = u.class_id';
+const USER_ACTIVITY_ORDER = 'COALESCE(u.last_seen_at, u.last_login_at) DESC, u.id DESC';
+
+// Resolve class ownership over the entire visible directory before paging the roots.
+// A missing class or inaccessible owner leaves the student visible as an independent row.
+async function readUserGroups(visibility, search, { pageSize, offset }) {
+    const groups = `WITH visible AS (
+            SELECT u.id, u.role, u.class_id, CASE WHEN ${search.sql} THEN 1 ELSE 0 END AS matched
+            FROM users u WHERE ${visibility.sql}
+        ), members AS (
+            SELECT account.id, COALESCE(teacher.id, account.id) AS rootId, account.matched
+            FROM visible account
+            LEFT JOIN classes owned ON owned.id = account.class_id AND account.role IN ('student', 'user')
+            LEFT JOIN visible teacher ON teacher.id = owned.teacher_user_id AND teacher.role = 'teacher'
+        ), groups AS (
+            SELECT rootId, COUNT(*) - 1 AS studentCount, SUM(matched) AS matches,
+                   SUM(CASE WHEN id <> rootId THEN matched ELSE 0 END) AS matchingStudentCount
+            FROM members GROUP BY rootId HAVING SUM(matched) > 0
+        )`;
+    const params = [...search.params, ...visibility.params];
+    const [counts, rows] = await pool.batch([
+        [`${groups} SELECT COUNT(*) AS rootCount, COALESCE(SUM(matches), 0) AS total FROM groups`, params],
+        [`${groups} SELECT ${USER_LIST_FIELDS}, g.studentCount, g.matchingStudentCount
+         ${USER_LIST_FROM} JOIN groups g ON g.rootId = u.id
+         ORDER BY CASE u.role WHEN 'super_admin' THEN 0 WHEN 'admin' THEN 1 WHEN 'teacher' THEN 2 ELSE 3 END,
+                  ${USER_ACTIVITY_ORDER} LIMIT ? OFFSET ?`, [...params, pageSize, offset]]
+    ]);
+    return { users: rows.rows, ...counts.rows[0] };
+}
+
+async function readUserPage(visibility, search, { pageSize, offset }, query, actor) {
+    const conditions = [visibility.sql, search.sql];
+    const params = [...visibility.params, ...search.params];
+    if (query.teacherId !== undefined) {
+        const teacherId = Number(query.teacherId);
+        if (!Number.isSafeInteger(teacherId) || teacherId <= 0) throw httpError('无效的教师账号');
+        if (actor.role === ROLES.TEACHER && teacherId !== Number(actor.id)) throw httpError('不能查看其他教师的学生', 403);
+        conditions.push("u.role IN ('student', 'user') AND c.teacher_user_id = ?");
+        params.push(teacherId);
+    }
+    if (query.view === 'candidates') {
+        conditions.push('u.id <> ?');
+        params.push(actor.id);
+    }
+    const from = `${USER_LIST_FROM} WHERE ${conditions.join(' AND ')}`;
+    const fields = query.view === 'candidates' ? 'u.id, u.username, u.email, u.role, u.class_id' : USER_LIST_FIELDS;
+    const [counts, rows] = await pool.batch([
+        [`SELECT COUNT(*) AS total ${from}`, params],
+        [`SELECT ${fields} ${from} ORDER BY ${USER_ACTIVITY_ORDER} LIMIT ? OFFSET ?`, [...params, pageSize, offset]]
+    ]);
+    return { users: rows.rows, total: counts.rows[0].total, rootCount: counts.rows[0].total };
+}
+
 router.get("/", authMiddleware, userManagerOnly, async (req, res) => {
     try {
         const actor = await getActorWithClass(req.user);
-        const { page, pageSize, offset } = userPageParams(req.query);
-        const visibility = userVisibilityConditions(actor, req.query.search);
-        const [[totalRows], [users]] = await Promise.all([
-            pool.query(
-                `SELECT COUNT(*) AS count FROM users u ${visibility.where}`,
-                visibility.params
-            ),
-            pool.query(`
-                SELECT
-                    u.id, u.username, u.email, u.role, u.is_disabled, u.created_at,
-                    CASE WHEN u.last_login_at IS NULL THEN NULL
-                         ELSE strftime('%Y-%m-%dT%H:%M:%fZ', u.last_login_at) END AS last_login_time,
-                    CASE WHEN COALESCE(u.last_seen_at, u.last_login_at) IS NULL THEN NULL
-                         ELSE strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(u.last_seen_at, u.last_login_at)) END AS last_active_time,
-                    u.last_ip AS last_login_ip,
-                    u.last_latitude, u.last_longitude,
-                    u.last_city, u.last_country_code, u.last_region, u.last_timezone, u.last_organization,
-                    u.user_agent, u.screen_resolution,
-                    u.device_info, u.class_id,
-                    c.name AS class_name,
-                    c.teacher_user_id AS class_teacher_id
-                FROM users u
-                LEFT JOIN classes c ON c.id = u.class_id
-                ${visibility.where}
-                ORDER BY COALESCE(u.last_seen_at, u.last_login_at) DESC, u.id DESC
-                LIMIT ? OFFSET ?
-            `, [...visibility.params, pageSize, offset])
-        ]);
-        const total = Number(totalRows[0]?.count || 0);
+        const pagination = userPageParams(req.query);
+        const visibility = userVisibility(actor);
+        const search = userSearch(req.query.search);
+        const { users, total, rootCount } = req.query.view === 'hierarchy'
+            ? await readUserGroups(visibility, search, pagination)
+            : await readUserPage(visibility, search, pagination, req.query, actor);
 
         const visibleUsers = users
             .map(user => ({ ...user, role: normalizeRole(user.role) }))
             .filter(user => canSeeUser(actor, user) && canSeeUserInClass(actor, user));
 
-        const accessByUser = await getUsersAccess(visibleUsers.map(user => user.id));
-        for (let user of visibleUsers) {
-            // D1 stores JSON values as text.
-            if (typeof user.device_info === 'string') {
-                try { user.device_info = JSON.parse(user.device_info); } catch { user.device_info = null; }
-            }
-            // 兼容设备信息
-            if (!user.device_info && user.user_agent) {
-                user.device_info = {
-                    userAgent: user.user_agent,
-                    screenResolution: user.screen_resolution
-                };
-            }
-
-            const access = accessByUser.get(Number(user.id)) || { configured: false, permissions: [], timeRules: {} };
-            user.permissions = access.permissions;
-            user.timeRules = access.timeRules;
-            user.permissionsConfigured = access.configured;
+        if (req.query.view !== 'candidates') {
+            await attachUserListDetails(visibleUsers);
         }
 
         res.json({
             users: visibleUsers,
             total,
-            page,
-            pageSize,
-            totalPages: Math.max(1, Math.ceil(total / pageSize))
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            totalPages: Math.max(1, Math.ceil(rootCount / pagination.pageSize))
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
+        if (!err.status) console.error(err);
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
+
+async function attachUserListDetails(visibleUsers) {
+    const accessByUser = await getUsersAccess(visibleUsers.map(user => user.id));
+    for (const user of visibleUsers) {
+        if (typeof user.device_info === 'string') {
+            try { user.device_info = JSON.parse(user.device_info); } catch { user.device_info = null; }
+        }
+        if (!user.device_info && user.user_agent) {
+            user.device_info = {
+                userAgent: user.user_agent,
+                screenResolution: user.screen_resolution
+            };
+        }
+
+        const access = accessByUser.get(Number(user.id)) || { configured: false, permissions: [], timeRules: {} };
+        user.permissions = access.permissions;
+        user.timeRules = access.timeRules;
+        user.permissionsConfigured = access.configured;
+    }
+}
 
 router.get("/classes", authMiddleware, userManagerOnly, async (req, res) => {
     try {
@@ -526,6 +562,18 @@ router.patch("/me/reset-session-policy", authMiddleware, userManagerOnly, async 
 // 🛠 用户管理操作
 // ==========================================
 
+async function findOccupiedTeacher(teacherIds) {
+    if (!teacherIds.length) return null;
+    const [[teacher]] = await pool.query(
+        `SELECT t.username FROM users t JOIN classes c ON c.teacher_user_id = t.id
+         WHERE t.id IN (SELECT value FROM json_each(?))
+           AND EXISTS (SELECT 1 FROM users s WHERE s.class_id = c.id AND s.role IN ('student', 'user'))
+         ORDER BY t.id LIMIT 1`,
+        [jsonList(teacherIds)]
+    );
+    return teacher;
+}
+
 async function deleteUsersBatch(actorUser, inputIds) {
     if (!Array.isArray(inputIds) || !inputIds.length) throw httpError('请选择要删除的用户');
     const normalizedIds = inputIds.map(value => Number(value));
@@ -554,22 +602,8 @@ async function deleteUsersBatch(actorUser, inputIds) {
         if (!canSeeUserInClass(actor, target)) throw httpError('不能删除其他班级的学生', 403);
     }
     const teacherIds = normalizedTargets.filter(target => target.role === ROLES.TEACHER).map(target => target.id);
-    if (teacherIds.length) {
-        const studentRows = [];
-        for (const chunk of userIdChunks(teacherIds)) {
-            const [rows] = await pool.query(
-                `SELECT c.teacher_user_id AS teacher_id, COUNT(s.id) AS student_count
-                 FROM classes c
-                 LEFT JOIN users s ON s.class_id = c.id AND s.role = 'student'
-                 WHERE c.teacher_user_id IN (?) GROUP BY c.teacher_user_id`,
-                [chunk]
-            );
-            studentRows.push(...rows);
-        }
-        const occupied = new Set(studentRows.filter(row => Number(row.student_count) > 0).map(row => Number(row.teacher_id)));
-        const blocked = normalizedTargets.find(target => occupied.has(Number(target.id)));
-        if (blocked) throw httpError(`教师 ${blocked.username} 班级仍有学生，请先删除或转移班级学生`, 409);
-    }
+    const blocked = await findOccupiedTeacher(teacherIds);
+    if (blocked) throw httpError(`教师 ${blocked.username} 班级仍有学生，请先删除或转移班级学生`, 409);
 
     const statements = [];
     const dependentQueries = [
@@ -613,19 +647,8 @@ router.delete('/batch', authMiddleware, userManagerOnly, async (req, res) => {
 router.delete("/:id", authMiddleware, userManagerOnly, async (req, res) => {
     try {
         const target = await getManagedTarget(req.user, req.params.id);
-        if (target.role === ROLES.TEACHER) {
-            const [[classInfo]] = await pool.query(
-                `SELECT c.id, COUNT(s.id) AS student_count
-                 FROM classes c
-                 LEFT JOIN users s ON s.class_id = c.id AND s.role = 'student'
-                 WHERE c.teacher_user_id = ? GROUP BY c.id`,
-                [target.id]
-            );
-            if (Number(classInfo?.student_count || 0) > 0) {
-                const error = new Error("该教师班级仍有学生，请先删除或转移班级学生");
-                error.status = 409;
-                throw error;
-            }
+        if (target.role === ROLES.TEACHER && await findOccupiedTeacher([target.id])) {
+            throw httpError('该教师班级仍有学生，请先删除或转移班级学生', 409);
         }
         const statements = [
             "DELETE FROM user_permissions WHERE user_id = ?",

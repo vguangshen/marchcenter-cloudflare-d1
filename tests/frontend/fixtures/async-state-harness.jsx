@@ -4,6 +4,7 @@ import App from '../../../src/App.jsx';
 import AgentTaskCard from '../../../src/components/cards/AgentTaskCard.jsx';
 import ProfileModal from '../../../src/components/modals/ProfileModal.jsx';
 import TaskAppModal from '../../../src/components/modals/TaskAppModal.jsx';
+import UserManager from '../../../src/components/views/settings/UserManager.jsx';
 import { useAgentTaskResults } from '../../../src/hooks/useAgentTaskResults.js';
 import { useAuthSession } from '../../../src/hooks/useAuthSession.js';
 import { useCompetitionActions } from '../../../src/hooks/useCompetitionActions.js';
@@ -228,6 +229,12 @@ if (['app', 'auth', 'agent-score', 'agent-modules', 'maintenance'].includes(mode
     localStorage.setItem('authToken', 'fixture-token');
     localStorage.setItem('authUser', JSON.stringify(window.__profileUser));
 }
-const fixtures = { profile: ProfileFixture, platform: PlatformFixture, auth: AuthFixture, 'agent-score': AgentScoreFixture };
+function UserDirectoryFixture() {
+    const [revision, setRevision] = useState(0);
+    const teacher = { id: 700, role: 'teacher', username: 'Teacher', studentCount: 52 };
+    return <UserManager users={[teacher]} currentUser={{ id: 800, role: 'admin' }} total={53}
+        listRevision={revision} onToggleStatus={() => setRevision(value => value + 1)} />;
+}
+const fixtures = { profile: ProfileFixture, platform: PlatformFixture, auth: AuthFixture, 'agent-score': AgentScoreFixture, 'user-directory': UserDirectoryFixture };
 const Fixture = fixtures[mode] || App;
 createRoot(document.getElementById('root')).render(<Fixture />);

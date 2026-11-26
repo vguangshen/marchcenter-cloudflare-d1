@@ -31,6 +31,7 @@ export default function FeedbackCenter() {
         };
         const handleConfirm = (event) => {
             if (confirmationRef.current?.resolve) confirmationRef.current.resolve(false);
+            else confirmationTriggerRef.current = document.activeElement;
             confirmationRef.current = event.detail;
             setConfirmation(event.detail);
         };
@@ -45,16 +46,17 @@ export default function FeedbackCenter() {
 
     useEffect(() => {
         if (!confirmation) return undefined;
-        confirmationTriggerRef.current = document.activeElement;
         const dialog = confirmationDialogRef.current;
         const frame = window.requestAnimationFrame(() => dialog?.querySelector('button')?.focus());
         const handleKeyDown = event => {
             if (event.key === 'Escape') {
                 event.preventDefault();
+                event.stopPropagation();
                 closeConfirmation(false);
                 return;
             }
             if (event.key !== 'Tab' || !dialog) return;
+            event.stopPropagation();
             const buttons = [...dialog.querySelectorAll('button:not([disabled])')];
             if (!buttons.length) return;
             const first = buttons[0];
@@ -67,10 +69,10 @@ export default function FeedbackCenter() {
                 first.focus();
             }
         };
-        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keydown', handleKeyDown, true);
         return () => {
             window.cancelAnimationFrame(frame);
-            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keydown', handleKeyDown, true);
             confirmationTriggerRef.current?.focus?.();
         };
     }, [confirmation]);
@@ -110,12 +112,13 @@ export default function FeedbackCenter() {
                         role="alertdialog"
                         aria-modal="true"
                         aria-labelledby="feedback-confirm-title"
+                        aria-describedby="feedback-confirm-message"
                         onMouseDown={(event) => event.stopPropagation()}
                     >
                         <span className="feedback-confirm-icon"><AlertTriangle /></span>
                         <div>
                             <h2 id="feedback-confirm-title">{confirmation.title || '请确认操作'}</h2>
-                            <p>{confirmation.message || '确定继续吗？'}</p>
+                            <p id="feedback-confirm-message">{confirmation.message || '确定继续吗？'}</p>
                         </div>
                         <div className="feedback-confirm-actions">
                             <button type="button" onClick={() => closeConfirmation(false)}>
@@ -125,7 +128,6 @@ export default function FeedbackCenter() {
                                 type="button"
                                 className={confirmation.danger === false ? 'primary' : 'danger'}
                                 onClick={() => closeConfirmation(true)}
-                                autoFocus
                             >
                                 {confirmation.confirmText || '确认'}
                             </button>

@@ -51,18 +51,18 @@ const PermissionModal = ({ isOpen, onClose, user, allLinks = [], agentPlatforms 
     return (
         <div className="mc-modal-backdrop mc-modal-backdrop--overlay animate-in fade-in duration-300">
             <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="permission-modal-title" tabIndex={-1} className="mc-modal mc-modal--medium">
-                <div className="mc-modal__header mc-modal__header--dark">
-                    <div className="flex items-center gap-3">
+                <div className="mc-modal__header mc-modal__header--dark flex-wrap">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md border border-white/10"><ShieldCheck className="w-6 h-6 text-emerald-400" /></div>
-                        <div>
-                            <h3 id="permission-modal-title" className="text-lg font-bold tracking-tight">模块权限与时间控制</h3>
-                            <p className="text-xs text-slate-400 font-medium">正在编辑: <span className="text-white font-bold">{user?.username}</span></p>
-                        </div>
-                        <div className="relative ml-2">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                            <input type="text" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="搜索模块 / 类目名称" className="w-64 rounded-lg border border-white/15 bg-white/10 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-white/40" />
+                        <div className="min-w-0">
+                            <h3 id="permission-modal-title" className="text-base font-bold tracking-tight text-balance sm:text-lg">模块权限与时间控制</h3>
+                            <p className="text-xs text-slate-400 font-medium">正在编辑 <span className="text-white font-bold [overflow-wrap:anywhere]">{user?.username}</span></p>
                         </div>
                     </div>
+                    <label className="relative order-last w-full sm:order-none sm:w-56">
+                        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+                        <input type="text" aria-label="搜索模块或类目名称" value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="搜索模块 / 类目名称" className="w-full rounded-lg border border-white/15 bg-white/10 py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-white/40" />
+                    </label>
                     <button type="button" onClick={onClose} aria-label="关闭权限设置窗口" className="mc-icon-button mc-modal__close !text-white/60 hover:!bg-white/10 hover:!text-white"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-6 py-3">

@@ -41,7 +41,7 @@
 ## 已实现范围与缺口
 
 - 已实现的核心 `common*` 方法：`commonReturnTargetId`、`commonGetLoginName`、`commonCheckTrain`、`commonCheckTrainWithTeacher`、`commonReturnStudentBaseInfo`、`commonReturnTeacherBaseInfo`（覆盖登录跳转、建班建号、票据签发）。
-- 远程删除班级：`.NET/沙盘类 SOAP` 走 `IsGroupExisted + DelGroup`；`JAVA` 走**账号管理 API 直删数据库**（通用原语 `POST /api/v1/db/delete`：执行端按 MarchCenter 编排的参数化删行操作，`DELETE FROM 班级表 WHERE 班级名列 = 班级名`，`dryRun` 可预览）。JAVA 不再使用 v3 删除密钥模块（v3 删班在真实平台不可用），也不再走 v1 open-API 组合（`markGroupDeleted` 在部分平台 302、`checkClassName` 在部分平台按 `uc_mode=5` 过滤导致班级不可见）。**卡片在编辑中（仅当 SSO 方式为 JAVA 接口时显示）配置"Java 班级删除映射"：选择账号管理 API 服务器 → 数据库 → 班级表 → 班级名列**，未配置时长按删除班级返回 409。长按删除进度条 JAVA 平台为蓝色、.NET/SOAP 为红色。
+- 远程删除班级：`.NET/沙盘类 SOAP` 走 `IsGroupExisted + DelGroup`；`JAVA` 走**账号管理 API 直删数据库**（通用原语 `POST /api/v1/db/delete`：执行端按 mcgo.app 编排的参数化删行操作，`DELETE FROM 班级表 WHERE 班级名列 = 班级名`，`dryRun` 可预览）。JAVA 不再使用 v3 删除密钥模块（v3 删班在真实平台不可用），也不再走 v1 open-API 组合（`markGroupDeleted` 在部分平台 302、`checkClassName` 在部分平台按 `uc_mode=5` 过滤导致班级不可见）。**卡片在编辑中（仅当 SSO 方式为 JAVA 接口时显示）配置"Java 班级删除映射"：选择账号管理 API 服务器 → 数据库 → 班级表 → 班级名列**，未配置时长按删除班级返回 409。长按删除进度条 JAVA 平台为蓝色、.NET/SOAP 为红色。
 - 尚未实现的官方 `common*` 管理方法（18 个）：成绩/标签分查询（`commonGetExamPaperScore`、`commonGetTheoreticalScore`、`commonGetStudentTagNameScore*`）、报告与任务汇总（`commonGetTrainReport`、`commonGetTaskCollect`）、重置（`commonResetExamineData`、`commonResetEndExamTime`）、在线数（`commonGetOnlineCount`）、删除/换卷/备份（`commonMarkStudentDeleted`、`commonChangePaper`、`commonStartBackup*` 等）。
 - 官方 JAR 中的 20 个旧版适配器（`service.impl`，旧 `ITrainingServiceInterface` 契约）未注册，仅保留取证记录。
 - canary 灰度框架（`server/utils/officialCompat/canary/`）已就绪，未接入生产路由，用于将来对真实厂商平台做受控上线验证。
