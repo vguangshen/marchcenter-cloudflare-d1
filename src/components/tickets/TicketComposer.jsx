@@ -61,7 +61,6 @@ export default function TicketComposer({ cards, onCreated, onBusyChange }) {
     const filesRef = useRef(files);
     filesRef.current = files;
     useEffect(() => () => releaseDraftFiles(filesRef.current), []);
-    useEffect(() => { onBusyChange?.(submitting); }, [submitting, onBusyChange]);
 
     const chooseCategory = id => {
         const previous = TICKET_CATEGORIES.find(item => item.id === category);
@@ -83,7 +82,7 @@ export default function TicketComposer({ cards, onCreated, onBusyChange }) {
     });
     const paste = event => {
         const pasted = [...(event.clipboardData?.files || [])];
-        if (!pasted.length) return;
+        if (!pasted.length || submitting) return;
         event.preventDefault();
         addFiles(pasted);
     };
@@ -100,6 +99,7 @@ export default function TicketComposer({ cards, onCreated, onBusyChange }) {
         if (finalSubject.length < 2) { setError('请填写标题'); return; }
         if (description.trim().length < 5) { setError('请把问题描述得详细一些（至少 5 个字）'); return; }
         setSubmitting(true);
+        onBusyChange?.(true);
         setError('');
         const form = new FormData();
         if (cardId) form.append('competitionId', cardId);
@@ -115,7 +115,9 @@ export default function TicketComposer({ cards, onCreated, onBusyChange }) {
             onCreated?.(result?.ticket?.id);
         } catch (requestError) {
             setError(requestError.message || '提交工单失败，请稍后重试');
+        } finally {
             setSubmitting(false);
+            onBusyChange?.(false);
         }
     };
 
@@ -135,7 +137,7 @@ export default function TicketComposer({ cards, onCreated, onBusyChange }) {
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="问题类型">
                         {TICKET_CATEGORIES.map(({ id, label, icon: Icon }) => (
                             <button key={id} type="button" role="radio" aria-checked={category === id} disabled={submitting} onClick={() => chooseCategory(id)} className={`ticket-category ${category === id ? 'is-selected' : ''}`}>
-                                <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{label}</span>
+                                <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 text-left leading-snug">{label}</span>
                             </button>
                         ))}
                     </div>

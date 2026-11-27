@@ -31,7 +31,7 @@ export function DraftAttachments({ files, onAdd, onRemove, disabled, compact = f
     const pick = event => {
         const picked = [...(event.currentTarget.files || [])];
         event.currentTarget.value = '';
-        if (picked.length) onAdd(picked);
+        if (!disabled && picked.length) onAdd(picked);
     };
     const drop = event => {
         event.preventDefault();
@@ -40,7 +40,7 @@ export function DraftAttachments({ files, onAdd, onRemove, disabled, compact = f
         const dropped = [...(event.dataTransfer?.files || [])];
         if (dropped.length) onAdd(dropped);
     };
-    const input = <input ref={inputRef} type="file" multiple accept={ACCEPT_ATTACHMENTS} className="hidden" onChange={pick} />;
+    const input = <input ref={inputRef} type="file" multiple accept={ACCEPT_ATTACHMENTS} disabled={disabled} className="hidden" onChange={pick} />;
 
     if (compact) {
         return (
@@ -70,7 +70,7 @@ export function DraftAttachments({ files, onAdd, onRemove, disabled, compact = f
                 <ImagePlus className="h-5 w-5 shrink-0" />
                 <span className="min-w-0">
                     <span className="block text-xs font-black text-slate-700 dark:text-slate-200">点击选择、拖入文件，或直接 Ctrl+V 粘贴截图</span>
-                    <span className="mt-0.5 block text-[11px] font-medium text-slate-400">最多 {MAX_FILES} 个，单个 ≤10MB · 图片、PDF、TXT/LOG/CSV、ZIP、Word、Excel</span>
+                    <span className="mt-0.5 block text-[11px] font-medium text-slate-500 dark:text-slate-400">最多 {MAX_FILES} 个，单个 10 MB，合计 20 MB。支持图片、PDF、TXT、LOG、CSV、ZIP、DOCX、XLSX。</span>
                 </span>
             </div>
             <DraftFileList files={files} onRemove={onRemove} disabled={disabled} />
@@ -78,55 +78,72 @@ export function DraftAttachments({ files, onAdd, onRemove, disabled, compact = f
     );
 }
 
-// Signed-in fetches cannot go through <img src>, so attachments are loaded as
-// blobs. Recently viewed ones stay cached while the page is open.
-const blobCache = new Map();
-const MAX_CACHED = 40;
-
-async function loadAttachment(url) {
-    if (blobCache.has(url)) return blobCache.get(url);
-    const promise = api.blob(url, { fallback: '附件读取失败', timeoutMs: 60_000 })
-        .then(({ blob }) => URL.createObjectURL(blob));
-    blobCache.set(url, promise);
-    promise.catch(() => blobCache.delete(url));
-    if (blobCache.size > MAX_CACHED) {
-        const [oldest] = blobCache.keys();
-        blobCache.get(oldest)?.then(objectUrl => URL.revokeObjectURL(objectUrl)).catch(() => {});
-        blobCache.delete(oldest);
-    }
-    return promise;
+function loadAttachment(url, signal) {
+    return api.blob(url, { signal, fallback: '附件读取失败', timeoutMs: 60_000 });
 }
 
 function ImageAttachment({ url, attachment, onOpen }) {
     const [src, setSrc] = useState('');
     const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const buttonRef = useRef(null);
     useEffect(() => {
-        let active = true;
-        loadAttachment(url).then(objectUrl => { if (active) setSrc(objectUrl); }).catch(() => { if (active) setFailed(true); });
-        return () => { active = false; };
-    }, [url]);
+        const controller = new AbortController();
+        const { signal } = controller;
+        let objectUrl;
+        const observer = new IntersectionObserver(entries => {
+            if (signal.aborted || !entries.some(entry => entry.isIntersecting)) return;
+            observer.disconnect();
+            loadAttachment(url, signal).then(({ blob }) => {
+                if (signal.aborted) return;
+                objectUrl = URL.createObjectURL(blob);
+                setSrc(objectUrl);
+            }).catch(() => { if (!signal.aborted) setFailed(true); });
+        });
+        observer.observe(buttonRef.current);
+        return () => {
+            controller.abort();
+            observer.disconnect();
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [url, attempt]);
+    const activate = () => {
+        if (src) onOpen({ src, name: attachment.fileName });
+        else if (failed) {
+            setFailed(false);
+            setAttempt(current => current + 1);
+        }
+    };
     return (
-        <button type="button" onClick={() => src && onOpen({ src, name: attachment.fileName })} className="ticket-image-attachment" aria-label={`查看图片 ${attachment.fileName}`} disabled={!src}>
+        <button ref={buttonRef} type="button" onClick={activate} className="ticket-image-attachment" aria-label={`${failed ? '重新读取图片' : '查看图片'} ${attachment.fileName}`} disabled={!src && !failed}>
             {src ? <img src={src} alt={attachment.fileName} className="h-full w-full object-cover" />
-                : <span className="flex h-full w-full items-center justify-center text-slate-400">{failed ? <span className="px-2 text-[10px] font-bold">图片读取失败</span> : <Loader2 className="h-4 w-4 animate-spin" />}</span>}
+                : <span className="flex h-full w-full items-center justify-center text-slate-400">{failed ? <span className="px-2 text-[10px] font-bold">读取失败，点击重试</span> : <Loader2 className="h-4 w-4 animate-spin" />}</span>}
         </button>
     );
 }
 
 function FileAttachment({ url, attachment }) {
     const [busy, setBusy] = useState(false);
+    const requestRef = useRef(null);
+    useEffect(() => () => requestRef.current?.abort(), []);
     const download = async () => {
         setBusy(true);
+        const controller = new AbortController();
+        requestRef.current = controller;
+        const { signal } = controller;
         try {
-            const objectUrl = await loadAttachment(url);
+            const { blob } = await loadAttachment(url, signal);
+            if (signal.aborted) return;
+            const objectUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = objectUrl;
             link.download = attachment.fileName;
             document.body.appendChild(link);
             link.click();
             link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
         } catch (error) {
-            notify(error.message || '附件下载失败', 'error');
+            if (!signal.aborted) notify(error.message || '附件下载失败', 'error');
         } finally {
             setBusy(false);
         }

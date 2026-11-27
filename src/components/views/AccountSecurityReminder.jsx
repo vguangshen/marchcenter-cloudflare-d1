@@ -42,7 +42,7 @@ function Section({ show, className = '', children }) {
 }
 
 /**
- * Bottom-right reminder shown during the grace period for an administrator
+ * Floating reminder shown during the grace period for an administrator
  * chosen password and/or while the account has no email. It never blocks the
  * workbench; once the deadline passes App switches to the locked screen.
  *
@@ -96,7 +96,7 @@ export default function AccountSecurityReminder({ user, isDarkMode, onUserUpdate
 
     if (phase === 'collapsed') {
         return (
-            <div className={`${isDarkMode ? 'dark' : ''} fixed bottom-5 right-5 z-[150]`}>
+            <div className={`${isDarkMode ? 'dark' : ''} account-reminder-dock fixed bottom-5 right-5 z-[150]`}>
                 <button type="button" onClick={expand} aria-expanded="false"
                     className="acct-glass acct-pill--enter flex items-center gap-2 rounded-full px-4 py-2.5 text-xs font-black text-amber-700 transition-transform duration-200 hover:-translate-y-0.5 dark:text-amber-300">
                     <span className="relative flex h-2 w-2">
@@ -112,7 +112,7 @@ export default function AccountSecurityReminder({ user, isDarkMode, onUserUpdate
 
     const animation = phase === 'enter' ? 'acct-card--enter' : phase === 'open' ? '' : 'acct-card--exit';
     return (
-        <div className={`${isDarkMode ? 'dark' : ''} fixed bottom-5 right-5 z-[150] w-[min(calc(100vw-2.5rem),360px)]`}>
+        <div className={`${isDarkMode ? 'dark' : ''} account-reminder-dock fixed bottom-5 right-5 z-[150] w-[min(calc(100vw-2.5rem),360px)]`}>
             <section role="region" aria-labelledby="account-reminder-title" onAnimationEnd={onCardAnimationEnd}
                 className={`acct-glass ${animation} max-h-[calc(100vh-2.5rem)] overflow-y-auto rounded-3xl p-5`}>
                 <header className="flex items-start gap-3">

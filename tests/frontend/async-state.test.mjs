@@ -578,18 +578,21 @@ test('a reset account must change its password before the workbench loads', asyn
     } finally { await page.close(); }
 });
 
-test('during the reminder period the workbench loads with a bottom-right card for email and password', async () => {
+test('during the reminder period the workbench keeps the security card clear of the support launcher', async () => {
     const page = await browser.newPage();
     try {
         await page.goto(`${origin}/?mode=app&remind=1`);
+        await page.addStyleTag({ path: path.resolve('src/styles/support-chat.css') });
         await page.getByRole('button', { name: '打开个人资料', exact: true }).waitFor();
         assert.equal(await page.getByRole('dialog', { name: '请先修改登录密码' }).count(), 0, 'no lock before the deadline');
         const card = page.getByRole('region', { name: '完善账号安全', exact: true });
         await card.waitFor();
         await card.getByText('剩余 3 天', { exact: true }).waitFor();
         const box = await card.boundingBox();
-        const viewport = page.viewportSize();
-        assert.ok(box.x + box.width > viewport.width - 40 && box.y + box.height > viewport.height - 40, 'card sits in the bottom-right corner');
+        const launcher = page.getByRole('button', { name: /^打开客服/ });
+        const launcherBox = await launcher.boundingBox();
+        assert.ok(launcherBox, 'the support launcher is visible');
+        assert.ok(box.x + box.width < launcherBox.x || box.y + box.height < launcherBox.y, 'security card and support launcher do not overlap');
 
         await card.getByRole('button', { name: '收起提醒', exact: true }).click();
         assert.match(await card.getAttribute('class'), /acct-card--exit/, 'collapsing plays the fold-away animation');

@@ -133,6 +133,12 @@ npm run cf:deploy
 
 GitHub 的 Validate 工作流在 push/PR 时检查代码。Deploy production 工作流只接受 main 分支的手动触发，需要 production 环境中的 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` Secrets。部署命令不会自动迁移远程数据库；现有生产库应先核对实际 schema、备份并确认迁移。
 
+工单中心依赖 D1 迁移 `0048_support_tickets.sql` 和 `TICKET_FILES` 绑定。首次部署前，在同一 Cloudflare 账户中创建 `mcgo-ticket-attachments` 私有 R2 存储桶，并应用 D1 迁移。工单记录及附件元数据随数据库备份导出，附件文件保存在 R2 中。管理员回复的邮件通知使用站点现有的邮件服务配置。
+
+工作台右下角的客服聊天使用独立的 D1 会话和消息表。上线前应用 `0049_support_chat.sql` 至 `0051_support_chat_automation.sql`。聊天附件存放在同一个私有 R2 桶的 `support-chat/` 路径，D1 备份包含聊天记录、附件元数据和自动回复配置。
+
+超级管理员可在客服面板的「自动回复」中设置常见问题模板和关键词。AI 回复默认关闭，启用时复用站点「AI API 配置」里的接口、模型和密钥。系统先匹配模板，再尝试 AI。客服面板会提示当前文本可能由 AI 服务处理，用户可随时转人工。含附件且未匹配模板的消息由人工客服处理。
+
 ## 8. 首次初始化
 
 空数据库首次打开时，可以注册第一个 `super_admin`，但必须同时填写由部署者配置的 `INITIAL_ADMIN_BOOTSTRAP_SECRET`。初始化成功后该入口永久关闭；后续账号必须由上级账号在用户管理中创建。建议初始化完成后更换或删除这条 Worker Secret，数据库中的初始化锁仍会阻止再次抢占首个管理员。

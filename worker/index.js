@@ -20,7 +20,9 @@ import wallpaperRoutes from '../server/routes/wallpapers.js';
 import emailSettingsRoutes from '../server/routes/emailSettings.js';
 import paasV2Routes from '../server/routes/paasV2.js';
 import mapRoutes from '../server/routes/map.js';
-import ticketRoutes, { MAX_TICKET_REQUEST_BYTES } from '../server/routes/tickets.js';
+import ticketRoutes from '../server/routes/tickets.js';
+import supportChatRoutes from '../server/routes/supportChat.js';
+import { isAttachmentForm, MAX_ATTACHMENT_REQUEST_BYTES } from '../server/utils/privateAttachments.js';
 import { syncLatestBingWallpaper } from '../server/services/wallpaperService.js';
 
 const app = express();
@@ -48,6 +50,7 @@ app.use('/api/email-settings', emailSettingsRoutes);
 app.use('/api/paas-v2', paasV2Routes);
 app.use('/api/map', mapRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/support-chat', supportChatRoutes);
 app.get('/api/health', (_req, res) => res.json({ ok: true, runtime: 'cloudflare-workers', database: 'd1' }));
 app.get('/api/ready', async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -56,7 +59,10 @@ app.get('/api/ready', async (_req, res) => {
         await pool.query(`SELECT EXISTS (SELECT 1 FROM users),
             EXISTS (SELECT 1 FROM competitions), EXISTS (SELECT 1 FROM user_agent_task_results),
             EXISTS (SELECT catalog_generation FROM paas_v2_platforms),
-            EXISTS (SELECT 1 FROM revoked_sessions)`);
+            EXISTS (SELECT 1 FROM revoked_sessions), EXISTS (SELECT 1 FROM support_tickets),
+            EXISTS (SELECT 1 FROM support_ticket_messages), EXISTS (SELECT 1 FROM support_ticket_attachments),
+            EXISTS (SELECT 1 FROM support_chat_conversations), EXISTS (SELECT 1 FROM support_chat_messages),
+            EXISTS (SELECT 1 FROM support_chat_attachments), EXISTS (SELECT 1 FROM support_chat_options)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });
@@ -232,16 +238,18 @@ export default {
                 // 上传与替换都允许 13MB（路由内部再按 12MB 图面上限校验）；其余 API 1MB。
                 const isWallpaperUploadOrReplace = url.pathname === '/api/wallpapers/upload'
                     || /^\/api\/wallpapers\/\d+\/replace$/.test(url.pathname);
-                // 工单提交与回复带附件（合计 20MB），同样在路由内边读边限。
-                const isTicketUpload = request.method === 'POST'
-                    && (url.pathname === '/api/tickets' || /^\/api\/tickets\/\d+\/messages$/.test(url.pathname));
-                const bodyLimit = isTicketUpload
-                    ? MAX_TICKET_REQUEST_BYTES
+                // 工单和客服附件合计 20MB，在路由中也按实际读取量限制。
+                const isAttachmentUpload = request.method === 'POST' && (
+                    /^\/api\/tickets(?:\/\d+\/messages)?\/?$/.test(url.pathname)
+                    || (isAttachmentForm(request) && /^\/api\/support-chat(?:\/conversations\/\d+)?\/messages\/?$/.test(url.pathname))
+                );
+                const bodyLimit = isAttachmentUpload
+                    ? MAX_ATTACHMENT_REQUEST_BYTES
                     : isWallpaperUploadOrReplace
                         ? 13 * 1024 * 1024
                         : 1024 * 1024;
                 if (contentLength > bodyLimit) {
-                    const limitText = isTicketUpload ? '20MB' : bodyLimit > 1024 * 1024 ? '12MB' : '1MB';
+                    const limitText = isAttachmentUpload ? '20MB' : bodyLimit > 1024 * 1024 ? '12MB' : '1MB';
                     return withSecurityHeaders(Response.json({ error: `请求内容不能超过 ${limitText}` }, { status: 413 }), request, env);
                 }
                 if (origin && !allowedOrigins(env).has(origin)) {

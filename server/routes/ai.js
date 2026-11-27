@@ -1,8 +1,7 @@
 import express from '../compat/express.js';
-import crypto from 'crypto';
 import pool from '../config/db.js';
-import { authMiddleware, adminOnly, getJwtSecret } from '../middleware/auth.js';
-import { getEnv } from '../config/runtime.js';
+import { authMiddleware, adminOnly } from '../middleware/auth.js';
+import { decryptAiSecret, encryptAiSecret, readAiSettings } from '../services/aiSettings.js';
 import { isSuperAdmin } from '../utils/roleAccess.js';
 import { listAccountColumns, listAccountTables } from '../utils/accountManagementApi.js';
 import { readAccountManagementConfig } from '../utils/accountManagementStore.js';
@@ -15,41 +14,6 @@ import { requestAi, resolveAiEndpoint } from '../utils/aiHttpClient.js';
 
 const router = express.Router();
 const MAX_AI_OUTPUT_TOKENS = 131072;
-
-const encryptionKey = () => crypto.createHash('sha256').update(getEnv('SSO_CONFIG_ENCRYPTION_KEY') || getJwtSecret()).digest();
-
-function encryptSecret(value) {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
-    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-    return [iv, cipher.getAuthTag(), encrypted].map(part => part.toString('base64')).join('.');
-}
-
-function decryptSecret(value) {
-    const parts = String(value || '').split('.');
-    if (parts.length !== 3) return '';
-    const [iv, tag, encrypted] = parts.map(part => Buffer.from(part, 'base64'));
-    const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-}
-
-const parseConfig = value => {
-    if (!value) return {};
-    if (typeof value === 'string') {
-        try { return JSON.parse(value); } catch { return {}; }
-    }
-    return value;
-};
-
-async function readSettings() {
-    const [rows] = await pool.query('SELECT config_json, encrypted_api_key FROM ai_settings WHERE id = 1');
-    if (!rows.length) return { config: {}, apiKey: '' };
-    return {
-        config: parseConfig(rows[0].config_json),
-        apiKey: rows[0].encrypted_api_key ? decryptSecret(rows[0].encrypted_api_key) : ''
-    };
-}
 
 function normalizeAiConfig(value = {}) {
     return {
@@ -97,7 +61,7 @@ function extractAiText(rawData) {
 
 router.get('/config', authMiddleware, async (req, res) => {
     try {
-        const { config, apiKey } = await readSettings();
+        const { config, apiKey } = await readAiSettings();
         // Only the super administrator may read the decrypted key. Other signed-in
         // users still receive non-secret model information used by the dashboard.
         res.setHeader('Cache-Control', 'no-store');
@@ -115,7 +79,7 @@ router.put('/config', authMiddleware, adminOnly, async (req, res) => {
             ? await pool.query('SELECT encrypted_api_key FROM ai_settings WHERE id = 1')
             : [[]];
         const encryptedApiKey = apiKey
-            ? encryptSecret(String(apiKey).trim())
+            ? encryptAiSecret(String(apiKey).trim())
             : (hasApiKey ? rows[0]?.encrypted_api_key || null : null);
         await pool.query(
             `INSERT INTO ai_settings (id, config_json, encrypted_api_key, updated_at) VALUES (1, ?, ?, CURRENT_TIMESTAMP)
@@ -123,7 +87,7 @@ router.put('/config', authMiddleware, adminOnly, async (req, res) => {
                  encrypted_api_key = excluded.encrypted_api_key, updated_at = CURRENT_TIMESTAMP`,
             [JSON.stringify(config), encryptedApiKey]
         );
-        const savedApiKey = encryptedApiKey ? decryptSecret(encryptedApiKey) : '';
+        const savedApiKey = encryptedApiKey ? decryptAiSecret(encryptedApiKey) : '';
         res.setHeader('Cache-Control', 'no-store');
         res.json({ success: true, config: { ...config, apiKey: savedApiKey, hasApiKey: Boolean(encryptedApiKey) } });
     } catch (err) {
@@ -133,7 +97,7 @@ router.put('/config', authMiddleware, adminOnly, async (req, res) => {
 
 router.post('/models/discover', authMiddleware, adminOnly, async (req, res) => {
     try {
-        const saved = await readSettings();
+        const saved = await readAiSettings();
         const submitted = req.body || {};
         const config = normalizeAiConfig({ ...saved.config, ...submitted });
         const apiKey = String(submitted.apiKey || saved.apiKey || '').trim();
@@ -151,7 +115,7 @@ router.post('/models/discover', authMiddleware, adminOnly, async (req, res) => {
 router.post('/test', authMiddleware, adminOnly, async (req, res) => {
     const startedAt = Date.now();
     try {
-        const saved = await readSettings();
+        const saved = await readAiSettings();
         const submitted = req.body || {};
         const config = normalizeAiConfig({ ...saved.config, ...submitted });
         const apiKey = String(submitted.apiKey || saved.apiKey || '').trim();
@@ -184,7 +148,7 @@ router.post('/test', authMiddleware, adminOnly, async (req, res) => {
 
 router.post('/generate', authMiddleware, async (req, res) => {
     try {
-        const settings = await readSettings();
+        const settings = await readAiSettings();
         const config = normalizeAiConfig(settings.config);
         const { apiKey } = settings;
         if (!apiKey) return res.status(400).json({ error: '管理员尚未配置 AI API Key' });
@@ -229,7 +193,7 @@ router.post('/database-mapping', authMiddleware, adminOnly, async (req, res) => 
         }
         const accountApiConfig = await readAccountManagementConfig(apiId);
         if (!accountApiConfig?.enabled) return res.status(409).json({ error: '所选账号管理 API 不存在或已停用' });
-        const settings = await readSettings();
+        const settings = await readAiSettings();
         const config = normalizeAiConfig(settings.config);
         if (!settings.apiKey || !/^https:\/\//i.test(resolveAiEndpoint(config)) || !config.modelName) {
             return res.status(409).json({ error: '请先在系统工具中完成 AI 服务配置' });

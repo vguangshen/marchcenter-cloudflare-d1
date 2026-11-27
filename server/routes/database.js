@@ -73,7 +73,8 @@ const BACKUP_TABLES = [
     'user_class_removals', 'user_login_locations',
     'paas_v2_platforms', 'paas_v2_catalogs', 'user_agent_task_results',
     'announcements', 'user_gifts', 'ai_settings',
-    'support_tickets', 'support_ticket_messages', 'support_ticket_attachments'
+    'support_tickets', 'support_ticket_messages', 'support_ticket_attachments',
+    'support_chat_conversations', 'support_chat_messages', 'support_chat_attachments', 'support_chat_options'
 ];
 
 router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
@@ -92,7 +93,7 @@ router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {
         append(`-- ${BRAND_NAME} Cloudflare D1 data backup\n`);
         append('-- Apply all D1 migrations before importing this file.\n');
         append('-- Import: npx wrangler d1 execute DB --remote --file <this file>\n');
-        append('-- Wallpaper and cover images live in R2 and are not included.\n');
+        append('-- Wallpaper images, cover images and support attachment files live in R2 and are not included.\n');
         append(`-- Generated: ${new Date().toISOString()}\n`);
         // D1 rejects BEGIN/COMMIT/SAVEPOINT and ignores PRAGMA foreign_keys.
         // Wrangler applies the file as one unit; deferring foreign keys lets

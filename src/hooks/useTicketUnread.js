@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../utils/api';
+import { getTabToken } from '../utils/tabSession';
 
 const POLL_MS = 60_000;
 
@@ -8,25 +9,29 @@ const POLL_MS = 60_000;
  * administrator replies plus, for administrators, tickets awaiting them.
  * Polls while the tab is visible and catches up when it becomes visible.
  */
-export function useTicketUnread(enabled) {
-    const [count, setCount] = useState(0);
-    const inflight = useRef(null);
+export function useTicketUnread(token) {
+    const [unread, setUnread] = useState(null);
+    const requestRef = useRef(null);
 
     const refresh = useCallback(() => {
-        if (!enabled) return Promise.resolve();
-        if (inflight.current) return inflight.current;
-        inflight.current = api.get('/tickets/unread', { retry: 0, fallback: '读取工单提醒失败' })
-            .then(result => setCount(Math.max(0, Number(result?.total) || 0)))
-            .catch(() => { /* The badge is best-effort; keep the last count. */ })
-            .finally(() => { inflight.current = null; });
-        return inflight.current;
-    }, [enabled]);
+        if (!token || getTabToken() !== token) return;
+        requestRef.current?.abort();
+        const controller = new AbortController();
+        requestRef.current = controller;
+        api.get('/tickets/unread', { signal: controller.signal, retry: 0, fallback: '读取工单提醒失败' })
+            .then(result => {
+                if (!controller.signal.aborted && getTabToken() === token) {
+                    setUnread({ token, count: Math.max(0, Number(result?.total) || 0) });
+                }
+            })
+            .catch(() => { /* Keep the latest count for this session when polling fails. */ })
+            .finally(() => {
+                if (requestRef.current === controller) requestRef.current = null;
+            });
+    }, [token]);
 
     useEffect(() => {
-        if (!enabled) {
-            setCount(0);
-            return undefined;
-        }
+        if (!token) return undefined;
         refresh();
         const timer = window.setInterval(() => {
             if (document.visibilityState === 'visible') refresh();
@@ -34,10 +39,11 @@ export function useTicketUnread(enabled) {
         const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => {
+            requestRef.current?.abort();
             window.clearInterval(timer);
             document.removeEventListener('visibilitychange', onVisible);
         };
-    }, [enabled, refresh]);
+    }, [token, refresh]);
 
-    return { count, refresh };
+    return { count: unread && unread.token === token ? unread.count : 0, refresh };
 }

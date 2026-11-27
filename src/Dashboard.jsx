@@ -8,6 +8,7 @@ import {
 
 // --- 组件引入 ---
 import Navbar from './components/layouts/Navbar';
+import SupportChatWidget from './components/layouts/SupportChatWidget';
 import AnnouncementBanner from './components/views/dashboard/AnnouncementBanner';
 import AgentTaskGroups from './components/views/dashboard/AgentTaskGroups';
 import FeedbackCenter from './components/feedback/FeedbackCenter';
@@ -172,7 +173,7 @@ export default function Dashboard({ auth, site, appearance }) {
     const [agentPlatformsLoadError, setAgentPlatformsLoadError] = useState('');
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isTicketCenterOpen, setIsTicketCenterOpen] = useState(false);
-    const { count: ticketUnread, refresh: refreshTicketUnread } = useTicketUnread(authStatus === 'authenticated' && Boolean(token));
+    const { count: ticketUnread, refresh: refreshTicketUnread } = useTicketUnread(authStatus === 'authenticated' ? token : null);
     const isTicketStaff = currentUserRole === 'super_admin' || currentUserRole === 'admin';
     const platformRequestRef = useRef(0);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -1147,6 +1148,10 @@ export default function Dashboard({ auth, site, appearance }) {
                 )}
 
             </div>
+
+            {authStatus === 'authenticated' && token && (
+                <SupportChatWidget key={`${currentUserId}:${currentUserRole}`} token={token} isStaff={isAdmin || currentUserRole === 'admin'} canConfigure={isAdmin} />
+            )}
 
             <Suspense fallback={<ModalLoadingNotice />}>
                 {isModalOpen && <EditModal isOpen onClose={() => setIsModalOpen(false)} onSave={handleSave} initialData={editingLink} existingCategories={competitionFieldHistory.categories} existingTitles={competitionFieldHistory.titles} ssoConfigs={ssoConfigs} authToken={token} />}

@@ -39,6 +39,7 @@ export const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 export const MAX_BODY_LENGTH = 5000;
 export const ACCEPT_ATTACHMENTS = 'image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.log,.csv,.zip,.docx,.xlsx';
 const ALLOWED_EXTENSIONS = /\.(png|jpe?g|webp|gif|pdf|txt|log|csv|zip|docx|xlsx)$/i;
+const IMAGE_EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 // Uploads can take far longer than an ordinary API call.
 export const UPLOAD_TIMEOUT_MS = 180_000;
 
@@ -82,13 +83,15 @@ export function mergeDraftFiles(current, incoming) {
     const problems = [];
     let total = current.reduce((sum, item) => sum + item.file.size, 0);
     for (const raw of incoming) {
-        // Pasted screenshots arrive as "image.png"; give them a readable name.
-        const file = raw.name && raw.name !== 'image.png'
-            ? raw
-            : new File([raw], `截图-${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '')}.png`, { type: raw.type || 'image/png' });
+        const extension = IMAGE_EXTENSIONS[raw.type];
+        const file = !raw.name && extension
+            ? new File([raw], `截图-${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '')}.${extension}`, { type: raw.type })
+            : raw;
+        const name = file.name || '未命名附件';
         if (next.length >= MAX_FILES) { problems.push(`最多添加 ${MAX_FILES} 个附件`); break; }
-        if (!ALLOWED_EXTENSIONS.test(file.name)) { problems.push(`「${file.name}」格式不受支持`); continue; }
-        if (file.size > MAX_FILE_BYTES) { problems.push(`「${file.name}」超过 10MB`); continue; }
+        if (!ALLOWED_EXTENSIONS.test(name)) { problems.push(`「${name}」格式不受支持`); continue; }
+        if (!file.size) { problems.push(`「${name}」是空文件`); continue; }
+        if (file.size > MAX_FILE_BYTES) { problems.push(`「${name}」超过 10MB`); continue; }
         if (total + file.size > MAX_TOTAL_BYTES) { problems.push('附件合计不能超过 20MB'); continue; }
         total += file.size;
         next.push({
