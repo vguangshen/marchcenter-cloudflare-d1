@@ -97,3 +97,32 @@ test('an administrator deletes one nested student only from the account manageme
     await members.getByText('student-b', { exact: true }).waitFor();
     assert.deepEqual(await storedIds(), [1, 2, 4, 5]);
 });
+
+test('system tools keeps the navbar geometry stable on press and across page switches', async t => {
+    const { page } = await openUserDirectory(t);
+    const snapshot = () => page.evaluate(() => [
+        '.dashboard-navbar', '.dashboard-navbar-surface', '.dashboard-navbar-brand',
+        '.dashboard-navbar-actions', '.nav-tools__trigger', '.nav-avatar'
+    ].map(selector => {
+        const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
+        return [x, y, width, height];
+    }));
+
+    for (const width of [1280, 320]) {
+        await page.setViewportSize({ width, height: 800 });
+        const exit = page.getByRole('button', { name: '退出设置', exact: true });
+        const tools = page.getByRole('button', { name: '系统工具', exact: true });
+        const expected = await snapshot();
+        await exit.hover();
+        await page.mouse.down();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.deepEqual(await snapshot(), expected, `during press at ${width}px`);
+        await page.mouse.up();
+        await tools.waitFor();
+        assert.deepEqual(await snapshot(), expected, `on workbench at ${width}px`);
+
+        await tools.click();
+        await exit.waitFor();
+        assert.deepEqual(await snapshot(), expected, `back in settings at ${width}px`);
+    }
+});

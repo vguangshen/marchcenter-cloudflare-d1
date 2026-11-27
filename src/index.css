@@ -1630,6 +1630,10 @@ body {
     isolation: isolate;
 }
 
+html:has(.dashboard-navbar) {
+    scrollbar-gutter: stable;
+}
+
 /* 深色导航面板接近不透明，关闭背景采样以避免其中的小动画触发大面积合成。 */
 .dark .dashboard-navbar-surface {
   -webkit-backdrop-filter: none !important;
@@ -5171,8 +5175,7 @@ body {
 /* ── Navbar buttons ───────────────────────────────────────────────────────
    One family for every navbar control. Colours come from variables so the
    holiday navbars only swap a palette instead of restyling each button.
-   Press feedback is instant (80ms squeeze) and the release springs back,
-   so a click always feels answered even before anything else happens. */
+   Interaction feedback changes colour and shadow while the button geometry stays fixed. */
 .dashboard-navbar {
   --nav-accent: var(--system-accent-rgb, 99 102 241);
   --nav-chip-bg: rgba(255, 255, 255, .6);
@@ -5244,23 +5247,21 @@ body {
   -webkit-tap-highlight-color: transparent;
   transition:
     background-color 200ms ease, color 200ms ease, border-color 200ms ease,
-    box-shadow 260ms ease, transform 420ms cubic-bezier(.34, 1.56, .64, 1);
+    box-shadow 200ms ease;
 }
 .nav-btn:hover {
   background: var(--nav-chip-bg-hover);
   color: var(--nav-chip-fg-hover);
   box-shadow: 0 8px 18px -8px rgba(15, 23, 42, .28), inset 0 1px 0 var(--nav-chip-highlight);
-  transform: translateY(-1px);
 }
 .nav-btn:active {
-  transform: translateY(0) scale(.94);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .08), inset 0 1px 2px rgba(15, 23, 42, .06);
-  transition-duration: 120ms, 120ms, 120ms, 120ms, 80ms;
+  transition-duration: 100ms;
   transition-timing-function: ease-out;
 }
 .nav-btn:focus-visible {
   outline: 2px solid rgb(var(--nav-accent) / .65);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .nav-btn__icon { display: inline-grid; place-items: center; }
@@ -5319,8 +5320,8 @@ body {
 
 .nav-btn--icon-only { width: 2.25rem; padding: 0; }
 
-.nav-btn--pop { animation: nav-btn-pop 600ms cubic-bezier(.175, .885, .32, 1.275) both; }
-@keyframes nav-btn-pop {
+.nav-btn__icon--pop { animation: nav-icon-pop 600ms cubic-bezier(.175, .885, .32, 1.275) both; }
+@keyframes nav-icon-pop {
   0% { transform: scale(0); }
   45% { transform: scale(1.18); }
   75% { transform: scale(.94); }
@@ -5343,13 +5344,10 @@ body {
   width: calc(var(--nav-tools-main-width) + var(--nav-tools-toggle-width));
 }
 .nav-tools__trigger { z-index: 1; }
-.nav-tools[data-can-edit="true"][data-settings="false"] .nav-tools__trigger {
-  width: var(--nav-tools-main-width);
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-  transform: none;
+.nav-tools[data-can-edit="true"] .nav-tools__trigger {
+  width: 100%;
+  padding-inline-end: calc(.8rem + var(--nav-tools-toggle-width));
 }
-.nav-tools[data-can-edit="true"][data-settings="true"] .nav-tools__trigger { width: 100%; }
 .dark .nav-tools,
 .dashboard-navbar[data-immersive="halloween"] .nav-tools,
 .dashboard-navbar[data-immersive="mid_autumn"] .nav-tools {
@@ -5363,32 +5361,30 @@ body {
 }
 .nav-tools__menu-toggle {
   position: absolute;
-  inset: 0 0 0 auto;
-  z-index: 1;
+  inset: 1px 1px 1px auto;
+  z-index: 2;
   display: grid;
-  width: var(--nav-tools-toggle-width);
+  width: calc(var(--nav-tools-toggle-width) - 1px);
   place-items: center;
-  border: 1px solid var(--nav-chip-border);
-  border-inline-start: 0;
-  border-radius: 0 .8rem .8rem 0;
-  background: var(--nav-chip-bg);
+  border-inline-start: 1px solid var(--nav-chip-border);
+  border-radius: 0 calc(.8rem - 1px) calc(.8rem - 1px) 0;
+  background: transparent;
   color: var(--nav-on-fg);
-  box-shadow: 0 1px 2px rgb(15 23 42 / .05), inset 0 1px var(--nav-chip-highlight);
   cursor: pointer;
   transition: background-color 160ms ease, border-color 160ms ease;
 }
-.nav-tools__menu-toggle:hover { background: var(--nav-chip-bg-hover); }
+.nav-tools__menu-toggle:hover { background: rgb(var(--nav-accent) / .09); }
 .nav-tools__menu-toggle:focus-visible {
   outline: 2px solid rgb(var(--nav-accent) / .75);
   outline-offset: -3px;
 }
 .nav-tools[data-open="true"] .nav-tools__trigger,
-.nav-tools__menu-toggle[aria-expanded="true"],
 .nav-tools[data-editing="true"] .nav-tools__trigger {
   border-color: rgb(var(--nav-accent) / .28);
   background: rgb(var(--nav-accent) / .11);
   color: var(--nav-on-fg);
 }
+.nav-tools__menu-toggle[aria-expanded="true"] { border-inline-start-color: rgb(var(--nav-accent) / .24); }
 .nav-tools__menu-toggle[aria-expanded="true"] .nav-tools__caret { transform: rotate(-180deg); }
 .nav-tools__surface {
   display: grid;
@@ -5595,19 +5591,23 @@ body {
   color: var(--nav-on-fg);
   font-weight: 900;
   box-shadow: 0 2px 8px -2px rgba(15, 23, 42, .2);
-  transition: transform 420ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 260ms ease;
+  transition: box-shadow 200ms ease;
   -webkit-tap-highlight-color: transparent;
 }
 .dark .nav-avatar { border-color: rgba(51, 65, 85, .9); }
-.nav-avatar:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 8px 18px -6px rgb(var(--nav-accent) / .5); }
-.nav-avatar:active { transform: scale(.92); transition-duration: 80ms; }
-.nav-avatar:focus-visible { outline: 2px solid rgb(var(--nav-accent) / .65); outline-offset: 2px; }
+.nav-avatar:hover { box-shadow: 0 8px 18px -6px rgb(var(--nav-accent) / .5); }
+.nav-avatar:active { box-shadow: 0 2px 6px rgb(var(--nav-accent) / .28); transition-duration: 100ms; }
+.nav-avatar:focus-visible { outline: 2px solid rgb(var(--nav-accent) / .65); outline-offset: -2px; }
 
 /* Narrow screens: secondary buttons collapse to their icon. */
 @media (width < 1024px) {
   .nav-btn:not(.nav-btn--keep-label) .nav-btn__label { display: none; }
   .nav-btn:not(.nav-btn--keep-label):not(.nav-btn--icon-only) { width: 2.25rem; padding: 0; }
   .nav-tools { --nav-tools-main-width: 36px; --nav-tools-toggle-width: 28px; }
+  .nav-tools[data-can-edit="true"] .nav-tools__trigger {
+    width: 100%;
+    padding-inline-end: var(--nav-tools-toggle-width);
+  }
   .nav-tools__split .nav-tools__row { justify-content: center; padding: 0; }
   .nav-tools__split .nav-tools__icon,
   .nav-tools__edit-full-label { display: none; }
@@ -5632,6 +5632,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .nav-btn, .nav-avatar { transition-duration: 1ms !important; }
-  .nav-btn__icon--swap, .nav-btn--pop { animation: none; }
+  .nav-btn__icon--swap, .nav-btn__icon--pop { animation: none; }
   .nav-tools__surface, .nav-tools__row, .nav-tools__disclosure, .nav-tools__disclosure svg, .nav-tools__menu-toggle, .nav-tools__caret { transition: none; }
 }

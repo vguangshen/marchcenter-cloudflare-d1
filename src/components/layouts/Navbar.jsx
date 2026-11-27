@@ -27,7 +27,7 @@ const QINGMING_ORNAMENTS = [{ icon: '🪁', left: '10%', speed: '3s', length: 25
 function NavButton({
     icon: Icon, iconKey, iconAfter = false, iconOnly = false, keepLabel = false,
     variant = 'chip', pressed, title, ariaLabel, badge, className = '', iconClassName = '',
-    buttonRef, onClick, children
+    buttonRef, visible = true, onClick, children
 }) {
     const icon = Icon && (
         <span key={iconKey} className={`nav-btn__icon ${iconKey ? 'nav-btn__icon--swap' : ''} ${iconClassName}`} aria-hidden="true"><Icon /></span>
@@ -40,7 +40,9 @@ function NavButton({
             title={title}
             aria-label={ariaLabel || (iconOnly ? title : undefined)}
             aria-pressed={pressed}
-            className={`nav-btn nav-btn--${variant} ${iconOnly ? 'nav-btn--icon-only' : ''} ${keepLabel ? 'nav-btn--keep-label' : ''} ${className}`}
+            aria-hidden={visible ? undefined : true}
+            inert={!visible}
+            className={`nav-btn nav-btn--${variant} ${iconOnly ? 'nav-btn--icon-only' : ''} ${keepLabel ? 'nav-btn--keep-label' : ''} ${visible ? '' : 'invisible'} ${className}`}
         >
             {!iconAfter && icon}
             {!iconOnly && <span className="nav-btn__label">{children}</span>}
@@ -80,7 +82,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     const placeFlyout = useCallback(() => {
         const anchor = root.current?.getBoundingClientRect();
         if (!anchor) return;
-        const viewport = document.documentElement.clientWidth;
+        const viewport = root.current.closest('.dashboard-navbar').getBoundingClientRect().right;
         const gutter = 12;
         const flyoutWidth = Math.min(180, viewport - gutter * 2);
         const room = flyoutWidth + gutter + 8;
@@ -118,7 +120,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
 
     function finish(action) {
         close();
-        trigger.current?.focus({ preventScroll: true });
+        if (menu.current?.contains(document.activeElement)) trigger.current?.focus({ preventScroll: true });
         action();
     }
 
@@ -146,7 +148,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
 
     return (
         <div ref={root} className="nav-tools" data-flyout={placement.side} data-can-edit={canEdit}
-            data-settings={settingsActive} data-open={open} data-editing={canEdit && editing}
+            data-open={open} data-editing={canEdit && editing}
             style={{ '--nav-tools-flyout-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
             onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}
             onPointerEnter={event => {
@@ -240,7 +242,8 @@ const Navbar = ({
     const isDragonBoat = immersiveMode === 'dragon_boat';
     const isYuanxiao = immersiveMode === 'yuanxiao';
     const isQingming = immersiveMode === 'qingming';
-    const suspendAmbientMotion = activePage === 'settings';
+    const workbenchActive = activePage === 'dashboard';
+    const suspendAmbientMotion = !workbenchActive;
     const navbarTheme = THEMES[activeThemeColor] || THEMES.blue;
 
     const logoTile = brandLogoHasTile(siteConfig);
@@ -357,37 +360,35 @@ const Navbar = ({
                     </button>
 
                     {/* Search Bar */}
-                    {activePage === 'dashboard' && (
-                        <div className="dashboard-navbar-search hidden md:flex flex-1 max-w-md mx-8 relative group z-10">
-                            <Search className={`absolute left-3 top-2.5 w-4 h-4 transition-colors
-                                ${isLunar ? 'text-red-400 group-focus-within:text-red-600' : ''}
-                                ${isHalloween ? 'text-purple-400 group-focus-within:text-orange-500' : ''}
-                                ${isMidAutumn ? 'text-blue-300 group-focus-within:text-yellow-200' : ''}
-                                ${isDragonBoat ? 'text-teal-500 group-focus-within:text-teal-700' : ''}
-                                ${isYuanxiao ? 'text-pink-400 group-focus-within:text-pink-600' : ''}
-                                ${isQingming ? 'text-slate-400 group-focus-within:text-slate-600' : ''}
-                                ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'text-slate-400 group-focus-within:text-indigo-500' : ''}
-                            `} />
-                            <input
-                                type="text"
-                                className={`w-full pl-10 pr-4 py-2 rounded-xl text-sm transition-all border border-transparent focus:w-full ${GLASS_INPUT}
-                                    ${isLunar ? 'focus:border-red-300 focus:bg-red-50/50 placeholder-red-300 text-red-800' : ''}
-                                    ${isHalloween ? 'bg-slate-800/50 text-white placeholder-slate-500 focus:border-orange-500 focus:bg-slate-800' : ''}
-                                    ${isMidAutumn ? 'bg-blue-950/50 text-blue-100 placeholder-blue-400/50 focus:border-yellow-200/50 focus:bg-blue-900/80' : ''}
-                                    ${isDragonBoat ? 'focus:border-teal-300 focus:bg-teal-50/50 placeholder-teal-400 text-teal-900' : ''}
-                                    ${isYuanxiao ? 'focus:border-pink-300 focus:bg-pink-50/50 placeholder-pink-300 text-pink-900' : ''}
-                                    ${isQingming ? 'focus:border-slate-300 focus:bg-slate-100/50 placeholder-slate-400 text-slate-700' : ''}
-                                    ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'focus:border-indigo-200 focus:bg-white' : ''}
-                                `}
-                                placeholder={searchPlaceholder}
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    )}
+                    <div className={`dashboard-navbar-search hidden md:flex flex-1 max-w-md mx-8 relative group z-10 ${workbenchActive ? '' : 'invisible'}`}
+                        aria-hidden={workbenchActive ? undefined : true} inert={!workbenchActive}>
+                        <Search className={`absolute left-3 top-2.5 w-4 h-4 transition-colors
+                            ${isLunar ? 'text-red-400 group-focus-within:text-red-600' : ''}
+                            ${isHalloween ? 'text-purple-400 group-focus-within:text-orange-500' : ''}
+                            ${isMidAutumn ? 'text-blue-300 group-focus-within:text-yellow-200' : ''}
+                            ${isDragonBoat ? 'text-teal-500 group-focus-within:text-teal-700' : ''}
+                            ${isYuanxiao ? 'text-pink-400 group-focus-within:text-pink-600' : ''}
+                            ${isQingming ? 'text-slate-400 group-focus-within:text-slate-600' : ''}
+                            ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'text-slate-400 group-focus-within:text-indigo-500' : ''}
+                        `} />
+                        <input
+                            type="text"
+                            className={`w-full pl-10 pr-4 py-2 rounded-xl text-sm transition-all border border-transparent focus:w-full ${GLASS_INPUT}
+                                ${isLunar ? 'focus:border-red-300 focus:bg-red-50/50 placeholder-red-300 text-red-800' : ''}
+                                ${isHalloween ? 'bg-slate-800/50 text-white placeholder-slate-500 focus:border-orange-500 focus:bg-slate-800' : ''}
+                                ${isMidAutumn ? 'bg-blue-950/50 text-blue-100 placeholder-blue-400/50 focus:border-yellow-200/50 focus:bg-blue-900/80' : ''}
+                                ${isDragonBoat ? 'focus:border-teal-300 focus:bg-teal-50/50 placeholder-teal-400 text-teal-900' : ''}
+                                ${isYuanxiao ? 'focus:border-pink-300 focus:bg-pink-50/50 placeholder-pink-300 text-pink-900' : ''}
+                                ${isQingming ? 'focus:border-slate-300 focus:bg-slate-100/50 placeholder-slate-400 text-slate-700' : ''}
+                                ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'focus:border-indigo-200 focus:bg-white' : ''}
+                            `}
+                            placeholder={searchPlaceholder}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
 
-                    {/* Right Actions — every control is a NavButton so size,
-                        glass surface, hover lift and press feedback match. */}
+                    {/* Keep workbench-only controls in flow when settings hides them. */}
                     <div
                         className="dashboard-navbar-actions flex items-center gap-2 z-10"
                         onAnimationEnd={(event) => {
@@ -398,8 +399,9 @@ const Navbar = ({
                             ) onEntryTransitionEnd?.();
                         }}
                     >
-                        {showCategoryArrange && activePage === 'dashboard' && (
+                        {showCategoryArrange && (
                             <NavButton
+                                visible={workbenchActive}
                                 onClick={onToggleCategoryArrange}
                                 pressed={categoryArrangeEnabled}
                                 title={categoryArrangeEnabled ? '取消分类排列' : '按分类排列'}
@@ -408,16 +410,16 @@ const Navbar = ({
                             >分类排列</NavButton>
                         )}
 
-                        {hasActiveAnnouncement && !isAnnouncementVisible && activePage === 'dashboard' && (
+                        {hasActiveAnnouncement && (
                             <NavButton
+                                visible={workbenchActive && !isAnnouncementVisible}
                                 onClick={onToggleAnnouncement}
                                 variant="tinted"
                                 iconOnly
                                 title="有新公告"
                                 ariaLabel="查看新公告"
                                 icon={Megaphone}
-                                className="nav-btn--pop"
-                                iconClassName="nav-btn__icon--wiggle"
+                                iconClassName={workbenchActive && !isAnnouncementVisible ? 'nav-btn__icon--wiggle nav-btn__icon--pop' : ''}
                                 badge={<span className="nav-btn__ping" aria-hidden="true" />}
                             />
                         )}
@@ -448,19 +450,18 @@ const Navbar = ({
                         </button>
                     </div>
                 </div>
-                {activePage === 'dashboard' && (
-                    <div className="relative mt-3 md:hidden">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="search"
-                            aria-label={searchPlaceholder}
-                            className={`w-full rounded-xl border border-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-indigo-200 ${GLASS_INPUT}`}
-                            placeholder={searchPlaceholder}
-                            value={searchTerm}
-                            onChange={event => setSearchTerm(event.target.value)}
-                        />
-                    </div>
-                )}
+                <div className={`relative mt-3 md:hidden ${workbenchActive ? '' : 'invisible'}`}
+                    aria-hidden={workbenchActive ? undefined : true} inert={!workbenchActive}>
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="search"
+                        aria-label={searchPlaceholder}
+                        className={`w-full rounded-xl border border-transparent py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-indigo-200 ${GLASS_INPUT}`}
+                        placeholder={searchPlaceholder}
+                        value={searchTerm}
+                        onChange={event => setSearchTerm(event.target.value)}
+                    />
+                </div>
             </div>
         </nav>
     );
