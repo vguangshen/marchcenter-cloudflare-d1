@@ -320,10 +320,10 @@ export default function SupportChatThread({
                     <ChatDraftAttachments items={draftFiles} disabled={busy} onRemove={removeFile} />
                     {canAskAi && <p id={aiDisclosureId} className="mb-2 text-[11px] leading-snug text-slate-600 dark:text-slate-300">纯文字消息可能交由站点配置的 AI 处理。</p>}
                     {waitingForOptions && <p role="status" className="mb-2 text-xs text-slate-600 dark:text-slate-300">正在读取客服设置…</p>}
-                    <div className="flex items-end gap-2">
+                    <div className="support-chat-composer flex items-end gap-2">
                         <div className="support-chat-input">
                             <textarea ref={inputRef} aria-label="消息内容" aria-describedby={canAskAi ? aiDisclosureId : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
-                                placeholder="输入消息…" value={body} rows={2} maxLength={MAX_BODY_LENGTH} readOnly={busy}
+                                placeholder="输入消息…" value={body} rows={1} maxLength={MAX_BODY_LENGTH} readOnly={busy}
                                 onChange={event => { setBody(event.target.value); setSendError(''); }}
                                 onKeyDown={event => {
                                     if (event.key === 'Enter' && !event.nativeEvent.isComposing && (event.ctrlKey || event.metaKey)) send(event);
@@ -331,7 +331,7 @@ export default function SupportChatThread({
                                 className="text-sm" />
                             <ChatAttachmentPicker count={draftFiles.length} onAdd={addFiles} disabled={busy} />
                         </div>
-                        <button type="submit" aria-label="发送消息" disabled={busy || waitingForOptions || (!body.trim() && !draftFiles.length)} className="mc-button mc-button--primary mc-button--compact !h-10 shrink-0">
+                        <button type="submit" aria-label="发送消息" disabled={busy || waitingForOptions || (!body.trim() && !draftFiles.length)} className="mc-button mc-button--primary support-chat-send">
                             {pendingAction === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         </button>
                     </div>
