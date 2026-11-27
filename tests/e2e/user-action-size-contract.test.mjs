@@ -36,6 +36,8 @@ test('class members expand under their teacher and account actions fit a narrow 
 
     const expand = page.getByRole('button', { name: /展开 teacher-a 的学生/ });
     await expand.waitFor();
+    assert.equal((await expand.innerText()).trim(), '2 名学生');
+    assert.equal(await page.getByText('Class A', { exact: true }).count(), 0);
     assert.equal(await page.getByText('student-a', { exact: true }).count(), 0);
     await expand.click();
     const members = page.getByRole('list', { name: 'teacher-a 的学生', exact: true });

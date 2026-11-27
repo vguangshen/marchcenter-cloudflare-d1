@@ -34,8 +34,7 @@ function TeacherGroup({ teacher, appliedSearch, revision, rowProps, deletedAccou
     return (
         <>
             <UserAccountRow user={teacher} {...rowProps}>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                    {teacher.class_name && <span className="text-slate-500 [overflow-wrap:anywhere]">{teacher.class_name}</span>}
+                <div className="mt-1 text-xs">
                     {count ? (
                         <button type="button" aria-expanded={expanded} aria-controls={groupId} onClick={() => setManualExpansion(!expanded)}
                             onPointerEnter={prefetchNow} onFocus={prefetchNow}
