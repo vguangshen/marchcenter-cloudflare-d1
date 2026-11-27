@@ -16,8 +16,8 @@ export function ChatAttachmentPicker({ disabled, count, onAdd }) {
                 }} />
             <button type="button" disabled={disabled || count >= MAX_FILES} onClick={() => inputRef.current?.click()}
                 aria-label="添加附件" title="添加附件或粘贴截图（最多 5 个，单个 10 MB，合计 20 MB）"
-                className="mc-button mc-button--ghost mc-button--compact !h-10 !px-2.5 shrink-0">
-                <Paperclip className="h-4 w-4" />
+                className="mc-icon-button h-9 w-9 min-w-9 shrink-0">
+                <Paperclip className="h-4 w-4" aria-hidden="true" />
             </button>
         </>
     );

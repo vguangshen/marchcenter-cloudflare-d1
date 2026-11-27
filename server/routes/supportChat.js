@@ -176,6 +176,29 @@ router.get('/unread', endpoint('读取客服提醒失败', async (req, res) => {
     res.json({ ...counts, total: counts.mine + counts.staff });
 }));
 
+router.get('/management/overview', endpoint('读取客服概览失败', async (req, res) => {
+    if (!isStaff(req.user)) throw httpError(403, '需要客服管理权限');
+    const userId = req.user.id;
+    const [{ rows: [inbox] }, { rows: [recent] }] = await pool.batch([
+        [
+            `SELECT COUNT(*) AS totalConversations, COALESCE(SUM(human_requested), 0) AS humanConversations,
+                    COALESCE(SUM(staff_unread), 0) AS unreadMessages
+             FROM support_chat_conversations WHERE user_id <> ?`,
+            [userId]
+        ],
+        [
+            `SELECT COUNT(*) FILTER (WHERE m.author_role = 'user') AS recentUserMessages,
+                    COUNT(*) FILTER (WHERE m.reply_source = 'template') AS recentTemplateReplies,
+                    COUNT(*) FILTER (WHERE m.reply_source = 'ai') AS recentAiReplies,
+                    COUNT(*) FILTER (WHERE m.author_role = 'staff' AND m.reply_source IS NULL AND m.author_id IS NOT NULL) AS recentHumanReplies
+             FROM support_chat_messages m JOIN support_chat_conversations c ON c.id = m.conversation_id
+             WHERE c.user_id <> ? AND m.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`,
+            [userId]
+        ]
+    ]);
+    res.json({ ...inbox, ...recent });
+}));
+
 router.get('/conversations', endpoint('读取客服会话失败', async (req, res) => {
     const staff = isStaff(req.user);
     const scope = req.query.scope || (staff ? 'all' : 'mine');
@@ -184,10 +207,23 @@ router.get('/conversations', endpoint('读取客服会话失败', async (req, re
     const rawPage = req.query.page;
     const page = rawPage === undefined ? 1 : positiveId(rawPage, '页码无效');
     if (page > 10000) throw httpError(400, '页码无效');
-    const where = scope === 'mine' ? 'WHERE c.user_id = ?' : 'WHERE c.user_id <> ?';
+    const conditions = [scope === 'mine' ? 'c.user_id = ?' : 'c.user_id <> ?'];
     const params = [req.user.id];
+    if (scope === 'all') {
+        const queue = req.query.queue || 'all';
+        const search = String(req.query.q || '').trim();
+        if (!['all', 'human', 'unread'].includes(queue)) throw httpError(400, '会话筛选无效');
+        if (search.length > 80) throw httpError(400, '搜索内容不能超过 80 个字符');
+        if (queue === 'human') conditions.push('c.human_requested = 1');
+        if (queue === 'unread') conditions.push('c.staff_unread > 0');
+        if (search) {
+            conditions.push('(instr(LOWER(u.username), LOWER(?)) > 0 OR CAST(c.id AS TEXT) = ?)');
+            params.push(search, search.replace(/^#/, ''));
+        }
+    }
+    const where = `WHERE ${conditions.join(' AND ')}`;
     const [{ rows: [{ total }] }, { rows: conversations }] = await pool.batch([
-        [`SELECT COUNT(*) AS total FROM support_chat_conversations c ${where}`, params],
+        [`SELECT COUNT(*) AS total FROM support_chat_conversations c JOIN users u ON u.id = c.user_id ${where}`, params],
         [
             `${CONVERSATION_SQL} ${where} ORDER BY c.updated_at DESC, c.id DESC LIMIT ? OFFSET ?`,
             [...params, CONVERSATIONS_PER_PAGE, (page - 1) * CONVERSATIONS_PER_PAGE]
@@ -238,6 +274,18 @@ router.post('/conversations/:id/messages', endpoint('发送客服消息失败', 
     const id = positiveId(req.params.id, '会话编号无效');
     const viewer = await loadViewer(req.user, id);
     await postMessage(req, res, id, viewer.owner ? 'user' : 'staff');
+}));
+
+router.post('/conversations/:id/finish-handoff', endpoint('结束人工接待失败', async (req, res) => {
+    const id = positiveId(req.params.id, '会话编号无效');
+    const viewer = await loadViewer(req.user, id);
+    if (!viewer.staff || viewer.owner) throw httpError(403, '需要客服管理权限');
+    const [, { rows: [conversation] }] = await pool.batch([
+        ['UPDATE support_chat_conversations SET human_requested = 0 WHERE id = ? AND human_requested = 1', [id]],
+        [`${CONVERSATION_SQL} WHERE c.id = ?`, [id]]
+    ]);
+    if (!conversation) throw httpError(404, '客服会话不存在');
+    res.json({ conversation: conversationDto(conversation), message: null });
 }));
 
 router.patch('/automation', endpoint('更新客服回复方式失败', async (req, res) => {

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, MessageCircle, Minus, RefreshCw } from 'lucide-react';
 import { api } from '../../utils/api';
-import SupportChatSettings from './SupportChatSettings';
 import SupportChatThread from './SupportChatThread';
 import { useVisibleChatPolling } from './useVisibleChatPolling';
 
@@ -41,8 +40,8 @@ function StaffInbox({ active, onSelect, page, setPage }) {
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-100">
                                             <span className="min-w-0 truncate">{conversation.ownerUsername}</span>
-                                            {conversation.humanRequested && conversation.staffUnread > 0 &&
-                                                <span className="shrink-0 text-[10px] font-medium text-amber-700 dark:text-amber-300">人工模式</span>}
+                                            {conversation.humanRequested &&
+                                                <span className="shrink-0 text-[10px] font-medium text-amber-700 dark:text-amber-300">人工接待</span>}
                                         </span>
                                         <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">{conversation.lastAuthorRole === 'staff' ? AUTOMATED_REPLY_PREFIXES[conversation.lastReplySource] || '客服：' : ''}{conversation.lastMessage}</span>
                                     </span>
@@ -64,10 +63,9 @@ function StaffInbox({ active, onSelect, page, setPage }) {
     );
 }
 
-export default function SupportChatPanel({ expanded, isStaff, canConfigure, onMinimize, onUnreadChange }) {
+export default function SupportChatPanel({ expanded, isStaff, onMinimize, onUnreadChange }) {
     const [staffTab, setStaffTab] = useState('inbox');
     const [staffOwnOpened, setStaffOwnOpened] = useState(false);
-    const [settingsOpened, setSettingsOpened] = useState(false);
     const [selected, setSelected] = useState(null);
     const [page, setPage] = useState(1);
     const [options, setOptions] = useState(null);
@@ -80,7 +78,6 @@ export default function SupportChatPanel({ expanded, isStaff, canConfigure, onMi
     const own = !isStaff || staffTab === 'own';
     const staffInbox = isStaff && staffTab === 'inbox';
     const inbox = staffInbox && !selected;
-    const settings = canConfigure && staffTab === 'settings';
 
     useEffect(() => {
         if (!expanded || !own) return undefined;
@@ -132,8 +129,6 @@ export default function SupportChatPanel({ expanded, isStaff, canConfigure, onMi
                 <div role="group" aria-label="客服视图" className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-300/35 px-3 py-2 dark:border-slate-600/40">
                     <button ref={staffInboxTabRef} type="button" aria-pressed={staffInbox} onClick={() => setStaffTab('inbox')} className={`mc-button mc-button--compact ${staffInbox ? 'mc-button--secondary' : 'mc-button--ghost'}`}>用户会话</button>
                     <button type="button" aria-pressed={own} onClick={() => { setStaffTab('own'); setStaffOwnOpened(true); }} className={`mc-button mc-button--compact ${own ? 'mc-button--secondary' : 'mc-button--ghost'}`}>我的客服</button>
-                    {canConfigure && <button type="button" aria-pressed={settings} onClick={() => { setStaffTab('settings'); setSettingsOpened(true); }}
-                        className={`mc-button mc-button--compact ${settings ? 'mc-button--secondary' : 'mc-button--ghost'}`}>自动回复</button>}
                 </div>
             )}
             {isStaff && (
@@ -161,11 +156,6 @@ export default function SupportChatPanel({ expanded, isStaff, canConfigure, onMi
                         <h3 className="min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{selected.ownerUsername}</h3>
                     </div>
                     <SupportChatThread key={selected.id} active={expanded && staffInbox} initialConversation={selected} onUnreadChange={onUnreadChange} />
-                </div>
-            )}
-            {canConfigure && settingsOpened && (
-                <div className={settings ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
-                    <SupportChatSettings active={expanded && settings} onSaved={setOptions} />
                 </div>
             )}
         </section>

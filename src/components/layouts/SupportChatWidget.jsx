@@ -6,7 +6,7 @@ import { getTabToken } from '../../utils/tabSession';
 const SupportChatPanel = lazy(() => import('../support-chat/SupportChatPanel'));
 const UNREAD_REFRESH_MS = 12_000;
 
-export default function SupportChatWidget({ token, isStaff, canConfigure }) {
+export default function SupportChatWidget({ token, isStaff }) {
     const [mode, setMode] = useState('idle');
     const [unread, setUnread] = useState(null);
     const dockRef = useRef(null);
@@ -99,7 +99,7 @@ export default function SupportChatWidget({ token, isStaff, canConfigure }) {
                         <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
                     </button>
                 )}>
-                    <SupportChatPanel expanded={expanded} isStaff={isStaff} canConfigure={canConfigure} onMinimize={minimize} onUnreadChange={refreshUnread} />
+                    <SupportChatPanel expanded={expanded} isStaff={isStaff} onMinimize={minimize} onUnreadChange={refreshUnread} />
                 </Suspense>
             )}
         </div>

@@ -19,7 +19,7 @@
 }
 
 .support-chat-dock > #support-chat-panel {
-    width: min(27rem, calc(100vw - var(--support-chat-right) - max(var(--support-chat-gap), env(safe-area-inset-left))));
+    width: min(24rem, calc(100vw - var(--support-chat-right) - max(var(--support-chat-gap), env(safe-area-inset-left))));
     height: min(35rem, calc(var(--support-chat-viewport-height, 100dvh) - var(--support-chat-bottom) - max(var(--support-chat-gap), env(safe-area-inset-top))));
     overflow: clip;
     border: 1px solid rgb(255 255 255 / .88);
@@ -35,6 +35,36 @@
     border-color: rgb(255 255 255 / .12);
     background: radial-gradient(105% 65% at 0% 0%, rgb(var(--system-accent-rgb, 59 130 246) / .18), transparent 65%), rgb(15 23 42 / .94);
     box-shadow: 0 20px 54px rgb(2 6 23 / .55);
+}
+
+.support-chat-input {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    gap: .25rem;
+    padding-right: .375rem;
+    border: 1px solid var(--mc-color-border);
+    border-radius: var(--mc-radius-control);
+    background: var(--mc-color-surface);
+    color: var(--mc-color-text);
+}
+
+.support-chat-input:focus-within {
+    border-color: var(--mc-color-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc-color-accent) 16%, transparent);
+}
+
+.support-chat-input > textarea {
+    flex: 1;
+    min-width: 0;
+    padding: .5rem 0 .5rem .75rem;
+    resize: none;
+    outline: none;
+}
+
+.support-chat-input > textarea::placeholder {
+    color: var(--mc-color-placeholder);
 }
 
 .support-chat-launcher {

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Bot, Loader2, MessageCircle, RefreshCw, Send } from 'lucide-react';
 import { api } from '../../utils/api';
 import { mergeDraftFiles, releaseDraftFiles, UPLOAD_TIMEOUT_MS } from '../tickets/ticketShared';
@@ -54,7 +54,7 @@ function ChatMessage({ conversationId, message, own, onPreview }) {
 
 export default function SupportChatThread({
     active, own = false, initialConversation = null, onUnreadChange,
-    quickQuestions = [], aiActive = false, automationActive = aiActive || quickQuestions.length > 0, optionsPending = false
+    quickQuestions = [], aiActive = false, optionsPending = false
 }) {
     const [conversation, setConversation] = useState(initialConversation);
     const [timeline, setTimeline] = useState({ messages: [], latestServerId: 0, hasMore: false, hasHistory: false });
@@ -65,12 +65,12 @@ export default function SupportChatThread({
     const [retry, setRetry] = useState(0);
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [body, setBody] = useState('');
-    const [sending, setSending] = useState(false);
-    const [switchingAutomation, setSwitchingAutomation] = useState(false);
+    const [pendingAction, setPendingAction] = useState(null);
     const [sendError, setSendError] = useState('');
     const [draftFiles, setDraftFiles] = useState([]);
     const [attachmentError, setAttachmentError] = useState('');
     const [preview, setPreview] = useState(null);
+    const aiDisclosureId = useId();
     const draftRef = useRef([]);
     const inputRef = useRef(null);
     const listRef = useRef(null);
@@ -79,16 +79,17 @@ export default function SupportChatThread({
     const newestSeenRef = useRef(0);
     const scrollAdjustmentRef = useRef(null);
     const scrollToBottomRef = useRef(true);
-    const sendRequestRef = useRef(null);
+    const actionRequestRef = useRef(null);
     const olderRequestRef = useRef(null);
     const conversationRevision = useRef(0);
     const humanRequested = Boolean(conversation?.humanRequested);
-    const busy = sending || switchingAutomation;
+    const busy = pendingAction !== null;
     const waitingForOptions = own && optionsPending && !humanRequested;
+    const canAskAi = own && aiActive && !optionsPending && !humanRequested;
     const showQuestions = own && !humanRequested && (!body.trim() || quickQuestions.some(item => item.question === body));
 
     useEffect(() => () => {
-        sendRequestRef.current?.abort();
+        actionRequestRef.current?.abort();
         olderRequestRef.current?.abort();
         releaseDraftFiles(draftRef.current);
     }, []);
@@ -170,18 +171,16 @@ export default function SupportChatThread({
         const text = body.trim();
         if ((!text && !draftRef.current.length) || busy || waitingForOptions) return;
         const controller = new AbortController();
-        sendRequestRef.current = controller;
+        actionRequestRef.current = controller;
         const { signal } = controller;
         setSendError('');
-        setSending(true);
+        setPendingAction('send');
         try {
             const path = own ? '/support-chat/messages' : `/support-chat/conversations/${conversation.id}/messages`;
-            const allowAi = own && aiActive && !optionsPending && !humanRequested && Boolean(text);
-            let payload = { body: text, allowAi };
+            let payload = { body: text, allowAi: canAskAi && Boolean(text) };
             if (draftRef.current.length) {
                 payload = new FormData();
                 payload.append('body', text);
-                if (allowAi) payload.append('allowAi', 'true');
                 for (const { file } of draftRef.current) payload.append('files', file, file.name);
             }
             const result = await api.post(path, payload, {
@@ -198,7 +197,7 @@ export default function SupportChatThread({
         } catch (failure) {
             if (!signal.aborted) setSendError(failure.message || '发送消息失败');
         } finally {
-            if (!signal.aborted) setSending(false);
+            if (!signal.aborted) setPendingAction(null);
         }
     };
 
@@ -213,22 +212,22 @@ export default function SupportChatThread({
         onUnreadChange?.();
     }
 
-    const switchAutomation = async () => {
-        if (busy) return;
+    const finishHandoff = async () => {
+        if (busy || own || !humanRequested) return;
         const controller = new AbortController();
-        sendRequestRef.current = controller;
+        actionRequestRef.current = controller;
         const { signal } = controller;
-        setSwitchingAutomation(true);
         setSendError('');
+        setPendingAction('finish');
         try {
-            const result = await api.patch('/support-chat/automation', { humanRequested: !humanRequested }, {
-                signal, retry: 0, fallback: '切换客服方式失败'
+            const result = await api.post(`/support-chat/conversations/${conversation.id}/finish-handoff`, {}, {
+                signal, retry: 0, fallback: '结束接待失败'
             });
             if (!signal.aborted) applyResult(result);
         } catch (failure) {
-            if (!signal.aborted) setSendError(failure.message || '切换客服方式失败');
+            if (!signal.aborted) setSendError(failure.message || '结束接待失败');
         } finally {
-            if (!signal.aborted) setSwitchingAutomation(false);
+            if (!signal.aborted) setPendingAction(null);
         }
     };
 
@@ -259,8 +258,13 @@ export default function SupportChatThread({
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
             <div inert={Boolean(preview)} className="flex min-h-0 flex-1 flex-col">
-                {!own && humanRequested && (
-                    <p className="shrink-0 border-b border-slate-300/35 bg-amber-500/10 px-4 py-2 text-xs font-bold text-slate-700 dark:border-slate-600/40 dark:text-slate-200">用户已请求人工客服</p>
+                {humanRequested && (
+                    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-300/35 bg-amber-500/10 px-4 py-1.5 text-xs text-slate-700 dark:border-slate-600/40 dark:text-slate-200">
+                        <p role="status">人工接待中</p>
+                        {!own && <button type="button" onClick={finishHandoff} disabled={busy} className="mc-button mc-button--ghost mc-button--compact !min-h-8">
+                            {pendingAction === 'finish' && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}结束接待
+                        </button>}
+                    </div>
                 )}
                 <div ref={listRef} className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3"
                     onScroll={event => {
@@ -300,16 +304,6 @@ export default function SupportChatThread({
                         addFiles(Array.from(event.dataTransfer.files));
                     }}
                     className="shrink-0 border-t border-slate-300/35 px-3 py-3 dark:border-slate-600/40">
-                    {own && (automationActive || humanRequested || waitingForOptions) && (
-                        <div className="mb-2 flex items-start gap-1.5">
-                            <p className="min-w-0 flex-1 self-center text-[11px] leading-snug text-slate-600 dark:text-slate-300">
-                                {humanRequested ? '已转人工，等待客服回复。' : waitingForOptions ? '正在确认客服设置。' : aiActive ? '发送的文字可能提交给站点配置的 AI 服务。附件仅在客服会话中使用。' : '客服可自动回答常见问题。'}
-                            </p>
-                            <button type="button" disabled={busy} onClick={switchAutomation} className="mc-button mc-button--ghost mc-button--compact shrink-0 text-xs">
-                                {switchingAutomation && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{humanRequested ? '恢复自动回复' : '转人工'}
-                            </button>
-                        </div>
-                    )}
                     {showQuestions && quickQuestions.length > 0 && (
                         <div role="group" aria-label="常见问题" className="custom-scrollbar mb-2 flex gap-1.5 overflow-x-auto pb-1">
                             {quickQuestions.map(({ id, question }) => (
@@ -324,16 +318,21 @@ export default function SupportChatThread({
                     {sendError && <p role="alert" className="mb-2 text-xs font-medium text-red-700 dark:text-red-300">{sendError}</p>}
                     {attachmentError && <p role="alert" className="mb-2 text-xs font-medium text-red-700 dark:text-red-300">{attachmentError}</p>}
                     <ChatDraftAttachments items={draftFiles} disabled={busy} onRemove={removeFile} />
+                    {canAskAi && <p id={aiDisclosureId} className="mb-2 text-[11px] leading-snug text-slate-600 dark:text-slate-300">纯文字消息可能交由站点配置的 AI 处理。</p>}
+                    {waitingForOptions && <p role="status" className="mb-2 text-xs text-slate-600 dark:text-slate-300">正在读取客服设置…</p>}
                     <div className="flex items-end gap-2">
-                        <ChatAttachmentPicker count={draftFiles.length} onAdd={addFiles} disabled={busy} />
-                        <textarea ref={inputRef} aria-label="消息内容" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="输入消息…" value={body} rows={2} maxLength={MAX_BODY_LENGTH} readOnly={busy}
-                            onChange={event => { setBody(event.target.value); setSendError(''); }}
-                            onKeyDown={event => {
-                                if (event.key === 'Enter' && !event.nativeEvent.isComposing && (event.ctrlKey || event.metaKey)) send(event);
-                            }}
-                            className="mc-input min-w-0 flex-1 resize-none !py-2 text-sm" />
+                        <div className="support-chat-input">
+                            <textarea ref={inputRef} aria-label="消息内容" aria-describedby={canAskAi ? aiDisclosureId : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
+                                placeholder="输入消息…" value={body} rows={2} maxLength={MAX_BODY_LENGTH} readOnly={busy}
+                                onChange={event => { setBody(event.target.value); setSendError(''); }}
+                                onKeyDown={event => {
+                                    if (event.key === 'Enter' && !event.nativeEvent.isComposing && (event.ctrlKey || event.metaKey)) send(event);
+                                }}
+                                className="text-sm" />
+                            <ChatAttachmentPicker count={draftFiles.length} onAdd={addFiles} disabled={busy} />
+                        </div>
                         <button type="submit" aria-label="发送消息" disabled={busy || waitingForOptions || (!body.trim() && !draftFiles.length)} className="mc-button mc-button--primary mc-button--compact !h-10 shrink-0">
-                            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            {pendingAction === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         </button>
                     </div>
                 </form>

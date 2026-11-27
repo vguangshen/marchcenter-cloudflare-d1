@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import {
     Sparkles, Network, Key, Users, Megaphone, Gift, Palette,
     RefreshCw, Quote,
-    Database, Loader2, AlertTriangle, Mail, Edit2, Trash2
+    Database, Loader2, AlertTriangle, Mail, Edit2, Trash2, Headset
 } from 'lucide-react';
 
 // --- 组件引入 ---
@@ -45,6 +45,7 @@ const AnnouncementManager = lazy(() => import('./components/views/settings/Annou
 const DatabaseManager = lazy(() => import('./components/views/settings/DatabaseManager'));
 const AccountManagementApiManager = lazy(() => import('./components/views/settings/AccountManagementApiManager'));
 const EmailServiceManager = lazy(() => import('./components/views/settings/EmailServiceManager'));
+const SupportChatManager = lazy(() => import('./components/views/settings/SupportChatManager'));
 
 const AddUserModal = lazy(() => import('./components/modals/AddUserModal'));
 const EditModal = lazy(() => import('./components/modals/EditModal'));
@@ -175,6 +176,7 @@ export default function Dashboard({ auth, site, appearance }) {
     const [isTicketCenterOpen, setIsTicketCenterOpen] = useState(false);
     const { count: ticketUnread, refresh: refreshTicketUnread } = useTicketUnread(authStatus === 'authenticated' ? token : null);
     const isTicketStaff = currentUserRole === 'super_admin' || currentUserRole === 'admin';
+    const canManageSupport = isAdmin || currentUserRole === 'admin';
     const platformRequestRef = useRef(0);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
@@ -308,10 +310,14 @@ export default function Dashboard({ auth, site, appearance }) {
         { id: 'database', label: '数据库配置', icon: Database },
         { id: 'email', label: '邮件服务', icon: Mail },
         { id: 'users', label: '用户管理', icon: Users },
+        { id: 'support', label: '客服管理', icon: Headset },
         { id: 'announcements', label: '系统公告', icon: Megaphone },
         { id: 'gifts', label: '赠送礼物', icon: Gift },
         { id: 'site', label: '站点设置', icon: Palette }
-    ] : [{ id: 'users', label: '用户管理', icon: Users }];
+    ] : [
+        { id: 'users', label: '用户管理', icon: Users },
+        ...(canManageSupport ? [{ id: 'support', label: '客服管理', icon: Headset }] : [])
+    ];
 
     // Effects
     useEffect(() => {
@@ -923,6 +929,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                 {settingsTab === 'api' && <ApiEngine aiConfig={aiConfig} setAiConfig={setAiConfig} onSave={saveAiConfig} onTest={testAiConfig} onDiscoverModels={discoverAiModels} />}
                                 {settingsTab === 'sso' && <SsoManager configs={ssoConfigs} token={token} fetchConfigs={fetchSsoConfigs} onBindingsChange={refreshCompetitionBindings} loadError={ssoConfigsLoadError} onRetry={fetchSsoConfigs} />}
                                 {settingsTab === 'email' && <EmailServiceManager />}
+                                {settingsTab === 'support' && canManageSupport && <SupportChatManager canConfigure={isAdmin} onOpenAiSettings={() => setSettingsTab('api')} />}
                                 {settingsTab === 'users' && (
                                     <UserManager
                                         users={users}
@@ -1150,7 +1157,7 @@ export default function Dashboard({ auth, site, appearance }) {
             </div>
 
             {authStatus === 'authenticated' && token && (
-                <SupportChatWidget key={`${currentUserId}:${currentUserRole}`} token={token} isStaff={isAdmin || currentUserRole === 'admin'} canConfigure={isAdmin} />
+                <SupportChatWidget key={`${currentUserId}:${currentUserRole}`} token={token} isStaff={canManageSupport} />
             )}
 
             <Suspense fallback={<ModalLoadingNotice />}>

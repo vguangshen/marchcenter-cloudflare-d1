@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { requestAi, resolveAiEndpoint } from '../utils/aiHttpClient.js';
+import { isSupportAcknowledgment, isUnresolvedSupportFollowup, supportHandoffIntent } from '../utils/supportChatLanguage.js';
 import { readAiSettings } from './aiSettings.js';
 
 const DEFAULT_TEMPLATES = [
@@ -26,6 +27,11 @@ const DEFAULT_TEMPLATES = [
 const LATEST_USER_MESSAGE = `c.human_requested = 0 AND (
     SELECT id FROM support_chat_messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1
 ) = ?`;
+const NO_NEW_HUMAN_REPLY = `c.human_requested = 0 AND NOT EXISTS (
+    SELECT 1 FROM support_chat_messages WHERE conversation_id = c.id
+    AND id > ? AND author_role = 'staff' AND reply_source IS NULL
+)`;
+const HANDOFF_NOTICE = '已转接人工客服，请稍候。你可以继续补充信息。';
 const AI_MIN_INTERVAL_SECONDS = 8;
 const AI_DAILY_LIMIT = 20;
 
@@ -79,6 +85,50 @@ async function storeReply(conversationId, messageId, source, body) {
     ]);
 }
 
+async function storeHandoff(conversationId, messageId, explicit = false) {
+    // An explicit request is still valid when the user sends more information,
+    // while an automatic fallback only applies to the latest message.
+    const eligible = explicit ? NO_NEW_HUMAN_REPLY : LATEST_USER_MESSAGE;
+    await pool.batch([
+        [
+            `INSERT INTO support_chat_messages (conversation_id, author_role, body)
+             SELECT c.id, 'staff', ? FROM support_chat_conversations c
+             WHERE c.id = ? AND ${eligible}`,
+            [HANDOFF_NOTICE, conversationId, messageId]
+        ],
+        [
+            `UPDATE support_chat_conversations SET human_requested = 1,
+                 staff_unread = MAX(staff_unread, 1), user_unread = user_unread + 1,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND changes() > 0`,
+            [conversationId]
+        ]
+    ]);
+}
+
+async function latestStaffReply(conversationId, messageId) {
+    const [[reply]] = await pool.query(
+        `SELECT m.body, m.reply_source,
+                EXISTS (SELECT 1 FROM support_chat_messages f
+                        WHERE f.conversation_id = m.conversation_id AND f.id > m.id AND f.id < ? AND f.author_role = 'user') AS has_followup,
+                (SELECT u.body FROM support_chat_messages u
+                 WHERE u.conversation_id = m.conversation_id AND u.id < m.id AND u.author_role = 'user'
+                 ORDER BY u.id DESC LIMIT 1) AS question
+         FROM support_chat_messages m
+         WHERE m.conversation_id = ? AND m.id < ? AND m.author_role = 'staff'
+         ORDER BY m.id DESC LIMIT 1`,
+        [messageId, conversationId, messageId]
+    );
+    return reply;
+}
+
+function automationFailed(reply, currentQuestion) {
+    if (!reply?.reply_source) return false;
+    if (isUnresolvedSupportFollowup(currentQuestion)) return true;
+    if (reply.has_followup) return false;
+    const previous = normalizeSupportQuestion(reply.question || '');
+    return Boolean(previous && previous === normalizeSupportQuestion(currentQuestion));
+}
+
 async function reserveAiReply(conversationId, messageId) {
     const [result] = await pool.query(
         `UPDATE support_chat_conversations AS c SET ai_last_request_at = unixepoch(),
@@ -116,21 +166,44 @@ function replyText(data) {
 
 export async function maybeReplyToSupportMessage({ conversation, message }, { allowAi = false } = {}) {
     if (conversation.humanRequested || message.authorRole !== 'user' || !message.body) return;
+    const intent = supportHandoffIntent(message.body);
+    if (intent === 'request') return storeHandoff(conversation.id, message.id, true);
+
+    const acknowledged = isSupportAcknowledgment(message.body);
+    const previousReply = acknowledged ? null : await latestStaffReply(conversation.id, message.id);
+    const failed = automationFailed(previousReply, message.body);
+    const canTransfer = intent !== 'decline';
+    if (failed && previousReply.reply_source === 'ai' && canTransfer) {
+        return storeHandoff(conversation.id, message.id);
+    }
+
     const { templates, aiEnabled } = await readSupportOptions();
-    const template = selectTemplate(templates, message.body);
+    const template = failed ? null : selectTemplate(templates, message.body);
     if (template) return storeReply(conversation.id, message.id, 'template', template.answer);
-    if (!aiEnabled || !allowAi || message.attachments?.length) return;
-    const settings = await readSupportAi();
-    if (!settings || !await reserveAiReply(conversation.id, message.id)) return;
-    let answer;
+    if (acknowledged) return;
+
+    const settings = aiEnabled && allowAi && !message.attachments?.length ? await readSupportAi() : null;
+    if (!settings || !await reserveAiReply(conversation.id, message.id)) {
+        if (failed && canTransfer) await storeHandoff(conversation.id, message.id);
+        return;
+    }
+
+    const prompt = failed && previousReply.reply_source === 'template'
+        ? `${SUPPORT_PROMPT}\n这是一条未能解决问题的模板建议。把它作为背景，避免重复同样的步骤：\n${previousReply.body}`
+        : SUPPORT_PROMPT;
+    let answer = '';
     try {
-        const { data } = await requestAi({ ...settings.config, systemPrompt: SUPPORT_PROMPT }, settings.apiKey, [
-            { role: 'system', content: SUPPORT_PROMPT },
+        const { data } = await requestAi({ ...settings.config, systemPrompt: prompt }, settings.apiKey, [
+            { role: 'system', content: prompt },
             { role: 'user', content: message.body }
         ], 450, 10_000);
         answer = replyText(data);
     } catch {
-        return; // The user's message stays available to staff when the provider fails.
+        // A provider error leaves the inquiry for staff.
     }
-    if (answer && !answer.includes('[人工客服]')) await storeReply(conversation.id, message.id, 'ai', answer);
+    if (!answer || /\[人工客服\]|【人工客服】|^NEEDS_HUMAN$/i.test(answer.normalize('NFKC'))) {
+        if (canTransfer) await storeHandoff(conversation.id, message.id);
+        return;
+    }
+    await storeReply(conversation.id, message.id, 'ai', answer);
 }

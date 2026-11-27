@@ -115,3 +115,76 @@ test('older history is paginated without clearing unread newer replies', async (
     assert.equal(refreshed.data.messages.at(-1).id, reply.data.message.id);
     assert.equal((await call('chat-teacher', base + '/unread')).data.mine, 0);
 });
+
+test('staff can review queue totals and find conversations by status, name or number', async () => {
+    const overviewPath = base + '/management/overview';
+    assert.equal((await call(null, overviewPath)).status, 401);
+    assert.equal((await call('chat-student', overviewPath)).status, 403);
+    assert.equal((await call('chat-teacher', overviewPath)).status, 403);
+    assert.equal((await call('chat-student', base + '/conversations?scope=all&queue=human&q=chat')).status, 403);
+
+    const baseline = await call('chat-admin', overviewPath);
+    assert.equal(baseline.status, 200);
+    const users = JSON.stringify(Array.from({ length: 33 }, (_, index) => index + 1));
+    await harness.run(
+        `INSERT INTO users (id, username, email, password_hash, role, is_disabled)
+         SELECT value + 100, 'queue-test-' || value, 'queue-' || value || '@example.invalid', 'unused', 'student', 0
+         FROM json_each(?)`,
+        users
+    );
+    await harness.run(
+        `INSERT INTO support_chat_conversations (id, user_id, human_requested, staff_unread)
+         SELECT value + 1000, value + 100, value <= 31, CASE WHEN value IN (1, 2, 32) THEN 2 ELSE 0 END
+         FROM json_each(?)`,
+        users
+    );
+    await harness.run('INSERT INTO support_chat_conversations (id, user_id, human_requested, staff_unread) VALUES (2000, 22, 1, 10)');
+    await harness.run(
+        `INSERT INTO support_chat_messages (conversation_id, author_id, author_role, reply_source, body) VALUES
+         (1001, 101, 'user', NULL, '最近的提问'),
+         (1001, NULL, 'staff', 'template', '常见问题回复'),
+         (1001, NULL, 'staff', 'ai', 'AI 回复'),
+         (1001, 22, 'staff', NULL, '人工回复'),
+         (1001, NULL, 'staff', NULL, '自动转接通知'),
+         (2000, 22, 'user', NULL, '客服自己的提问')`
+    );
+    await harness.run(
+        `INSERT INTO support_chat_messages (conversation_id, author_id, author_role, body, created_at)
+         VALUES (1001, 101, 'user', '更早的提问', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 days'))`
+    );
+
+    const overview = await call('chat-admin', overviewPath);
+    assert.equal(overview.status, 200);
+    assert.deepEqual(overview.data, {
+        totalConversations: baseline.data.totalConversations + 33,
+        humanConversations: baseline.data.humanConversations + 31,
+        unreadMessages: baseline.data.unreadMessages + 6,
+        recentUserMessages: baseline.data.recentUserMessages + 1,
+        recentTemplateReplies: baseline.data.recentTemplateReplies + 1,
+        recentAiReplies: baseline.data.recentAiReplies + 1,
+        recentHumanReplies: baseline.data.recentHumanReplies + 1
+    });
+
+    const queuePath = base + '/conversations?scope=all';
+    const all = await call('chat-admin', queuePath + '&queue=all&q=QUEUE-TEST');
+    assert.equal(all.status, 200);
+    assert.equal(all.data.conversations.length, 30);
+    assert.equal(all.data.total, 33);
+    assert.equal(all.data.totalPages, 2);
+    const human = await call('chat-admin', queuePath + '&queue=human&q=QUEUE-TEST&page=2');
+    assert.equal(human.status, 200);
+    assert.equal(human.data.page, 2);
+    assert.equal(human.data.total, 31);
+    assert.equal(human.data.totalPages, 2);
+    assert.deepEqual(human.data.conversations.map(conversation => conversation.id), [1001]);
+
+    const unread = await call('chat-admin', queuePath + '&queue=unread&q=QUEUE-TEST');
+    assert.equal(unread.status, 200);
+    assert.equal(unread.data.total, 3);
+    assert.equal(unread.data.totalPages, 1);
+    assert.deepEqual(unread.data.conversations.map(conversation => conversation.id).sort(), [1001, 1002, 1032]);
+    const byNumber = await call('chat-admin', queuePath + '&q=%231032');
+    assert.equal(byNumber.status, 200);
+    assert.equal(byNumber.data.total, 1);
+    assert.equal(byNumber.data.conversations[0].ownerUsername, 'queue-test-32');
+});

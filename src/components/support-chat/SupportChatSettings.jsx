@@ -159,7 +159,7 @@ export default function SupportChatSettings({ active, onSaved }) {
                     <span className="min-w-0">
                         <span className="block text-sm font-bold text-slate-800 dark:text-slate-100">启用 mcgo AI 自动回复</span>
                         <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">
-                            {draft.aiConfigured ? '模板未匹配时将对话文字发送到已配置的 AI 服务。用户可随时转人工。' : '请先在系统工具中配置 AI 服务。'}
+                            {draft.aiConfigured ? '模板未匹配或未解决问题时，AI 可继续处理当前文字。无法解决时自动转人工。' : '请先在系统工具中配置 AI 服务。'}
                         </span>
                     </span>
                 </label>

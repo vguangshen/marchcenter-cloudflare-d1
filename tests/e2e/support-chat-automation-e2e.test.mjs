@@ -14,7 +14,9 @@ let harness;
 let student;
 let aiStudent;
 let raceStudent;
-const providerCalls = [];
+let directStudent;
+let followupStudent;
+let declinedStudent;
 
 before(async () => {
     harness = await createProductionHarness();
@@ -23,7 +25,9 @@ before(async () => {
         await harness.seedUser(user);
         return { Authorization: `Bearer ${await harness.issueToken(user)}` };
     };
-    [student, aiStudent, raceStudent] = await Promise.all([createStudent(61), createStudent(62), createStudent(63)]);
+    [student, aiStudent, raceStudent, directStudent, followupStudent, declinedStudent] = await Promise.all(
+        [61, 62, 63, 64, 65, 66].map(createStudent)
+    );
 });
 
 after(async () => { await harness?.dispose(); });
@@ -35,6 +39,35 @@ async function waitForRow(sql, ...values) {
         await delay(25);
     }
     assert.fail(`Expected row did not appear: ${sql}`);
+}
+
+async function enableSupportAi() {
+    const saved = await harness.api('/api/ai/config', { method: 'PUT', body: {
+        provider: 'openai', apiUrl: 'https://support-ai.example.invalid/v1', modelName: 'support-fixture', apiKey: API_KEY,
+        systemPrompt: 'A separate instruction for the competition guide.'
+    } });
+    assert.equal(saved.status, 200, saved.text);
+    const configured = await harness.api(OPTIONS, { method: 'PUT', body: { templates: [template], aiEnabled: true } });
+    assert.equal(configured.status, 200, configured.text);
+    assert.equal(configured.data.aiConfigured, true);
+}
+
+async function waitForHandoff(id, headers) {
+    const unread = await waitForRow(
+        'SELECT user_unread, staff_unread FROM support_chat_conversations WHERE id = ? AND human_requested = 1',
+        id
+    );
+    assert.ok(unread.user_unread > 0, 'handoff notice alerts the customer');
+    assert.ok(unread.staff_unread > 0, 'handoff alerts support staff');
+
+    const thread = await harness.api(`/api/support-chat/conversations/${id}`, { headers });
+    assert.equal(thread.status, 200, thread.text);
+    assert.equal(thread.data.conversation.humanRequested, true);
+    const notice = thread.data.messages.at(-1);
+    assert.equal(notice.authorRole, 'staff');
+    assert.equal(notice.replySource, null);
+    assert.match(notice.body, /已转接?人工客服/);
+    return notice;
 }
 
 test('support FAQs are configurable only by a super admin and produce a labeled template reply', async () => {
@@ -74,21 +107,102 @@ test('support FAQs are configurable only by a super admin and produce a labeled 
     assert.equal(templates[0].total, 2);
 });
 
+test('only an affirmative transfer request enters human support and staff can finish the handoff', async () => {
+    const configured = await harness.api(OPTIONS, { method: 'PUT', body: { templates: [template], aiEnabled: false } });
+    assert.equal(configured.status, 200, configured.text);
+    const headers = directStudent;
+    const greeting = await harness.api(MESSAGES, { headers, body: { body: '你好！' } });
+    assert.equal(greeting.status, 201, greeting.text);
+    const { id } = greeting.data.conversation;
+    const threadPath = `/api/support-chat/conversations/${id}`;
+    for (const body of ['报名需要人工审核吗？', 'Do I need human approval for enrollment?']) {
+        const ordinaryMessage = await harness.api(MESSAGES, { headers, body: { body } });
+        assert.equal(ordinaryMessage.status, 201, ordinaryMessage.text);
+    }
+    await delay(80);
+    const greeted = await harness.api(threadPath, { headers });
+    assert.equal(greeted.status, 200, greeted.text);
+    assert.equal(greeted.data.conversation.humanRequested, false);
+
+    const negated = await harness.api(MESSAGES, { headers, body: { body: '先不用转人工，我只想问课程开放时间。' } });
+    assert.equal(negated.status, 201, negated.text);
+    const automatic = await waitForRow("SELECT id FROM support_chat_messages WHERE conversation_id = ? AND reply_source = 'template'", id);
+    const answered = await harness.api(threadPath, { headers });
+    assert.equal(answered.data.conversation.humanRequested, false);
+    assert.equal(answered.data.messages.at(-1).id, automatic.id);
+
+    await enableSupportAi();
+    let aiCalls = 0;
+    harness.platform.fetch = async () => {
+        aiCalls += 1;
+        return Response.json({ choices: [{ message: { content: 'This request should go straight to staff.' } }] });
+    };
+    const requested = await harness.api(MESSAGES, { headers, body: { body: '请帮我转人工客服。', allowAi: true } });
+    assert.equal(requested.status, 201, requested.text);
+    const notice = await waitForHandoff(id, headers);
+    assert.equal(aiCalls, 0, 'an explicit transfer skips the AI provider');
+
+    const repeated = await harness.api(MESSAGES, { headers, body: { body: '请转人工，课程开放时间依旧没显示。', allowAi: true } });
+    assert.equal(repeated.status, 201, repeated.text);
+    assert.equal(repeated.data.conversation.humanRequested, true);
+    const waiting = await harness.api(threadPath, { headers });
+    assert.deepEqual(waiting.data.messages.filter(message => message.authorRole === 'staff').map(message => message.id), [
+        automatic.id, notice.id
+    ]);
+
+    const finishPath = `${threadPath}/finish-handoff`;
+    const denied = await harness.api(finishPath, { method: 'POST', headers });
+    assert.equal(denied.status, 403, denied.text);
+    const finished = await harness.api(finishPath, { method: 'POST' });
+    assert.equal(finished.status, 200, finished.text);
+    assert.equal(finished.data.conversation.humanRequested, false);
+
+    const resumed = await harness.api(MESSAGES, { headers, body: { body: template.question } });
+    assert.equal(resumed.status, 201, resumed.text);
+    const reply = await waitForRow(
+        "SELECT body FROM support_chat_messages WHERE conversation_id = ? AND id > ? AND reply_source = 'template'",
+        id, resumed.data.message.id
+    );
+    assert.equal(reply.body, template.answer);
+});
+
+test('a failed FAQ follow-up transfers to staff when AI is unavailable', async () => {
+    const configured = await harness.api(OPTIONS, { method: 'PUT', body: { templates: [template], aiEnabled: false } });
+    assert.equal(configured.status, 200, configured.text);
+    const headers = followupStudent;
+    const opened = await harness.api(MESSAGES, { headers, body: { body: template.question } });
+    assert.equal(opened.status, 201, opened.text);
+    const { id } = opened.data.conversation;
+    await waitForRow("SELECT id FROM support_chat_messages WHERE conversation_id = ? AND reply_source = 'template'", id);
+    const acknowledged = await harness.api(MESSAGES, { headers, body: { body: '谢谢，已经解决了。' } });
+    assert.equal(acknowledged.status, 201, acknowledged.text);
+    const reopened = await harness.api(MESSAGES, { headers, body: { body: template.question } });
+    assert.equal(reopened.status, 201, reopened.text);
+    await waitForRow(
+        "SELECT id FROM support_chat_messages WHERE conversation_id = ? AND id > ? AND reply_source = 'template'",
+        id, reopened.data.message.id
+    );
+    const read = await harness.api(`/api/support-chat/conversations/${id}`, { headers });
+    assert.equal(read.data.conversation.humanRequested, false);
+
+    const followup = await harness.api(MESSAGES, {
+        headers, body: { body: '我按步骤试过了，还是不行，课程开放时间依旧看不到。' }
+    });
+    assert.equal(followup.status, 201, followup.text);
+    await waitForHandoff(id, headers);
+    const replies = await harness.rows("SELECT id FROM support_chat_messages WHERE conversation_id = ? AND reply_source = 'template'", id);
+    assert.equal(replies.length, 2, 'the bot answers fresh questions but does not repeat the unsuccessful FAQ');
+});
+
 test('AI reuses the configured mcgo provider after disclosure and forwards only the current text', async () => {
-    const saved = await harness.api('/api/ai/config', { method: 'PUT', body: {
-        provider: 'openai', apiUrl: 'https://support-ai.example.invalid/v1', modelName: 'support-fixture', apiKey: API_KEY,
-        systemPrompt: 'A separate instruction for the competition guide.'
-    } });
-    assert.equal(saved.status, 200, saved.text);
+    await enableSupportAi();
+    const providerCalls = [];
     harness.platform.fetch = async request => {
         assert.equal(request.url, 'https://support-ai.example.invalid/v1/chat/completions');
         assert.equal(request.headers.get('Authorization'), `Bearer ${API_KEY}`);
         providerCalls.push(await request.json());
         return Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '请先检查工作台中的卡片访问权限。' }] }] });
     };
-    const configured = await harness.api(OPTIONS, { method: 'PUT', body: { templates: [template], aiEnabled: true } });
-    assert.equal(configured.status, 200, configured.text);
-    assert.equal(configured.data.aiConfigured, true);
 
     await harness.api(MESSAGES, { headers: aiStudent, body: { body: '从未同意发给模型的内容' } });
     const form = new FormData();
@@ -120,13 +234,38 @@ test('AI reuses the configured mcgo provider after disclosure and forwards only 
     assert.equal(providerCalls.length, 1, 'the same conversation is rate limited');
 });
 
-test('a provider response in flight yields to a human reply', async () => {
+test('an AI refusal after a failed FAQ transfers to staff without showing the provider marker', async () => {
+    await enableSupportAi();
+    const headers = declinedStudent;
+    const opened = await harness.api(MESSAGES, { headers, body: { body: template.question } });
+    assert.equal(opened.status, 201, opened.text);
+    const { id } = opened.data.conversation;
+    await waitForRow("SELECT id FROM support_chat_messages WHERE conversation_id = ? AND reply_source = 'template'", id);
+    const read = await harness.api(`/api/support-chat/conversations/${id}`, { headers });
+    assert.equal(read.data.conversation.humanRequested, false);
+
+    const text = '这个办法试过了，还是不行。';
+    const providerCalls = [];
+    harness.platform.fetch = async request => {
+        providerCalls.push((await request.json()).messages.at(-1).content);
+        return Response.json({ choices: [{ message: { content: '[人工客服]' } }] });
+    };
+    const followup = await harness.api(MESSAGES, { headers, body: { body: text, allowAi: true } });
+    assert.equal(followup.status, 201, followup.text);
+    await waitForHandoff(id, headers);
+    assert.deepEqual(providerCalls, [text], 'after an unsuccessful FAQ the recent question is sent to AI once');
+    const replies = await harness.rows("SELECT reply_source FROM support_chat_messages WHERE conversation_id = ? AND reply_source IS NOT NULL", id);
+    assert.deepEqual(replies, [{ reply_source: 'template' }]);
+});
+
+test('a provider handoff in flight yields to a human reply', async () => {
+    await enableSupportAi();
     const started = Promise.withResolvers();
     const final = Promise.withResolvers();
     harness.platform.fetch = async () => {
         started.resolve();
         await final.promise;
-        return Response.json({ choices: [{ message: { content: '这是稍后返回的 AI 回复。' } }] });
+        return Response.json({ choices: [{ message: { content: '[人工客服]' } }] });
     };
     const question = await harness.api(MESSAGES, { headers: raceStudent, body: { body: '我想询问工作台的常用设置。', allowAi: true } });
     const id = question.data.conversation.id;
@@ -139,6 +278,7 @@ test('a provider response in flight yields to a human reply', async () => {
     }
     await delay(120);
     const result = await harness.api(`/api/support-chat/conversations/${id}`, { headers: raceStudent });
+    assert.equal(result.data.conversation.humanRequested, false);
     assert.equal(result.data.messages.length, 2);
     assert.equal(result.data.messages.at(-1).body, '人工客服已经接手。');
 });
