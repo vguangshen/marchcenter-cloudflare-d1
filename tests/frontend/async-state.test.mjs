@@ -500,8 +500,11 @@ test('saving the card binding updates maintenance on the normal catalog refresh'
         await page.goto(`${origin}/?mode=maintenance`);
         const title = page.getByRole('heading', { name: '已绑定实训', exact: true });
         const card = page.locator('.contest-card').filter({ has: title });
+        const toolsTrigger = page.getByRole('button', { name: '系统工具', exact: true });
+        const toolsMenu = page.getByRole('group', { name: '系统工具菜单', exact: true });
         await title.waitFor();
-        await page.getByRole('button', { name: '编辑', exact: true }).first().click();
+        await toolsTrigger.click();
+        await toolsMenu.getByRole('button', { name: '编辑', exact: true }).click();
         await card.getByRole('button', { name: '', exact: true }).first().click();
         const editor = page.getByRole('dialog');
         const mapping = editor.getByRole('checkbox', { name: /Java 班级删除映射/ });
@@ -510,7 +513,8 @@ test('saving the card binding updates maintenance on the normal catalog refresh'
         await editor.getByRole('button', { name: '保存', exact: true }).click();
         await editor.waitFor({ state: 'detached' });
         await page.waitForFunction(() => window.__calls.filter(call => call.url === '/competitions').length === 2);
-        await page.getByRole('button', { name: '完成', exact: true }).first().click();
+        await toolsTrigger.click();
+        await toolsMenu.getByRole('button', { name: '完成编辑', exact: true }).click();
         const callsAfterSave = await readMaintenanceCalls(page);
         assert.equal(callsAfterSave.find(call => call.method === 'PUT' && call.url === '/competitions/73').body.classDeleteMapping.enabled, false);
 
