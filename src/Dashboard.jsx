@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import {
     Sparkles, Network, Key, Users, Megaphone, Gift, Palette,
     RefreshCw, Quote,
-    Database, Loader2, AlertTriangle, Mail, Edit2, Trash2, Headset
+    Database, Loader2, AlertTriangle, Mail, Edit2, Trash2, Headset, SlidersHorizontal
 } from 'lucide-react';
 
 // --- 组件引入 ---
@@ -59,6 +59,7 @@ const TicketCenter = lazy(() => import('./components/tickets/TicketCenter'));
 const ContestCard = lazy(() => import('./components/cards/ContestCard'));
 const AgentTaskCard = lazy(() => import('./components/cards/AgentTaskCard'));
 const CATEGORY_FLIP_ID = 'category-flip';
+const SETTINGS_EXIT_FALLBACK_MS = 520;
 const CardLoadingNotice = () => <div className="min-h-[190px] rounded-3xl border border-slate-200/60 bg-white/60 p-5 dark:border-slate-700 dark:bg-slate-900/60" role="status" aria-live="polite"><Loader2 className="mx-auto mt-10 h-5 w-5 animate-spin text-slate-400" /><span className="sr-only">正在加载卡片…</span></div>;
 export default function Dashboard({ auth, site, appearance }) {
     const {
@@ -81,7 +82,37 @@ export default function Dashboard({ auth, site, appearance }) {
         }
         return refreshCurrentUser();
     }, [currentUserId, refreshCurrentUser, token, updateCurrentUser]);
-    const [activePage, setActivePage] = useState('dashboard');
+    const [pageView, setPageView] = useState({ accountId: null, page: 'dashboard', showSettings: false, dashboardScroll: 0 });
+    const pageStage = useRef(null);
+    const settingsAvailable = canManageUsers && pageView.accountId === currentUserId;
+    const settingsActive = settingsAvailable && pageView.page === 'settings';
+    const settingsMounted = settingsAvailable && pageView.showSettings;
+    const activePage = settingsActive ? 'settings' : 'dashboard';
+
+    const finishSettingsExit = useCallback(() => {
+        setPageView(view => view.page === 'dashboard' && view.showSettings ? { ...view, showSettings: false } : view);
+    }, []);
+
+    useEffect(() => {
+        if (settingsActive || !settingsMounted) return undefined;
+        const timer = window.setTimeout(finishSettingsExit, SETTINGS_EXIT_FALLBACK_MS);
+        return () => window.clearTimeout(timer);
+    }, [finishSettingsExit, settingsActive, settingsMounted]);
+
+    const navigatePage = page => {
+        if (page === activePage || (page === 'settings' && !canManageUsers)) return;
+        const outgoingScroll = window.scrollY;
+        const dashboardScroll = settingsActive ? pageView.dashboardScroll : outgoingScroll;
+        const nextScroll = page === 'dashboard' ? dashboardScroll : 0;
+
+        // Switch document flow before changing scroll, then pin the outgoing
+        // pane to the same viewport position for its horizontal transition.
+        flushSync(() => setPageView({
+            accountId: currentUserId, page, dashboardScroll, showSettings: page === 'settings' || !prefersReducedMotion()
+        }));
+        if (window.scrollY !== nextScroll) window.scrollTo({ top: nextScroll, behavior: 'instant' });
+        pageStage.current?.style.setProperty('--dashboard-outgoing-top', `${window.scrollY - outgoingScroll}px`);
+    };
 
     const [isCardEditMode, setIsCardEditMode] = useState(false);
 
@@ -869,7 +900,7 @@ export default function Dashboard({ auth, site, appearance }) {
                 <Navbar
                     isAdmin={isAdmin} canManageUsers={canManageUsers} user={currentUser} onLogout={handleLogout}
                     onOpenProfile={() => setIsProfileModalOpen(true)}
-                    activePage={activePage} setActivePage={setActivePage}
+                    activePage={activePage} setActivePage={navigatePage}
                     siteConfig={siteConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm}
                     onAdd={() => { setEditingLink(null); setIsModalOpen(true); }}
                     onAddTaskApp={() => { setEditingLink(null); setTaskAppSoftwareUnique(''); setPlatformToEdit(''); setIsTaskAppModalOpen(true); }}
@@ -889,11 +920,18 @@ export default function Dashboard({ auth, site, appearance }) {
                     onOpenTickets={() => setIsTicketCenterOpen(true)}
                 />
 
-                <div className="flex-grow">
-                    {activePage === 'settings' && canManageUsers ? (
+                <div ref={pageStage} className="dashboard-view-stage flex-grow">
+                    <div className="dashboard-view dashboard-view--settings" data-active={settingsActive}
+                        aria-hidden={settingsActive ? undefined : true} inert={!settingsActive}
+                        onTransitionEnd={event => {
+                            if (!settingsActive && event.target === event.currentTarget && event.propertyName === 'transform') finishSettingsExit();
+                        }}>{settingsMounted && (
                         <div className="settings-shell min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-28 w-full flex flex-col md:flex-row gap-4 md:gap-6 relative z-10">
-                            <aside className="settings-surface w-full md:w-56 rounded-2xl p-3 md:p-4 flex-shrink-0 h-fit overflow-hidden">
-                                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2">系统管理</h2>
+                            <aside className="settings-surface w-full md:w-56 rounded-3xl p-3 md:p-4 flex-shrink-0 h-fit overflow-hidden">
+                                <div className="settings-rail-heading">
+                                    <span className="settings-rail-icon" aria-hidden="true"><SlidersHorizontal className="h-[17px] w-[17px]" /></span>
+                                    <h2 className="text-sm font-black text-slate-800 dark:text-slate-100">系统管理</h2>
+                                </div>
                                 <nav className="relative flex flex-row overflow-x-auto pb-1 md:pb-0 md:overflow-visible md:flex-col gap-1 text-sm">
                                     <div
                                         className={`hidden md:block absolute left-0 rounded-xl transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow-lg ${
@@ -929,7 +967,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                 {settingsTab === 'api' && <ApiEngine aiConfig={aiConfig} setAiConfig={setAiConfig} onSave={saveAiConfig} onTest={testAiConfig} onDiscoverModels={discoverAiModels} />}
                                 {settingsTab === 'sso' && <SsoManager configs={ssoConfigs} token={token} fetchConfigs={fetchSsoConfigs} onBindingsChange={refreshCompetitionBindings} loadError={ssoConfigsLoadError} onRetry={fetchSsoConfigs} />}
                                 {settingsTab === 'email' && <EmailServiceManager />}
-                                {settingsTab === 'support' && canManageSupport && <SupportChatManager canConfigure={isAdmin} onOpenAiSettings={() => setSettingsTab('api')} />}
+                                {settingsTab === 'support' && canManageSupport && <SupportChatManager active={settingsActive} canConfigure={isAdmin} onOpenAiSettings={() => setSettingsTab('api')} />}
                                 {settingsTab === 'users' && (
                                     <UserManager
                                         users={users}
@@ -988,7 +1026,9 @@ export default function Dashboard({ auth, site, appearance }) {
                                 </Suspense>
                             </section>
                         </div>
-                    ) : (
+                    )}</div>
+                    <div className="dashboard-view dashboard-view--workbench" data-active={!settingsActive}
+                        aria-hidden={settingsActive ? true : undefined} inert={settingsActive}>
                         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-28 w-full relative z-10">
 
                             <AnnouncementBanner
@@ -1143,7 +1183,7 @@ export default function Dashboard({ auth, site, appearance }) {
                                 )}
                             </div>
                         </main>
-                    )}
+                    </div>
                 </div>
 
                 {shouldShowFooter('dashboard') && (

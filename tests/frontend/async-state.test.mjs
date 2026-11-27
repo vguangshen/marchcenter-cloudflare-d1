@@ -902,6 +902,33 @@ test('system tools opens creation by keyboard and preserves the separate card ed
     } finally { await page.close(); }
 });
 
+test('the settings switch keeps its button and focus through repeated page changes', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const trigger = page.getByRole('button', { name: '系统工具', exact: true });
+        const exit = page.getByRole('button', { name: '退出设置', exact: true });
+        const open = page.getByRole('button', { name: '系统设置', exact: true });
+        const workbench = page.locator('.dashboard-view--workbench');
+        const settings = page.locator('.dashboard-view--settings');
+        const originalButton = await trigger.elementHandle();
+
+        for (let round = 0; round < 2; round++) {
+            await trigger.press('Enter');
+            await open.press('Enter');
+            assert.equal(await exit.evaluate((button, original) => button === original && document.activeElement === button, originalButton), true);
+            assert.equal(await workbench.evaluate(element => element.inert), true);
+            assert.equal(await settings.evaluate(element => element.inert), false);
+
+            await exit.press('Enter');
+            assert.equal(await trigger.evaluate((button, original) => button === original && document.activeElement === button, originalButton), true);
+            assert.equal(await workbench.evaluate(element => element.inert), false);
+            assert.equal(await settings.evaluate(element => element.inert), true);
+        }
+        await settings.locator('.settings-shell').waitFor({ state: 'detached' });
+    } finally { await page.close(); }
+});
+
 test('sending a page of gifts produces one distinct, compact gift per recipient', async () => {
     const page = await browser.newPage();
     try {

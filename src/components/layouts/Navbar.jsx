@@ -53,7 +53,7 @@ function NavButton({
     );
 }
 
-function SystemToolsMenu({ onSettings, canEdit, editing, onEdit, onAddContest, onAddAgent }) {
+function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, editing, onEdit, onAddContest, onAddAgent }) {
     const menuId = useId();
     const creationId = useId();
     const root = useRef(null);
@@ -64,6 +64,7 @@ function SystemToolsMenu({ onSettings, canEdit, editing, onEdit, onAddContest, o
     const [open, setOpen] = useState(false);
     const [creationOpen, setCreationOpen] = useState(false);
     const [placement, setPlacement] = useState({ offset: null, inline: true });
+    const label = settingsActive ? '退出设置' : '系统工具';
 
     const cancelLeave = () => clearTimeout(leaveTimer.current);
     const close = useCallback(() => {
@@ -106,7 +107,7 @@ function SystemToolsMenu({ onSettings, canEdit, editing, onEdit, onAddContest, o
 
     function finish(action, restoreFocus = false) {
         close();
-        if (restoreFocus) trigger.current?.focus();
+        if (restoreFocus) trigger.current?.focus({ preventScroll: true });
         action();
     }
 
@@ -130,13 +131,15 @@ function SystemToolsMenu({ onSettings, canEdit, editing, onEdit, onAddContest, o
         <div ref={root} className="nav-tools" data-inline={placement.inline} data-editing={canEdit && editing}
             style={placement.offset === null ? undefined : { '--nav-tools-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
             onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
-            <NavButton buttonRef={trigger} onClick={toggleMenu} icon={Settings} expanded={open} controls={menuId}
-                className="nav-btn--accent-icon nav-tools__trigger" ariaLabel="系统工具" title="系统工具"
+            <NavButton buttonRef={trigger} onClick={settingsActive ? onExitSettings : toggleMenu}
+                icon={settingsActive ? LayoutDashboard : Settings} iconKey={settingsActive ? 'exit-settings' : 'system-tools'}
+                pressed={settingsActive || undefined} expanded={settingsActive ? undefined : open} controls={settingsActive ? undefined : menuId}
+                className="nav-btn--accent-icon nav-tools__trigger" ariaLabel={label} title={label}
                 trailing={<ChevronDown className="nav-tools__caret" aria-hidden="true" />}>
-                系统工具
+                {label}
             </NavButton>
             <div id={menuId} role="group" aria-label="系统工具菜单" className="nav-tools__menu nav-tools__surface" data-open={open} inert={!open}>
-                <button type="button" className="nav-tools__row" onClick={() => finish(onSettings)}>
+                <button type="button" className="nav-tools__row" onClick={() => finish(onSettings, true)}>
                     <span className="nav-tools__icon" aria-hidden="true"><SlidersHorizontal /></span>
                     系统设置
                 </button>
@@ -388,14 +391,11 @@ const Navbar = ({
                             />
                         )}
 
-                        {canManageUsers && activePage === 'dashboard' && (
-                            <SystemToolsMenu onSettings={() => setActivePage('settings')} canEdit={isAdmin}
+                        {canManageUsers && (
+                            <SystemToolsMenu settingsActive={activePage === 'settings'} onSettings={() => setActivePage('settings')}
+                                onExitSettings={() => setActivePage('dashboard')} canEdit={isAdmin}
                                 editing={isCardEditMode} onEdit={() => setIsCardEditMode(value => !value)}
                                 onAddContest={onAdd} onAddAgent={onAddTaskApp} />
-                        )}
-
-                        {canManageUsers && activePage === 'settings' && (
-                            <NavButton onClick={() => setActivePage('dashboard')} variant="primary" icon={LayoutDashboard} keepLabel>退出设置</NavButton>
                         )}
 
                         {onOpenTickets && (

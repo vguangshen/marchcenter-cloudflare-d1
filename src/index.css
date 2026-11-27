@@ -661,6 +661,64 @@ body {
     }
 }
 
+.dashboard-view-stage {
+    position: relative;
+    overflow: clip;
+}
+
+.dashboard-view {
+    --dashboard-slide-distance: 100%;
+    position: absolute;
+    inset: var(--dashboard-outgoing-top, 0px) 0 auto;
+    min-width: 0;
+    transform: translateX(var(--dashboard-slide-distance));
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        transform 420ms cubic-bezier(.24, .72, .25, 1),
+        opacity 360ms ease,
+        visibility 0s linear 420ms;
+}
+
+.dashboard-view--settings {
+    --dashboard-slide-distance: -100%;
+}
+
+.dashboard-view[data-active="true"] {
+    position: relative;
+    inset: auto;
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+}
+
+.settings-rail-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 4px 6px 12px;
+    border-bottom: 1px solid rgb(148 163 184 / .22);
+}
+
+.settings-rail-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 11px;
+    background: rgb(var(--system-accent-rgb, 99 102 241) / .13);
+    color: var(--mc-color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-view { transition: none; }
+}
+
 /* 设置后台的深色层级。旧页面中仍有不少写死的浅色 Tailwind 工具类，
    统一在 settings-shell 内校正，避免影响登录页和竞赛卡片原有主题。 */
 
@@ -5298,6 +5356,7 @@ body {
   color: var(--nav-on-fg);
 }
 .nav-tools__trigger[aria-expanded="true"] .nav-tools__caret { transform: rotate(-180deg); }
+.nav-tools__trigger[aria-pressed="true"] .nav-tools__caret { visibility: hidden; }
 .nav-tools__surface {
   display: grid;
   gap: 3px;
