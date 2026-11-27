@@ -64,8 +64,9 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     const creationLeaveTimer = useRef(null);
     const [menuMode, setMenuMode] = useState(null);
     const [creationOpen, setCreationOpen] = useState(false);
-    const [placement, setPlacement] = useState({ offset: null, inline: true });
+    const [placement, setPlacement] = useState({ side: 'below', offset: 0 });
     const label = settingsActive ? '退出设置' : '系统工具';
+    const editLabel = editing ? '完成编辑' : '编辑';
     const canOpenMenu = canEdit && !settingsActive;
     const open = canOpenMenu && menuMode !== null;
 
@@ -76,16 +77,20 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
         setMenuMode(null);
     }, []);
 
-    const placeMenu = useCallback(() => {
+    const placeFlyout = useCallback(() => {
         const anchor = root.current?.getBoundingClientRect();
         if (!anchor) return;
         const viewport = document.documentElement.clientWidth;
-        const inline = viewport < 460 || window.matchMedia('(hover: none)').matches;
         const gutter = 12;
-        const mainWidth = 168;
-        const extraWidth = inline ? 0 : 180 + 8;
-        const left = Math.max(gutter, Math.min(anchor.right - mainWidth, viewport - gutter - mainWidth - extraWidth));
-        setPlacement({ offset: left - anchor.left, inline });
+        const flyoutWidth = Math.min(180, viewport - gutter * 2);
+        const room = flyoutWidth + gutter + 8;
+        let side = 'below';
+        if (!window.matchMedia('(hover: none)').matches) {
+            if (viewport - anchor.right >= room) side = 'right';
+            else if (anchor.left >= room) side = 'left';
+        }
+        const left = Math.min(Math.max(anchor.left, gutter), viewport - gutter - flyoutWidth);
+        setPlacement({ side, offset: side === 'below' ? left - anchor.left : 0 });
     }, []);
 
     useEffect(() => () => {
@@ -98,16 +103,16 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
             if (!root.current?.contains(event.target)) close();
         };
         window.addEventListener('pointerdown', outside, true);
-        window.addEventListener('resize', placeMenu);
+        window.addEventListener('resize', placeFlyout);
         return () => {
             window.removeEventListener('pointerdown', outside, true);
-            window.removeEventListener('resize', placeMenu);
+            window.removeEventListener('resize', placeFlyout);
         };
-    }, [close, open, placeMenu]);
+    }, [close, open, placeFlyout]);
 
     function revealMenu(mode) {
         clearTimeout(menuLeaveTimer.current);
-        placeMenu();
+        placeFlyout();
         setMenuMode(mode);
     }
 
@@ -140,9 +145,9 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     }
 
     return (
-        <div ref={root} className="nav-tools" data-inline={placement.inline} data-can-edit={canEdit}
+        <div ref={root} className="nav-tools" data-flyout={placement.side} data-can-edit={canEdit}
             data-settings={settingsActive} data-open={open} data-editing={canEdit && editing}
-            style={placement.offset === null ? undefined : { '--nav-tools-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
+            style={{ '--nav-tools-flyout-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
             onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}
             onPointerEnter={event => {
                 if (!canOpenMenu || event.pointerType !== 'mouse') return;
@@ -186,9 +191,10 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
                                 requestAnimationFrame(() => firstCreation.current?.focus());
                             }}>
                             <div className="nav-tools__split" data-open={creationOpen}>
-                                <button ref={editButton} type="button" className="nav-tools__row" aria-pressed={editing} onClick={() => finish(onEdit)}>
+                                <button ref={editButton} type="button" className="nav-tools__row" aria-pressed={editing} aria-label={editLabel} onClick={() => finish(onEdit)}>
                                     <span className="nav-tools__icon" aria-hidden="true">{editing ? <Check /> : <Pencil />}</span>
-                                    {editing ? '完成编辑' : '编辑'}
+                                    <span className={editing ? 'nav-tools__edit-full-label' : undefined}>{editLabel}</span>
+                                    {editing && <span className="nav-tools__edit-short-label" aria-hidden="true">完成</span>}
                                 </button>
                                 <button ref={disclosure} type="button" className="nav-tools__disclosure" aria-label="展开创建选项"
                                     aria-expanded={creationOpen} aria-controls={creationId} onClick={() => setCreationOpen(value => !value)}>
