@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-    LogOut, Search, LayoutDashboard, Settings, SlidersHorizontal,
+    LogOut, Search, LayoutDashboard, Settings,
     Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy, ChevronDown, ChevronRight, SquarePlus
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
@@ -27,7 +27,7 @@ const QINGMING_ORNAMENTS = [{ icon: '🪁', left: '10%', speed: '3s', length: 25
 function NavButton({
     icon: Icon, iconKey, iconAfter = false, iconOnly = false, keepLabel = false,
     variant = 'chip', pressed, title, ariaLabel, badge, className = '', iconClassName = '',
-    buttonRef, expanded, controls, trailing, onClick, children
+    buttonRef, onClick, children
 }) {
     const icon = Icon && (
         <span key={iconKey} className={`nav-btn__icon ${iconKey ? 'nav-btn__icon--swap' : ''} ${iconClassName}`} aria-hidden="true"><Icon /></span>
@@ -40,14 +40,11 @@ function NavButton({
             title={title}
             aria-label={ariaLabel || (iconOnly ? title : undefined)}
             aria-pressed={pressed}
-            aria-expanded={expanded}
-            aria-controls={controls}
             className={`nav-btn nav-btn--${variant} ${iconOnly ? 'nav-btn--icon-only' : ''} ${keepLabel ? 'nav-btn--keep-label' : ''} ${className}`}
         >
             {!iconAfter && icon}
             {!iconOnly && <span className="nav-btn__label">{children}</span>}
             {iconAfter && icon}
-            {trailing}
             {badge}
         </button>
     );
@@ -58,19 +55,25 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     const creationId = useId();
     const root = useRef(null);
     const trigger = useRef(null);
+    const menuToggle = useRef(null);
+    const menu = useRef(null);
+    const editButton = useRef(null);
     const disclosure = useRef(null);
     const firstCreation = useRef(null);
-    const leaveTimer = useRef(null);
-    const [open, setOpen] = useState(false);
+    const menuLeaveTimer = useRef(null);
+    const creationLeaveTimer = useRef(null);
+    const [menuMode, setMenuMode] = useState(null);
     const [creationOpen, setCreationOpen] = useState(false);
     const [placement, setPlacement] = useState({ offset: null, inline: true });
     const label = settingsActive ? '退出设置' : '系统工具';
+    const canOpenMenu = canEdit && !settingsActive;
+    const open = canOpenMenu && menuMode !== null;
 
-    const cancelLeave = () => clearTimeout(leaveTimer.current);
     const close = useCallback(() => {
-        clearTimeout(leaveTimer.current);
+        clearTimeout(menuLeaveTimer.current);
+        clearTimeout(creationLeaveTimer.current);
         setCreationOpen(false);
-        setOpen(false);
+        setMenuMode(null);
     }, []);
 
     const placeMenu = useCallback(() => {
@@ -80,12 +83,15 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
         const inline = viewport < 460 || window.matchMedia('(hover: none)').matches;
         const gutter = 12;
         const mainWidth = 168;
-        const extraWidth = canEdit && !inline ? 180 + 8 : 0;
+        const extraWidth = inline ? 0 : 180 + 8;
         const left = Math.max(gutter, Math.min(anchor.right - mainWidth, viewport - gutter - mainWidth - extraWidth));
         setPlacement({ offset: left - anchor.left, inline });
-    }, [canEdit]);
+    }, []);
 
-    useEffect(() => () => clearTimeout(leaveTimer.current), []);
+    useEffect(() => () => {
+        clearTimeout(menuLeaveTimer.current);
+        clearTimeout(creationLeaveTimer.current);
+    }, []);
     useEffect(() => {
         if (!open) return undefined;
         const outside = event => {
@@ -99,92 +105,111 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
         };
     }, [close, open, placeMenu]);
 
-    function toggleMenu() {
-        if (open) return close();
+    function revealMenu(mode) {
+        clearTimeout(menuLeaveTimer.current);
         placeMenu();
-        setOpen(true);
+        setMenuMode(mode);
     }
 
-    function finish(action, restoreFocus = false) {
+    function finish(action) {
         close();
-        if (restoreFocus) trigger.current?.focus({ preventScroll: true });
+        trigger.current?.focus({ preventScroll: true });
         action();
     }
 
     function onMenuKey(event) {
+        if (canOpenMenu && event.key === 'ArrowDown' && (event.target === trigger.current || event.target === menuToggle.current)) {
+            event.preventDefault();
+            revealMenu('explicit');
+            requestAnimationFrame(() => editButton.current?.focus());
+            return;
+        }
         if (!open || (event.key !== 'Escape' && event.key !== 'ArrowLeft')) return;
         if (creationOpen) {
             event.preventDefault();
             event.stopPropagation();
-            cancelLeave();
+            clearTimeout(creationLeaveTimer.current);
             setCreationOpen(false);
             disclosure.current?.focus();
         } else if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();
             close();
-            trigger.current?.focus();
+            menuToggle.current?.focus();
         }
     }
 
     return (
-        <div ref={root} className="nav-tools" data-inline={placement.inline} data-editing={canEdit && editing}
+        <div ref={root} className="nav-tools" data-inline={placement.inline} data-can-edit={canEdit}
+            data-settings={settingsActive} data-open={open} data-editing={canEdit && editing}
             style={placement.offset === null ? undefined : { '--nav-tools-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
-            onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
-            <NavButton buttonRef={trigger} onClick={settingsActive ? onExitSettings : toggleMenu}
+            onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}
+            onPointerEnter={event => {
+                if (!canOpenMenu || event.pointerType !== 'mouse') return;
+                clearTimeout(menuLeaveTimer.current);
+                if (!open) revealMenu('hover');
+            }}
+            onPointerLeave={event => {
+                if (event.pointerType === 'mouse' && menuMode === 'hover' && !menu.current?.contains(document.activeElement)) {
+                    menuLeaveTimer.current = setTimeout(close, 160);
+                }
+            }}>
+            <NavButton buttonRef={trigger} onClick={() => finish(settingsActive ? onExitSettings : onSettings)}
                 icon={settingsActive ? LayoutDashboard : Settings} iconKey={settingsActive ? 'exit-settings' : 'system-tools'}
-                pressed={settingsActive || undefined} expanded={settingsActive ? undefined : open} controls={settingsActive ? undefined : menuId}
-                className="nav-btn--accent-icon nav-tools__trigger" ariaLabel={label} title={label}
-                trailing={<ChevronDown className="nav-tools__caret" aria-hidden="true" />}>
+                pressed={settingsActive || undefined} className="nav-btn--accent-icon nav-tools__trigger" ariaLabel={label} title={label}>
                 {label}
             </NavButton>
-            <div id={menuId} role="group" aria-label="系统工具菜单" className="nav-tools__menu nav-tools__surface" data-open={open} inert={!open}>
-                <button type="button" className="nav-tools__row" onClick={() => finish(onSettings, true)}>
-                    <span className="nav-tools__icon" aria-hidden="true"><SlidersHorizontal /></span>
-                    系统设置
-                </button>
-                {canEdit && (
-                    <div className="nav-tools__edit"
-                        onPointerEnter={event => {
-                            if (event.pointerType !== 'mouse' || !open) return;
-                            cancelLeave();
-                            setCreationOpen(true);
-                        }}
-                        onPointerLeave={event => {
-                            if (event.pointerType !== 'mouse' || event.currentTarget.contains(document.activeElement)) return;
-                            leaveTimer.current = setTimeout(() => setCreationOpen(false), 150);
-                        }}
-                        onKeyDown={event => {
-                            if (event.key !== 'ArrowRight' || event.target.closest('.nav-tools__flyout')) return;
-                            event.preventDefault();
-                            cancelLeave();
-                            setCreationOpen(true);
-                            requestAnimationFrame(() => firstCreation.current?.focus());
-                        }}>
-                        <div className="nav-tools__split" data-open={creationOpen}>
-                            <button type="button" className="nav-tools__row" aria-pressed={editing} onClick={() => finish(onEdit, true)}>
-                                <span className="nav-tools__icon" aria-hidden="true">{editing ? <Check /> : <Pencil />}</span>
-                                {editing ? '完成编辑' : '编辑'}
-                            </button>
-                            <button ref={disclosure} type="button" className="nav-tools__disclosure" aria-label="展开创建选项"
-                                aria-expanded={creationOpen} aria-controls={creationId} onClick={() => setCreationOpen(value => !value)}>
-                                <ChevronRight aria-hidden="true" />
-                            </button>
-                        </div>
-                        <div id={creationId} role="group" aria-label="创建选项" className="nav-tools__flyout nav-tools__surface"
-                            data-open={open && creationOpen} inert={!open || !creationOpen}>
-                            <button ref={firstCreation} type="button" className="nav-tools__row" onClick={() => finish(onAddContest, true)}>
-                                <span className="nav-tools__icon" aria-hidden="true"><SquarePlus /></span>
-                                创建竞赛卡片
-                            </button>
-                            <button type="button" className="nav-tools__row" onClick={() => finish(onAddAgent, true)}>
-                                <span className="nav-tools__icon nav-tools__icon--agent" aria-hidden="true"><Bot /></span>
-                                创建智能体
-                            </button>
+            {canOpenMenu && (
+                <>
+                    <button ref={menuToggle} type="button" className="nav-tools__menu-toggle" aria-label="展开编辑选项"
+                        aria-expanded={open} aria-controls={menuId} title="编辑选项"
+                        onClick={() => { if (menuMode === 'explicit') close(); else revealMenu('explicit'); }}>
+                        <ChevronDown className="nav-tools__caret" aria-hidden="true" />
+                    </button>
+                    <div ref={menu} id={menuId} role="group" aria-label="系统工具菜单" className="nav-tools__menu nav-tools__surface"
+                        data-open={open} aria-hidden={!open || undefined} inert={!open}>
+                        <div className="nav-tools__edit"
+                            onPointerEnter={event => {
+                                if (event.pointerType !== 'mouse' || !open) return;
+                                clearTimeout(creationLeaveTimer.current);
+                                setCreationOpen(true);
+                            }}
+                            onPointerLeave={event => {
+                                if (event.pointerType !== 'mouse' || event.currentTarget.contains(document.activeElement)) return;
+                                creationLeaveTimer.current = setTimeout(() => setCreationOpen(false), 150);
+                            }}
+                            onKeyDown={event => {
+                                if (event.key !== 'ArrowRight' || event.target.closest('.nav-tools__flyout')) return;
+                                event.preventDefault();
+                                clearTimeout(creationLeaveTimer.current);
+                                setCreationOpen(true);
+                                requestAnimationFrame(() => firstCreation.current?.focus());
+                            }}>
+                            <div className="nav-tools__split" data-open={creationOpen}>
+                                <button ref={editButton} type="button" className="nav-tools__row" aria-pressed={editing} onClick={() => finish(onEdit)}>
+                                    <span className="nav-tools__icon" aria-hidden="true">{editing ? <Check /> : <Pencil />}</span>
+                                    {editing ? '完成编辑' : '编辑'}
+                                </button>
+                                <button ref={disclosure} type="button" className="nav-tools__disclosure" aria-label="展开创建选项"
+                                    aria-expanded={creationOpen} aria-controls={creationId} onClick={() => setCreationOpen(value => !value)}>
+                                    <ChevronRight aria-hidden="true" />
+                                </button>
+                            </div>
+                            <div id={creationId} role="group" aria-label="创建选项" className="nav-tools__flyout nav-tools__surface"
+                                data-open={open && creationOpen} inert={!open || !creationOpen}>
+                                <button ref={firstCreation} type="button" className="nav-tools__row" onClick={() => finish(onAddContest)}>
+                                    <span className="nav-tools__icon" aria-hidden="true"><SquarePlus /></span>
+                                    创建竞赛卡片
+                                </button>
+                                <button type="button" className="nav-tools__row" onClick={() => finish(onAddAgent)}>
+                                    <span className="nav-tools__icon nav-tools__icon--agent" aria-hidden="true"><Bot /></span>
+                                    创建智能体
+                                </button>
+                            </div>
                         </div>
                     </div>
-                )}
-            </div>
+                </>
+            )}
         </div>
     );
 }

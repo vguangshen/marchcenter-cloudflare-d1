@@ -500,7 +500,7 @@ test('saving the card binding updates maintenance on the normal catalog refresh'
         await page.goto(`${origin}/?mode=maintenance`);
         const title = page.getByRole('heading', { name: '已绑定实训', exact: true });
         const card = page.locator('.contest-card').filter({ has: title });
-        const toolsTrigger = page.getByRole('button', { name: '系统工具', exact: true });
+        const toolsTrigger = page.getByRole('button', { name: '展开编辑选项', exact: true });
         const toolsMenu = page.getByRole('group', { name: '系统工具菜单', exact: true });
         await title.waitFor();
         await toolsTrigger.click();
@@ -875,11 +875,14 @@ test('system tools opens creation by keyboard and preserves the separate card ed
     try {
         await page.goto(`${origin}/?mode=maintenance`);
         const trigger = page.getByRole('button', { name: '系统工具', exact: true });
+        const menuToggle = page.getByRole('button', { name: '展开编辑选项', exact: true });
         const tools = page.locator('.nav-tools__menu');
         const edit = tools.getByRole('button', { name: '编辑', exact: true });
         const disclosure = tools.getByRole('button', { name: '展开创建选项' });
-        await trigger.press('Enter');
-        assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+        await trigger.press('ArrowDown');
+        await page.waitForFunction(() => document.activeElement?.textContent.trim() === '编辑');
+        assert.equal(await menuToggle.getAttribute('aria-expanded'), 'true');
+        assert.equal(await tools.getByRole('button', { name: '系统设置', exact: true }).count(), 0);
         await edit.press('ArrowRight');
         const contest = tools.getByRole('button', { name: '创建竞赛卡片', exact: true });
         await page.waitForFunction(() => document.activeElement?.textContent.trim() === '创建竞赛卡片');
@@ -888,16 +891,16 @@ test('system tools opens creation by keyboard and preserves the separate card ed
         await contest.press('Escape');
         assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
         await disclosure.press('Escape');
-        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+        assert.equal(await menuToggle.getAttribute('aria-expanded'), 'false');
 
-        await trigger.click();
+        await menuToggle.press('Enter');
         await edit.click();
-        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
-        await trigger.click();
+        assert.equal(await menuToggle.getAttribute('aria-expanded'), 'false');
+        await menuToggle.press('Enter');
         const done = tools.getByRole('button', { name: '完成编辑', exact: true });
         assert.equal(await done.getAttribute('aria-pressed'), 'true');
         await done.click();
-        await trigger.click();
+        await menuToggle.press('Enter');
         assert.equal(await edit.getAttribute('aria-pressed'), 'false');
     } finally { await page.close(); }
 });
@@ -908,14 +911,12 @@ test('the settings switch keeps its button and focus through repeated page chang
         await page.goto(`${origin}/?mode=maintenance`);
         const trigger = page.getByRole('button', { name: '系统工具', exact: true });
         const exit = page.getByRole('button', { name: '退出设置', exact: true });
-        const open = page.getByRole('button', { name: '系统设置', exact: true });
         const workbench = page.locator('.dashboard-view--workbench');
         const settings = page.locator('.dashboard-view--settings');
         const originalButton = await trigger.elementHandle();
 
         for (let round = 0; round < 2; round++) {
             await trigger.press('Enter');
-            await open.press('Enter');
             assert.equal(await exit.evaluate((button, original) => button === original && document.activeElement === button, originalButton), true);
             assert.equal(await workbench.evaluate(element => element.inert), true);
             assert.equal(await settings.evaluate(element => element.inert), false);
@@ -941,7 +942,6 @@ test('sending a page of gifts produces one distinct, compact gift per recipient'
                 : previous(method, url, ...args);
         });
         await page.getByRole('button', { name: '系统工具' }).click();
-        await page.getByRole('button', { name: '系统设置', exact: true }).click();
         await page.getByRole('button', { name: '赠送礼物' }).click();
         await page.getByRole('button', { name: 'student-50', exact: true }).waitFor();
         await page.getByPlaceholder(/礼物名称/).fill('Fixture gift');
@@ -963,7 +963,6 @@ test('site settings keeps a copy draft while appearance is saved and preserves b
             .map(call => call.body));
         await page.goto(`${origin}/?mode=maintenance`);
         await page.getByRole('button', { name: '系统工具', exact: true }).click();
-        await page.getByRole('button', { name: '系统设置', exact: true }).click();
 
         const sidebar = page.locator('.settings-shell > aside');
         await sidebar.getByRole('button', { name: '站点设置', exact: true }).click();
@@ -1025,7 +1024,6 @@ test('swiping theme cards saves once and queued choices keep newer appearance se
             .theme-carousel-art { width: 100%; height: 100px; pointer-events: none; }
         ` });
         await page.getByRole('button', { name: '系统工具', exact: true }).click();
-        await page.getByRole('button', { name: '系统设置', exact: true }).click();
         await page.getByRole('button', { name: '站点设置', exact: true }).click();
         await page.getByRole('button', { name: '界面外观', exact: true }).click();
         await page.getByRole('button', { name: /手动选择主色调/ }).click();
