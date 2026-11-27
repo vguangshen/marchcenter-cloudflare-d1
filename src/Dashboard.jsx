@@ -56,6 +56,7 @@ const ProfileModal = lazy(() => import('./components/modals/ProfileModal'));
 const TicketCenter = lazy(() => import('./components/tickets/TicketCenter'));
 const ContestCard = lazy(() => import('./components/cards/ContestCard'));
 const AgentTaskCard = lazy(() => import('./components/cards/AgentTaskCard'));
+const CATEGORY_FLIP_ID = 'category-flip';
 const CardLoadingNotice = () => <div className="min-h-[190px] rounded-3xl border border-slate-200/60 bg-white/60 p-5 dark:border-slate-700 dark:bg-slate-900/60" role="status" aria-live="polite"><Loader2 className="mx-auto mt-10 h-5 w-5 animate-spin text-slate-400" /><span className="sr-only">正在加载卡片…</span></div>;
 export default function Dashboard({ auth, site, appearance }) {
     const {
@@ -158,7 +159,7 @@ export default function Dashboard({ auth, site, appearance }) {
     const [searchTerm, setSearchTerm] = useState('');
     // 每次进入默认采用连续排列；用户主动点击后，本次页面会话才按分类分行。
     const [categoryArrangeEnabled, setCategoryArrangeEnabled] = useState(false);
-    const categoryTransitionRef = useRef(null);
+    const categoryGridRef = useRef(null);
     const [settingsTab, setSettingsTab] = useState(() => currentUser?.role === 'super_admin' ? 'api' : 'users');
     const [usersLoading, setUsersLoading] = useState(false);
 
@@ -551,30 +552,53 @@ export default function Dashboard({ auth, site, appearance }) {
     }, [competitionLinks]);
 
     const showCategoryArrange = links.length > 1;
+    // Category switching is a FLIP glide on the live cards rather than a
+    // full-page View Transition: a View Transition freezes the page into a
+    // snapshot that swallows clicks until it ends, so a quick second click
+    // was lost. Here the page stays interactive and a second click reverses
+    // from wherever each card is currently drawn.
     const toggleCategoryArrange = useCallback(() => {
         const updateLayout = () => setCategoryArrangeEnabled(enabled => !enabled);
-        if (typeof document.startViewTransition !== 'function' || prefersReducedMotion()) {
+        const grid = categoryGridRef.current;
+        if (!grid || prefersReducedMotion() || typeof grid.animate !== 'function') {
             updateLayout();
             return;
         }
-
-        categoryTransitionRef.current?.skipTransition?.();
-        const transition = document.startViewTransition(() => {
-            // The browser must see the old and new card rectangles in the same
-            // transition frame so cards can glide across re-parented rows.
-            flushSync(updateLayout);
-        });
-        categoryTransitionRef.current = transition;
-        const clearTransition = () => {
-            if (categoryTransitionRef.current === transition) categoryTransitionRef.current = null;
-        };
-        transition.finished.then(clearTransition, clearTransition);
+        const cardsBefore = [...grid.querySelectorAll('[data-flip-id]')];
+        const before = new Map(cardsBefore.map(card => [card.dataset.flipId, card.getBoundingClientRect()]));
+        for (const card of cardsBefore) {
+            for (const animation of card.getAnimations()) if (animation.id === CATEGORY_FLIP_ID) animation.cancel();
+        }
+        flushSync(updateLayout);
+        for (const card of grid.querySelectorAll('[data-flip-id]')) {
+            const previous = before.get(card.dataset.flipId);
+            if (!previous) continue;
+            const next = card.getBoundingClientRect();
+            const dx = previous.left - next.left;
+            const dy = previous.top - next.top;
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+            // The independent `translate` property leaves the side-panel
+            // `transform` offset on these cards untouched.
+            const animation = card.animate(
+                [{ translate: `${dx}px ${dy}px` }, { translate: '0px 0px' }],
+                { duration: 560, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+            );
+            animation.id = CATEGORY_FLIP_ID;
+            card.classList.add('category-flip-moving');
+            const settle = () => {
+                const stillMoving = card.getAnimations().some(other => other.id === CATEGORY_FLIP_ID && other.playState === 'running');
+                if (!stillMoving) card.classList.remove('category-flip-moving');
+            };
+            animation.finished.then(settle, settle);
+        }
     }, []);
-    const visibleLinkGroups = useMemo(() => {
-        if (categoryArrangeEnabled) return groupedLinks;
-        return competitionLinks.length
-            ? [['all', { title: '', items: competitionLinks }]]
-            : [];
+    // One flat, keyed list in both modes, so switching only reorders the
+    // existing card components instead of unmounting and rebuilding them.
+    const orderedCompetitionCards = useMemo(() => {
+        if (!categoryArrangeEnabled) return competitionLinks.map((link, index) => ({ link, section: 0, index, breakBefore: null }));
+        return groupedLinks.flatMap(([category, group], section) => group.items.map((link, index) => ({
+            link, section, index, breakBefore: section > 0 && index === 0 ? category : null
+        })));
     }, [categoryArrangeEnabled, competitionLinks, groupedLinks]);
 
     const agentPlatformGroups = useMemo(() => {
@@ -1003,26 +1027,25 @@ export default function Dashboard({ auth, site, appearance }) {
                                     </div>
                                 ) : linksPhase !== 'loading' && (
                                     <div
+                                        ref={categoryGridRef}
                                         className={`col-start-1 row-start-1 competition-flow-grid ${categoryArrangeEnabled ? 'competition-flow-grid--categorized' : 'competition-flow-grid--flat'} ${linksPhase === 'revealing' ? 'competition-content-reveal' : ''}`}
                                         onAnimationEnd={(event) => {
                                             if (event.target === event.currentTarget && event.animationName === 'competition-content-reveal') completeLinksReveal();
                                         }}
                                     >
-                                        {visibleLinkGroups.length === 0 ? (
+                                        {orderedCompetitionCards.length === 0 ? (
                                             <div className="flex min-h-[300px] items-center justify-center rounded-[2rem] border border-dashed border-slate-300 bg-white/30 text-sm font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-900/30">暂无可显示的竞赛卡片</div>
-                                        ) : visibleLinkGroups.map(([category, group], sectionIndex) => (
-                                            <section key={category} className={linksPhase === 'revealing' ? 'competition-section-reveal' : ''} style={linksPhase === 'revealing' ? { animationDelay: `${Math.min(sectionIndex * 90, 270)}ms` } : undefined}>
-                                                <div className="competition-flow-items grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                                    {group.items.map((link, cardIndex) => (
+                                        ) : (
+                                            <div className="competition-flow-items grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                                {orderedCompetitionCards.map(({ link, section, index, breakBefore }) => (
+                                                    <React.Fragment key={link.id}>
+                                                        {breakBefore && <div className="competition-category-break" aria-hidden="true" />}
                                                         <div
-                                                            key={link.id}
+                                                            data-flip-id={link.id}
                                                             className={`competition-flow-card ${linksPhase === 'revealing' ? 'competition-card-reveal' : ''}`}
-                                                            style={{
-                                                                viewTransitionName: `competition-card-${link.id}`,
-                                                                ...(linksPhase === 'revealing'
-                                                                    ? { animationDelay: `${Math.min(100 + sectionIndex * 90 + cardIndex * 65, 520)}ms` }
-                                                                    : {})
-                                                            }}
+                                                            style={linksPhase === 'revealing'
+                                                                ? { animationDelay: `${Math.min(100 + section * 90 + index * 65, 520)}ms` }
+                                                                : undefined}
                                                         >
                                                             <div className="competition-card-category" title={link.category || '未分类'}>
                                                                 <span>{link.category || '未分类'}</span>
@@ -1058,10 +1081,10 @@ export default function Dashboard({ auth, site, appearance }) {
                                                                 />
                                                             </Suspense>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </section>
-                                        ))}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

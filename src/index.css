@@ -865,35 +865,17 @@ body {
     align-items: start;
 }
 
-.competition-flow-grid--flat {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.5rem;
-}
-
-.competition-flow-grid--flat > section,
-.competition-flow-grid--flat .competition-flow-items {
-    display: contents;
-}
-
-.competition-flow-grid--categorized {
-    display: flex;
-    flex-direction: column;
-    gap: 2.25rem;
-}
-
-.competition-flow-grid--categorized > section {
-    display: block;
-    min-width: 0;
-    width: 100%;
-}
-
-.competition-flow-grid--categorized .competition-flow-items {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+/* Flat and categorized layouts share one grid of keyed cards; categorized
+   mode only reorders them and starts each category on a new row with a
+   full-width break, so toggling never re-parents (and rebuilds) a card. */
+.competition-flow-items {
     align-items: start;
     justify-items: start;
-    gap: 1.5rem;
+}
+
+.competition-category-break {
+    grid-column: 1 / -1;
+    height: 0;
 }
 
 .competition-flow-card {
@@ -941,53 +923,14 @@ body {
 /* A moving backdrop-filter surface is the source of Chromium's transient
    one-pixel edge seam. Keep the original matte fill during the 500ms movement
    and restore the live blur only after the card is stationary. */
-.competition-flow-card.manual-column-moving .contest-card-glass::before {
+.competition-flow-card.manual-column-moving .contest-card-glass::before,
+.competition-flow-card.category-flip-moving .contest-card-glass::before {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
 }
 
 .competition-flow-card > .manual-login-panel {
     z-index: 40;
-}
-
-/* Category switching uses the View Transitions API so each stable card moves
-   from its previous grid cell to the new category row, including re-parenting
-   between sections. The page itself stays still while cards follow a soft,
-   slightly springy spatial curve. */
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
-}
-
-::view-transition-group(*) {
-    animation-duration: 560ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-::view-transition-old(*),
-::view-transition-new(*) {
-    animation-duration: 320ms;
-    animation-timing-function: ease-out;
-}
-
-/* Keep the fixed dashboard navigation above card snapshots during any page
-   transition. Manual credential panels use their own CSS animation and do
-   not create a full-document transition snapshot. */
-::view-transition-group(root) {
-    z-index: 0;
-}
-
-::view-transition-group(dashboard-navbar) {
-    z-index: 100;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    ::view-transition-group(*),
-    ::view-transition-old(*),
-    ::view-transition-new(*) {
-        animation-duration: 1ms;
-    }
 }
 
 .competition-flow-card > :last-child {
@@ -1228,19 +1171,6 @@ body {
     grid-column: 1 / -1;
 }
 
-@media (min-width: 640px) {
-    .competition-flow-grid--flat,
-    .competition-flow-grid--categorized .competition-flow-items {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (min-width: 1024px) {
-    .competition-flow-grid--flat,
-    .competition-flow-grid--categorized .competition-flow-items {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-}
 /* MarchCenter horizontal sign-in card */
 .wallpaper-background-layer {
   overflow: hidden;
@@ -1640,7 +1570,6 @@ body {
 
 .dashboard-navbar {
     isolation: isolate;
-    view-transition-name: dashboard-navbar;
 }
 
 /* 深色导航面板接近不透明，关闭背景采样以避免其中的小动画触发大面积合成。 */
@@ -5167,4 +5096,234 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ticket-scrim, .ticket-center, .ticket-pane > *, .ticket-messages > li,
   .ticket-draft-file, .navbar-ticket-badge, .ticket-lightbox { animation-duration: 1ms !important; }
+}
+
+/* ── Navbar buttons ───────────────────────────────────────────────────────
+   One family for every navbar control. Colours come from variables so the
+   holiday navbars only swap a palette instead of restyling each button.
+   Press feedback is instant (80ms squeeze) and the release springs back,
+   so a click always feels answered even before anything else happens. */
+.dashboard-navbar {
+  --nav-accent: var(--system-accent-rgb, 99 102 241);
+  --nav-chip-bg: rgba(255, 255, 255, .6);
+  --nav-chip-bg-hover: rgba(255, 255, 255, .96);
+  --nav-chip-border: rgba(15, 23, 42, .07);
+  --nav-chip-fg: #475569;
+  --nav-chip-fg-hover: #0f172a;
+  --nav-chip-highlight: rgba(255, 255, 255, .85);
+  --nav-on-fg: rgb(var(--nav-accent));
+  --nav-divider: rgba(148, 163, 184, .35);
+}
+.dark .dashboard-navbar {
+  --nav-chip-bg: rgba(30, 41, 59, .6);
+  --nav-chip-bg-hover: rgba(51, 65, 85, .82);
+  --nav-chip-border: rgba(255, 255, 255, .07);
+  --nav-chip-fg: #cbd5e1;
+  --nav-chip-fg-hover: #fff;
+  --nav-chip-highlight: rgba(255, 255, 255, .05);
+  --nav-on-fg: color-mix(in srgb, rgb(var(--nav-accent)) 55%, white);
+  --nav-divider: rgba(71, 85, 105, .6);
+}
+.dashboard-navbar[data-immersive="lunar_new_year"] {
+  --nav-accent: 220 38 38; --nav-chip-bg: rgba(255, 255, 255, .7); --nav-chip-border: rgba(220, 38, 38, .16);
+  --nav-chip-fg: #b91c1c; --nav-chip-fg-hover: #7f1d1d; --nav-divider: rgba(248, 113, 113, .4); --nav-on-fg: #b91c1c;
+}
+.dashboard-navbar[data-immersive="halloween"] {
+  --nav-accent: 249 115 22; --nav-chip-bg: rgba(30, 27, 75, .55); --nav-chip-bg-hover: rgba(46, 16, 101, .8);
+  --nav-chip-border: rgba(168, 85, 247, .28); --nav-chip-fg: #d8b4fe; --nav-chip-fg-hover: #fdba74;
+  --nav-chip-highlight: rgba(255, 255, 255, .05); --nav-divider: rgba(126, 34, 206, .55); --nav-on-fg: #fdba74;
+}
+.dashboard-navbar[data-immersive="mid_autumn"] {
+  --nav-accent: 234 179 8; --nav-chip-bg: rgba(23, 37, 84, .55); --nav-chip-bg-hover: rgba(30, 58, 138, .8);
+  --nav-chip-border: rgba(96, 165, 250, .28); --nav-chip-fg: #bfdbfe; --nav-chip-fg-hover: #fef08a;
+  --nav-chip-highlight: rgba(255, 255, 255, .05); --nav-divider: rgba(59, 130, 246, .45); --nav-on-fg: #fef08a;
+}
+.dashboard-navbar[data-immersive="dragon_boat"] {
+  --nav-accent: 13 148 136; --nav-chip-border: rgba(13, 148, 136, .2); --nav-chip-fg: #0f766e; --nav-chip-fg-hover: #134e4a;
+  --nav-divider: rgba(45, 212, 191, .45); --nav-on-fg: #0f766e;
+}
+.dashboard-navbar[data-immersive="yuanxiao"] {
+  --nav-accent: 219 39 119; --nav-chip-border: rgba(219, 39, 119, .18); --nav-chip-fg: #be185d; --nav-chip-fg-hover: #831843;
+  --nav-divider: rgba(244, 114, 182, .45); --nav-on-fg: #be185d;
+}
+.dashboard-navbar[data-immersive="qingming"] {
+  --nav-accent: 71 85 105; --nav-chip-fg: #475569; --nav-on-fg: #334155;
+}
+
+.nav-btn {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 .8rem;
+  border: 1px solid var(--nav-chip-border);
+  border-radius: .8rem;
+  background: var(--nav-chip-bg);
+  color: var(--nav-chip-fg);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05), inset 0 1px 0 var(--nav-chip-highlight);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 200ms ease, color 200ms ease, border-color 200ms ease,
+    box-shadow 260ms ease, transform 420ms cubic-bezier(.34, 1.56, .64, 1);
+}
+.nav-btn:hover {
+  background: var(--nav-chip-bg-hover);
+  color: var(--nav-chip-fg-hover);
+  box-shadow: 0 8px 18px -8px rgba(15, 23, 42, .28), inset 0 1px 0 var(--nav-chip-highlight);
+  transform: translateY(-1px);
+}
+.nav-btn:active {
+  transform: translateY(0) scale(.94);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08), inset 0 1px 2px rgba(15, 23, 42, .06);
+  transition-duration: 120ms, 120ms, 120ms, 120ms, 80ms;
+  transition-timing-function: ease-out;
+}
+.nav-btn:focus-visible {
+  outline: 2px solid rgb(var(--nav-accent) / .65);
+  outline-offset: 2px;
+}
+
+.nav-btn__icon { display: inline-grid; place-items: center; }
+.nav-btn__icon svg { width: 15px; height: 15px; stroke-width: 2.2; }
+.nav-btn__icon--swap { animation: nav-icon-swap 420ms cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes nav-icon-swap {
+  from { opacity: 0; transform: rotate(-70deg) scale(.4); }
+  to { opacity: 1; transform: none; }
+}
+.nav-btn__icon--wiggle svg { animation: nav-wiggle 2.4s ease-in-out infinite; transform-origin: 30% 60%; }
+@keyframes nav-wiggle {
+  0%, 60%, 100% { transform: rotate(0); }
+  66% { transform: rotate(-14deg); }
+  74% { transform: rotate(12deg); }
+  82% { transform: rotate(-8deg); }
+  90% { transform: rotate(4deg); }
+}
+
+/* Toggle on: an accent wash, so "on" reads at a glance in every theme. */
+.nav-btn[aria-pressed="true"] {
+  border-color: rgb(var(--nav-accent) / .35);
+  background: rgb(var(--nav-accent) / .12);
+  color: var(--nav-on-fg);
+  box-shadow: inset 0 0 0 1px rgb(var(--nav-accent) / .08), 0 6px 16px -10px rgb(var(--nav-accent) / .6);
+}
+.nav-btn[aria-pressed="true"]:hover { background: rgb(var(--nav-accent) / .18); color: var(--nav-on-fg); }
+
+.nav-btn--tinted {
+  border-color: rgb(var(--nav-accent) / .16);
+  background: rgb(var(--nav-accent) / .09);
+  color: var(--nav-on-fg);
+}
+.nav-btn--tinted:hover { background: rgb(var(--nav-accent) / .16); color: var(--nav-on-fg); }
+
+.nav-btn--accent-icon .nav-btn__icon { color: var(--nav-on-fg); }
+
+.nav-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, rgb(var(--nav-accent)), rgb(var(--nav-accent) / .82));
+  color: #fff;
+  box-shadow: 0 8px 18px -8px rgb(var(--nav-accent) / .75), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+.nav-btn--primary:hover {
+  background: linear-gradient(135deg, rgb(var(--nav-accent)), rgb(var(--nav-accent) / .92));
+  color: #fff;
+  box-shadow: 0 12px 24px -10px rgb(var(--nav-accent) / .85), inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+.nav-btn--primary.nav-btn--violet { --nav-accent: 124 58 237; }
+
+.nav-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--nav-chip-fg);
+  opacity: .85;
+}
+.nav-btn--ghost:hover { opacity: 1; box-shadow: none; }
+
+.nav-btn--icon-only { width: 2.25rem; padding: 0; }
+
+.nav-btn--enter { animation: nav-btn-enter 380ms cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes nav-btn-enter {
+  from { opacity: 0; transform: translateX(10px) scale(.85); }
+}
+.nav-btn--pop { animation: nav-btn-pop 600ms cubic-bezier(.175, .885, .32, 1.275) both; }
+@keyframes nav-btn-pop {
+  0% { transform: scale(0); }
+  45% { transform: scale(1.18); }
+  75% { transform: scale(.94); }
+  100% { transform: scale(1); }
+}
+.nav-btn__ping {
+  position: absolute;
+  top: .45rem;
+  right: .45rem;
+  width: .45rem;
+  height: .45rem;
+  border-radius: 999px;
+  background: #ef4444;
+}
+.nav-btn__ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #f87171;
+  animation: nav-ping 1.2s cubic-bezier(0, 0, .2, 1) infinite;
+}
+
+@keyframes nav-ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+
+.nav-divider {
+  width: 1px;
+  height: 1.5rem;
+  margin: 0 .25rem;
+  flex-shrink: 0;
+  background: var(--nav-divider);
+}
+
+.nav-avatar {
+  position: relative;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, .92);
+  border-radius: 999px;
+  background: rgb(var(--nav-accent) / .14);
+  color: var(--nav-on-fg);
+  font-weight: 900;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, .2);
+  transition: transform 420ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 260ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.dark .nav-avatar { border-color: rgba(51, 65, 85, .9); }
+.nav-avatar:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 8px 18px -6px rgb(var(--nav-accent) / .5); }
+.nav-avatar:active { transform: scale(.92); transition-duration: 80ms; }
+.nav-avatar:focus-visible { outline: 2px solid rgb(var(--nav-accent) / .65); outline-offset: 2px; }
+
+/* Narrow screens: secondary buttons collapse to their icon. */
+@media (width < 1024px) {
+  .nav-btn:not(.nav-btn--keep-label) .nav-btn__label { display: none; }
+  .nav-btn:not(.nav-btn--keep-label):not(.nav-btn--icon-only) { width: 2.25rem; padding: 0; }
+}
+@media (width < 640px) {
+  .nav-btn--keep-label .nav-btn__label { display: none; }
+  .nav-btn--keep-label { width: 2.25rem; padding: 0; }
+  .dashboard-navbar-actions { gap: .35rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-btn, .nav-avatar { transition-duration: 1ms !important; }
+  .nav-btn__icon--swap, .nav-btn--enter, .nav-btn--pop { animation: none; }
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     LogOut, Plus, Search, LayoutDashboard, Settings,
-    Edit3, Check, Megaphone, LayoutGrid, Bot, LifeBuoy
+    Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
@@ -16,6 +16,39 @@ const MID_AUTUMN_ORNAMENTS = [{ icon: '🌕', left: '10%', speed: '4s', length: 
 const DRAGON_BOAT_ORNAMENTS = [{ icon: '🫔', left: '10%', speed: '4s', length: 20, size: 'text-2xl' }, { icon: '🥁', left: '25%', speed: '3s', length: 15, size: 'text-2xl' }, { icon: '🎐', left: '40%', speed: '5s', length: 25, size: 'text-2xl' }, { icon: '🌿', left: '55%', speed: '4s', length: 18, size: 'text-xl' }, { icon: '🫔', left: '70%', speed: '3.5s', length: 22, size: 'text-2xl' }, { icon: '🛶', left: '85%', speed: '2.5s', length: 12, size: 'text-2xl' }];
 const YUANXIAO_ORNAMENTS = [{ icon: '🍡', left: '10%', speed: '3s', length: 15, size: 'text-2xl' }, { icon: '🏮', left: '25%', speed: '4s', length: 20, size: 'text-3xl' }, { icon: '🐇', left: '40%', speed: '3.5s', length: 12, size: 'text-2xl' }, { icon: '🥣', left: '55%', speed: '5s', length: 18, size: 'text-2xl' }, { icon: '🧧', left: '70%', speed: '4s', length: 14, size: 'text-xl' }, { icon: '✨', left: '85%', speed: '2s', length: 25, size: 'text-lg' }];
 const QINGMING_ORNAMENTS = [{ icon: '🪁', left: '10%', speed: '3s', length: 25, size: 'text-2xl' }, { icon: '🌿', left: '25%', speed: '4s', length: 18, size: 'text-xl' }, { icon: '🐦', left: '40%', speed: '2.5s', length: 12, size: 'text-xl' }, { icon: '🌧️', left: '55%', speed: '5s', length: 20, size: 'text-2xl' }, { icon: '⛰️', left: '70%', speed: '0s', length: 15, size: 'text-xl' }, { icon: '🍃', left: '85%', speed: '3.5s', length: 10, size: 'text-lg' }];
+
+/**
+ * The one button used across the navbar. Variants share size, radius and
+ * motion: chip (glass), tinted (accent wash), primary (solid accent) and
+ * ghost (text). `pressed` makes it a toggle; `iconKey` replays the icon pop
+ * when a toggle swaps its icon. Labels collapse to icons on narrow screens
+ * unless `keepLabel` is set.
+ */
+function NavButton({
+    icon: Icon, iconKey, iconAfter = false, iconOnly = false, keepLabel = false,
+    variant = 'chip', pressed, title, ariaLabel, badge, className = '', iconClassName = '',
+    style, onClick, children
+}) {
+    const icon = Icon && (
+        <span key={iconKey} className={`nav-btn__icon ${iconKey ? 'nav-btn__icon--swap' : ''} ${iconClassName}`} aria-hidden="true"><Icon /></span>
+    );
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            aria-label={ariaLabel || (iconOnly ? title : undefined)}
+            aria-pressed={pressed}
+            style={style}
+            className={`nav-btn nav-btn--${variant} ${iconOnly ? 'nav-btn--icon-only' : ''} ${keepLabel ? 'nav-btn--keep-label' : ''} ${className}`}
+        >
+            {!iconAfter && icon}
+            {!iconOnly && <span className="nav-btn__label">{children}</span>}
+            {iconAfter && icon}
+            {badge}
+        </button>
+    );
+}
 
 const Navbar = ({
     isAdmin, canManageUsers, user, onLogout, onOpenProfile, activePage, setActivePage,
@@ -76,7 +109,7 @@ const Navbar = ({
     };
 
     return (
-        <nav className={`dashboard-navbar fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 py-4 pointer-events-none ${
+        <nav data-immersive={immersiveMode || undefined} className={`dashboard-navbar fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 py-4 pointer-events-none ${
             enteringFromLogin ? 'dashboard-navbar-entering' : ''
         }`}>
 
@@ -183,9 +216,10 @@ const Navbar = ({
                         </div>
                     )}
 
-                    {/* Right Actions */}
+                    {/* Right Actions — every control is a NavButton so size,
+                        glass surface, hover lift and press feedback match. */}
                     <div
-                        className="dashboard-navbar-actions flex items-center gap-3 z-10"
+                        className="dashboard-navbar-actions flex items-center gap-2 z-10"
                         onAnimationEnd={(event) => {
                             if (
                                 enteringFromLogin
@@ -195,127 +229,67 @@ const Navbar = ({
                         }}
                     >
                         {showCategoryArrange && activePage === 'dashboard' && (
-                            <button
-                                type="button"
+                            <NavButton
                                 onClick={onToggleCategoryArrange}
-                                aria-pressed={categoryArrangeEnabled}
+                                pressed={categoryArrangeEnabled}
                                 title={categoryArrangeEnabled ? '取消分类排列' : '按分类排列'}
-                                className={`h-9 px-3 rounded-xl text-xs font-bold flex items-center transition-all shadow-sm ${
-                                    categoryArrangeEnabled
-                                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800'
-                                        : 'bg-white/80 text-slate-600 border border-slate-200 hover:bg-white dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700'
-                                }`}
-                            >
-                                <LayoutGrid className="w-3.5 h-3.5 xl:mr-1.5" />
-                                <span className="hidden xl:inline">分类排列</span>
-                            </button>
+                                icon={categoryArrangeEnabled ? Rows3 : LayoutGrid}
+                                iconKey={categoryArrangeEnabled ? 'rows' : 'grid'}
+                            >分类排列</NavButton>
                         )}
 
-                        {/* Animated announcement inbox */}
                         {hasActiveAnnouncement && !isAnnouncementVisible && activePage === 'dashboard' && (
-                            <>
-                                <style>{`
-                                    @keyframes elastic-pop {
-                                        0% { transform: scale(0); }
-                                        40% { transform: scale(1.3); }
-                                        70% { transform: scale(0.9); }
-                                        100% { transform: scale(1); }
-                                    }
-                                `}</style>
-                                <button
-                                    onClick={onToggleAnnouncement}
-                                    style={{ animation: 'elastic-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }}
-                                    className={`w-9 h-9 rounded-xl flex items-center justify-center relative
-                                        ${isLunar ? 'bg-red-100 text-red-600 hover:bg-red-200' : ''}
-                                        ${isHalloween ? 'bg-slate-800 text-orange-400 border border-purple-800' : ''}
-                                        ${isMidAutumn ? 'bg-blue-900/50 text-yellow-200 border border-blue-500' : ''}
-                                        ${isQingming ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' : ''}
-                                        ${!isLunar && !isHalloween && !isMidAutumn && !isQingming ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 shadow-sm border border-indigo-100' : ''}
-                                    `}
-                                     title="有新公告"
-                                     aria-label="查看新公告"
-                                >
-                                    <Megaphone className="w-4 h-4 animate-[wiggle_1s_ease-in-out_infinite]" />
-                                    <span className="absolute top-2 right-2 flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                    </span>
-                                </button>
-                            </>
+                            <NavButton
+                                onClick={onToggleAnnouncement}
+                                variant="tinted"
+                                iconOnly
+                                title="有新公告"
+                                ariaLabel="查看新公告"
+                                icon={Megaphone}
+                                className="nav-btn--pop"
+                                iconClassName="nav-btn__icon--wiggle"
+                                badge={<span className="nav-btn__ping" aria-hidden="true" />}
+                            />
                         )}
 
                         {canManageUsers && activePage === 'dashboard' && (
+                            <NavButton onClick={() => setActivePage('settings')} icon={Settings} className="nav-btn--accent-icon" title="系统工具">系统工具</NavButton>
+                        )}
+                        {canManageUsers && activePage === 'dashboard' && isAdmin && (
+                            <NavButton
+                                onClick={() => setIsCardEditMode(!isCardEditMode)}
+                                pressed={isCardEditMode}
+                                icon={isCardEditMode ? Check : Pencil}
+                                iconKey={isCardEditMode ? 'done' : 'edit'}
+                                title={isCardEditMode ? '完成编辑' : '编辑卡片'}
+                            >{isCardEditMode ? '完成' : '编辑'}</NavButton>
+                        )}
+                        {canManageUsers && activePage === 'dashboard' && isAdmin && isCardEditMode && (
                             <>
-                                <button onClick={() => setActivePage('settings')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center transition-all ${isLunar ? 'bg-red-100 text-red-700 hover:bg-red-200' : ''} ${isHalloween ? 'bg-purple-900/50 text-orange-400 hover:bg-purple-900 border border-purple-500/30' : ''} ${isMidAutumn ? 'bg-blue-800/50 text-yellow-100 hover:bg-blue-800 border border-blue-500/30' : ''} ${isDragonBoat ? 'bg-teal-100 text-teal-700 hover:bg-teal-200 border border-teal-200' : ''} ${isYuanxiao ? 'bg-pink-100 text-pink-700 hover:bg-pink-200 border border-pink-200' : ''} ${isQingming ? 'bg-slate-200 text-slate-700 hover:bg-slate-300 border border-slate-300' : ''} ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : ''}`}>
-                                    <Settings className="w-3.5 h-3.5 mr-1.5"/> 系统工具
-                                </button>
-                                {isAdmin && <button onClick={() => setIsCardEditMode(!isCardEditMode)} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center transition-all shadow-sm ${isCardEditMode ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : isLunar ? 'bg-white border border-red-200 text-red-700 hover:bg-red-50' : isHalloween ? 'bg-slate-800 border border-orange-500/30 text-purple-300 hover:bg-slate-700' : isMidAutumn ? 'bg-blue-900/50 border border-blue-400/30 text-blue-200 hover:bg-blue-800' : isDragonBoat ? 'bg-white border border-teal-200 text-teal-700 hover:bg-teal-50' : isYuanxiao ? 'bg-white border border-pink-200 text-pink-700 hover:bg-pink-50' : isQingming ? 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                    {isCardEditMode ? <Check className="w-3.5 h-3.5 mr-1.5"/> : <Edit3 className="w-3.5 h-3.5 mr-1.5"/>}
-                                    {isCardEditMode ? '完成' : '编辑'}
-                                </button>}
-                                {isAdmin && isCardEditMode && (
-                                    <>
-                                        <button onClick={onAdd} className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white flex items-center hover:bg-slate-800 transition-colors shadow-lg animate-in fade-in slide-in-from-right-4">
-                                            <Plus className="w-3.5 h-3.5 mr-1.5" /> 新增竞赛平台
-                                        </button>
-                                        <button onClick={onAddTaskApp} className="px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 text-white flex items-center hover:bg-violet-500 transition-colors shadow-lg animate-in fade-in slide-in-from-right-4">
-                                            <Bot className="w-3.5 h-3.5 mr-1.5" /> 新增智能体任务
-                                        </button>
-                                    </>
-                                )}
+                                <NavButton onClick={onAdd} variant="primary" icon={Plus} title="新增竞赛平台" className="nav-btn--enter">新增竞赛平台</NavButton>
+                                <NavButton onClick={onAddTaskApp} variant="primary" icon={Bot} title="新增智能体任务" className="nav-btn--enter nav-btn--violet" style={{ animationDelay: '60ms' }}>新增智能体任务</NavButton>
                             </>
                         )}
 
                         {canManageUsers && activePage === 'settings' && (
-                            <button onClick={() => setActivePage('dashboard')} className="px-4 py-2 rounded-xl text-xs font-bold flex items-center transition-all bg-slate-800 text-white shadow-lg hover:bg-slate-700">
-                                <LayoutDashboard className="w-3.5 h-3.5 mr-1.5"/> 退出设置
-                            </button>
+                            <NavButton onClick={() => setActivePage('dashboard')} variant="primary" icon={LayoutDashboard} keepLabel>退出设置</NavButton>
                         )}
 
                         {onOpenTickets && (
-                            <button
-                                type="button"
+                            <NavButton
                                 onClick={onOpenTickets}
+                                icon={LifeBuoy}
                                 title={ticketUnread ? `工单（${ticketUnread} 条新动态）` : '工单'}
-                                aria-label={ticketUnread ? `工单，${ticketUnread} 条新动态` : '工单'}
-                                className={`navbar-ticket-button relative h-9 px-3 rounded-xl text-xs font-bold flex items-center transition-all shadow-sm ${
-                                    isHalloween ? 'bg-slate-800 text-orange-300 border border-purple-500/30 hover:bg-slate-700'
-                                        : isMidAutumn ? 'bg-blue-900/50 text-blue-100 border border-blue-400/30 hover:bg-blue-800'
-                                            : isLunar ? 'bg-white/80 text-red-700 border border-red-200 hover:bg-red-50'
-                                                : 'bg-white/80 text-slate-600 border border-slate-200 hover:bg-white hover:text-indigo-600 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700 dark:hover:text-indigo-300'
-                                }`}
-                            >
-                                <LifeBuoy className="w-3.5 h-3.5 sm:mr-1.5" />
-                                <span className="hidden sm:inline">工单</span>
-                                {ticketUnread > 0 && (
-                                    <span className="navbar-ticket-badge" aria-hidden="true">{ticketUnread > 99 ? '99+' : ticketUnread}</span>
-                                )}
-                            </button>
+                                ariaLabel={ticketUnread ? `工单，${ticketUnread} 条新动态` : '工单'}
+                                badge={ticketUnread > 0 && <span className="navbar-ticket-badge" aria-hidden="true">{ticketUnread > 99 ? '99+' : ticketUnread}</span>}
+                            >工单</NavButton>
                         )}
 
-                        <div className={`h-6 w-px mx-1 ${isLunar ? 'bg-red-200' : ''} ${isHalloween ? 'bg-purple-800' : ''} ${isMidAutumn ? 'bg-blue-800' : ''} ${isDragonBoat ? 'bg-teal-200' : ''} ${isYuanxiao ? 'bg-pink-200' : ''} ${isQingming ? 'bg-slate-300' : ''} ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'bg-slate-200 dark:bg-slate-700' : ''}`}></div>
+                        <span className="nav-divider" aria-hidden="true" />
 
-                        <button onClick={onLogout} className={`text-xs font-bold transition-colors flex items-center
-                            ${isLunar ? 'text-red-500 hover:text-red-700' : ''}
-                            ${isHalloween ? 'text-purple-400 hover:text-orange-400' : ''}
-                            ${isMidAutumn ? 'text-blue-300 hover:text-yellow-100' : ''}
-                            ${isDragonBoat ? 'text-teal-600 hover:text-teal-800' : ''}
-                            ${isYuanxiao ? 'text-pink-500 hover:text-pink-700' : ''}
-                            ${isQingming ? 'text-slate-600 hover:text-slate-800' : ''}
-                            ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'text-slate-500 hover:text-slate-800' : ''}
-                        `}>
-                            退出 <LogOut className="w-3.5 h-3.5 ml-1"/>
-                        </button>
+                        <NavButton onClick={onLogout} variant="ghost" icon={LogOut} iconAfter title="退出登录">退出</NavButton>
 
-                        <button type="button" onClick={onOpenProfile} title="个人资料" aria-label="打开个人资料" className={`w-9 h-9 rounded-full flex items-center justify-center font-black border-2 border-white shadow-sm relative overflow-hidden transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500
-                            ${isLunar ? 'bg-red-100 text-red-600' : ''}
-                            ${isHalloween ? 'bg-orange-100 text-purple-700' : ''}
-                            ${isMidAutumn ? 'bg-blue-900 text-yellow-200 border-blue-400' : ''}
-                            ${isDragonBoat ? 'bg-teal-100 text-teal-600 border-teal-200' : ''}
-                            ${isYuanxiao ? 'bg-pink-100 text-pink-600 border-pink-200' : ''}
-                            ${isQingming ? 'bg-slate-200 text-slate-600 border-slate-300' : ''}
-                            ${!isLunar && !isHalloween && !isMidAutumn && !isDragonBoat && !isYuanxiao && !isQingming ? 'bg-indigo-100 text-indigo-600' : ''}
-                        `}>
+                        <button type="button" onClick={onOpenProfile} title="个人资料" aria-label="打开个人资料" className="nav-avatar">
                             {user?.avatarDataUrl ? <img src={user.avatarDataUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" /> : Array.from(user?.username || 'M')[0]?.toUpperCase()}
                         </button>
                     </div>

@@ -14,14 +14,30 @@ const styles = await readFile(new URL('../../src/index.css', import.meta.url), '
 test('category arrangement defaults flat and groups every card count only after the user enables it', () => {
     assert.match(app, /const \[categoryArrangeEnabled, setCategoryArrangeEnabled\] = useState\(false\)/);
     assert.match(app, /const showCategoryArrange = links\.length > 1/);
-    assert.match(app, /categoryArrangeEnabled\) return groupedLinks/);
+    assert.match(app, /if \(!categoryArrangeEnabled\) return competitionLinks\.map/);
+    assert.match(app, /groupedLinks\.flatMap/);
     assert.doesNotMatch(app, /marchcenter_category_arrange/);
     assert.match(app, /competition-flow-grid--categorized/);
-    assert.match(navbar, /aria-pressed=\{categoryArrangeEnabled\}/);
+    assert.match(navbar, /pressed=\{categoryArrangeEnabled\}/);
+    assert.match(navbar, /aria-pressed=\{pressed\}/);
     assert.match(navbar, />分类排列</);
-    assert.match(styles, /\.competition-flow-grid--categorized > section[\s\S]*width: 100%/);
-    assert.match(styles, /\.competition-flow-grid--categorized \.competition-flow-items[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+    // Each category starts on its own row of the shared card grid.
+    assert.match(app, /breakBefore && <div className="competition-category-break"/);
+    assert.match(styles, /\.competition-category-break \{[^}]*grid-column: 1 \/ -1/);
     assert.match(styles, /\.competition-flow-card \{[\s\S]*width: 280px/);
+});
+
+test('category switching glides live cards and keeps the page clickable', () => {
+    // A View Transition snapshot swallowed clicks until it finished, and
+    // re-parenting cards into per-category sections remounted every card.
+    assert.doesNotMatch(app, /startViewTransition/);
+    assert.doesNotMatch(app, /<section key=\{category\}/);
+    assert.match(app, /<React\.Fragment key=\{link\.id\}>/);
+    assert.match(app, /data-flip-id=\{link\.id\}/);
+    assert.match(app, /animation\.id === CATEGORY_FLIP_ID\) animation\.cancel\(\)/);
+    assert.match(app, /translate: `\$\{dx\}px \$\{dy\}px`/);
+    assert.doesNotMatch(styles, /view-transition/);
+    assert.match(styles, /\.competition-flow-card\.category-flip-moving \.contest-card-glass::before/);
 });
 
 test('competition title and category inputs expose existing values as selectable history', () => {
@@ -109,8 +125,6 @@ test('manual teacher credential drawer has a framework-independent hover entranc
     assert.match(contestCard, /clipboard\?\.writeText/);
     assert.doesNotMatch(contestCard, /document\.startViewTransition/);
     assert.doesNotMatch(contestCard, /flushSync/);
-    assert.match(styles, /\.dashboard-navbar \{[\s\S]*view-transition-name:\s*dashboard-navbar/);
-    assert.match(styles, /::view-transition-group\(dashboard-navbar\)[\s\S]*z-index:\s*100/);
 });
 
 test('competition action buttons keep an explicit dark hover state', () => {
