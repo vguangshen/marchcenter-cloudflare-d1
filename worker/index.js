@@ -62,7 +62,8 @@ app.get('/api/ready', async (_req, res) => {
             EXISTS (SELECT 1 FROM revoked_sessions), EXISTS (SELECT 1 FROM support_tickets),
             EXISTS (SELECT 1 FROM support_ticket_messages), EXISTS (SELECT 1 FROM support_ticket_attachments),
             EXISTS (SELECT 1 FROM support_chat_conversations), EXISTS (SELECT 1 FROM support_chat_messages),
-            EXISTS (SELECT 1 FROM support_chat_attachments), EXISTS (SELECT 1 FROM support_chat_options)`);
+            EXISTS (SELECT 1 FROM support_chat_attachments), EXISTS (SELECT 1 FROM support_chat_options),
+            EXISTS (SELECT 1 FROM support_chat_knowledge), EXISTS (SELECT revision FROM support_chat_knowledge_revision WHERE id = 1)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });

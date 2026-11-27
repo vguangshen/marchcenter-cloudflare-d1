@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ArrowUpRight, ChevronLeft, ChevronRight, Headset, Inbox, Loader2, MessageCircle, RefreshCw, Search, Users, X } from 'lucide-react';
 import { api } from '../../../utils/api';
+import SupportChatKnowledge from '../../support-chat/SupportChatKnowledge';
 import SupportChatSettings from '../../support-chat/SupportChatSettings';
 import SupportChatThread from '../../support-chat/SupportChatThread';
 import { useVisibleChatPolling } from '../../support-chat/useVisibleChatPolling';
@@ -86,6 +87,7 @@ function ConversationRow({ conversation, selected, onSelect }) {
 
 export default function SupportChatManager({ active = true, canConfigure, onOpenAiSettings, onUnreadChange }) {
     const [tab, setTab] = useState('inbox');
+    const [knowledgeOpened, setKnowledgeOpened] = useState(false);
     const [settingsOpened, setSettingsOpened] = useState(false);
     const [queue, setQueue] = useState('all');
     const [page, setPage] = useState(1);
@@ -100,8 +102,10 @@ export default function SupportChatManager({ active = true, canConfigure, onOpen
     const searchRef = useRef(null);
     const headingRef = useRef(null);
 
+    const knowledge = tab === 'knowledge';
     const automation = canConfigure && tab === 'automation';
-    const inboxActive = active && !automation;
+    const inbox = !knowledge && !automation;
+    const inboxActive = active && inbox;
     const params = new URLSearchParams({ scope: 'all', queue, page: String(page) });
     if (query) params.set('q', query);
     const listKey = params.toString();
@@ -167,13 +171,14 @@ export default function SupportChatManager({ active = true, canConfigure, onOpen
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--system-accent-rgb)/.12)] text-[rgb(var(--system-accent-rgb))]"><Headset className="h-5 w-5" aria-hidden="true" /></span>
                     <h2 id="support-management-title" className="text-lg font-bold text-slate-900 dark:text-white">客服管理</h2>
                 </div>
-                {canConfigure && <div role="group" aria-label="客服管理视图" className="flex flex-wrap gap-1.5">
-                    <button type="button" aria-pressed={!automation} onClick={() => setTab('inbox')} className={`mc-button mc-button--compact ${!automation ? 'mc-button--secondary' : 'mc-button--ghost'}`}>用户会话</button>
-                    <button type="button" aria-pressed={automation} onClick={() => { setTab('automation'); setSettingsOpened(true); }} className={`mc-button mc-button--compact ${automation ? 'mc-button--secondary' : 'mc-button--ghost'}`}>自动回复</button>
-                </div>}
+                <div role="group" aria-label="客服管理视图" className="flex flex-wrap gap-1.5">
+                    <button type="button" aria-pressed={inbox} onClick={() => setTab('inbox')} className={`mc-button mc-button--compact ${inbox ? 'mc-button--secondary' : 'mc-button--ghost'}`}>用户会话</button>
+                    <button type="button" aria-pressed={knowledge} onClick={() => { setTab('knowledge'); setKnowledgeOpened(true); }} className={`mc-button mc-button--compact ${knowledge ? 'mc-button--secondary' : 'mc-button--ghost'}`}>问答语料</button>
+                    {canConfigure && <button type="button" aria-pressed={automation} onClick={() => { setTab('automation'); setSettingsOpened(true); }} className={`mc-button mc-button--compact ${automation ? 'mc-button--secondary' : 'mc-button--ghost'}`}>自动回复</button>}
+                </div>
             </header>
 
-            <div className={automation ? 'hidden' : 'space-y-3'}>
+            <div className={inbox ? 'space-y-3' : 'hidden'}>
                 <Overview data={overview} error={overviewError} onRetry={refresh} />
                 <div className="settings-surface overflow-hidden rounded-2xl lg:grid lg:grid-cols-[minmax(15rem,34%)_minmax(0,1fr)]">
                     <section className={`${selected ? 'hidden lg:flex' : 'flex'} min-w-0 flex-col lg:h-[clamp(30rem,66dvh,43rem)] lg:border-r lg:border-slate-300/50 lg:dark:border-slate-600/50`} aria-label="客服会话列表">
@@ -226,6 +231,8 @@ export default function SupportChatManager({ active = true, canConfigure, onOpen
                     )}
                 </div>
             </div>
+
+            {knowledgeOpened && <div className={knowledge ? 'min-w-0' : 'hidden'}><SupportChatKnowledge active={active && knowledge} /></div>}
 
             {canConfigure && settingsOpened && (
                 <section className={automation ? 'settings-surface flex h-[clamp(32rem,73dvh,46rem)] min-w-0 flex-col overflow-clip rounded-2xl' : 'hidden'} aria-label="客服自动回复">

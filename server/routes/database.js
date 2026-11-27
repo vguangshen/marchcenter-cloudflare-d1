@@ -74,7 +74,8 @@ const BACKUP_TABLES = [
     'paas_v2_platforms', 'paas_v2_catalogs', 'user_agent_task_results',
     'announcements', 'user_gifts', 'ai_settings',
     'support_tickets', 'support_ticket_messages', 'support_ticket_attachments',
-    'support_chat_conversations', 'support_chat_messages', 'support_chat_attachments', 'support_chat_options'
+    'support_chat_conversations', 'support_chat_messages', 'support_chat_attachments', 'support_chat_options',
+    'support_chat_knowledge', 'support_chat_knowledge_revision'
 ];
 
 router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {

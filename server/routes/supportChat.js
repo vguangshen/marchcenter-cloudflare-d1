@@ -6,6 +6,7 @@ import { maybeReplyToSupportMessage } from '../services/supportChatAutomation.js
 import { isAttachmentForm, readAttachmentForm, readAttachments, saveWithAttachments, streamPrivateAttachment } from '../utils/privateAttachments.js';
 import { ROLES } from '../utils/roleAccess.js';
 import supportChatOptionsRoutes from './supportChatOptions.js';
+import supportChatKnowledgeRoutes from './supportChatKnowledge.js';
 
 const router = express.Router();
 const CONVERSATIONS_PER_PAGE = 30;
@@ -81,6 +82,7 @@ function messageDto(row, attachments) {
         body: row.body,
         createdAt: row.created_at,
         replySource: row.reply_source || null,
+        ...(row.knowledge_json ? { knowledge: JSON.parse(row.knowledge_json) } : {}),
         attachments
     };
 }
@@ -164,6 +166,7 @@ router.use((_req, res, next) => {
 });
 router.use(authMiddleware);
 router.use('/options', supportChatOptionsRoutes);
+router.use('/knowledge', supportChatKnowledgeRoutes);
 
 router.get('/unread', endpoint('读取客服提醒失败', async (req, res) => {
     const { id } = req.user;
@@ -248,7 +251,7 @@ router.get('/conversations/:id', endpoint('读取客服消息失败', async (req
     const params = before === null ? [id] : [id, before];
     const results = await pool.batch([
         [
-            `SELECT m.id, m.author_role, m.body, m.created_at, m.reply_source, u.username AS author_username,
+            `SELECT m.id, m.author_role, m.body, m.created_at, m.reply_source, m.knowledge_json, u.username AS author_username,
                     (SELECT json_group_array(json_object('id', id, 'fileName', file_name, 'contentType', content_type, 'size', size))
                      FROM (SELECT id, file_name, content_type, size FROM support_chat_attachments WHERE message_id = m.id ORDER BY id)) AS attachments
              FROM support_chat_messages m LEFT JOIN users u ON u.id = m.author_id

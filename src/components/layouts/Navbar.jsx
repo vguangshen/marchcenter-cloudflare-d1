@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-    LogOut, Plus, Search, LayoutDashboard, Settings,
-    Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy
+    LogOut, Search, LayoutDashboard, Settings, SlidersHorizontal,
+    Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy, ChevronDown, ChevronRight, SquarePlus
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
@@ -27,26 +27,162 @@ const QINGMING_ORNAMENTS = [{ icon: '🪁', left: '10%', speed: '3s', length: 25
 function NavButton({
     icon: Icon, iconKey, iconAfter = false, iconOnly = false, keepLabel = false,
     variant = 'chip', pressed, title, ariaLabel, badge, className = '', iconClassName = '',
-    style, onClick, children
+    buttonRef, expanded, controls, trailing, onClick, children
 }) {
     const icon = Icon && (
         <span key={iconKey} className={`nav-btn__icon ${iconKey ? 'nav-btn__icon--swap' : ''} ${iconClassName}`} aria-hidden="true"><Icon /></span>
     );
     return (
         <button
+            ref={buttonRef}
             type="button"
             onClick={onClick}
             title={title}
             aria-label={ariaLabel || (iconOnly ? title : undefined)}
             aria-pressed={pressed}
-            style={style}
+            aria-expanded={expanded}
+            aria-controls={controls}
             className={`nav-btn nav-btn--${variant} ${iconOnly ? 'nav-btn--icon-only' : ''} ${keepLabel ? 'nav-btn--keep-label' : ''} ${className}`}
         >
             {!iconAfter && icon}
             {!iconOnly && <span className="nav-btn__label">{children}</span>}
             {iconAfter && icon}
+            {trailing}
             {badge}
         </button>
+    );
+}
+
+function SystemToolsMenu({ onSettings, canEdit, editing, onEdit, onAddContest, onAddAgent }) {
+    const menuId = useId();
+    const creationId = useId();
+    const root = useRef(null);
+    const trigger = useRef(null);
+    const disclosure = useRef(null);
+    const firstCreation = useRef(null);
+    const leaveTimer = useRef(null);
+    const [open, setOpen] = useState(false);
+    const [creationOpen, setCreationOpen] = useState(false);
+    const [placement, setPlacement] = useState({ offset: null, inline: true });
+
+    const cancelLeave = () => clearTimeout(leaveTimer.current);
+    const close = useCallback(() => {
+        clearTimeout(leaveTimer.current);
+        setCreationOpen(false);
+        setOpen(false);
+    }, []);
+
+    const placeMenu = useCallback(() => {
+        const anchor = root.current?.getBoundingClientRect();
+        if (!anchor) return;
+        const viewport = document.documentElement.clientWidth;
+        const inline = viewport < 460 || window.matchMedia('(hover: none)').matches;
+        const gutter = 12;
+        const mainWidth = 168;
+        const extraWidth = canEdit && !inline ? 180 + 8 : 0;
+        const left = Math.max(gutter, Math.min(anchor.right - mainWidth, viewport - gutter - mainWidth - extraWidth));
+        setPlacement({ offset: left - anchor.left, inline });
+    }, [canEdit]);
+
+    useEffect(() => () => clearTimeout(leaveTimer.current), []);
+    useEffect(() => {
+        if (!open) return undefined;
+        const outside = event => {
+            if (!root.current?.contains(event.target)) close();
+        };
+        window.addEventListener('pointerdown', outside, true);
+        window.addEventListener('resize', placeMenu);
+        return () => {
+            window.removeEventListener('pointerdown', outside, true);
+            window.removeEventListener('resize', placeMenu);
+        };
+    }, [close, open, placeMenu]);
+
+    function toggleMenu() {
+        if (open) return close();
+        placeMenu();
+        setOpen(true);
+    }
+
+    function finish(action, restoreFocus = false) {
+        close();
+        if (restoreFocus) trigger.current?.focus();
+        action();
+    }
+
+    function onMenuKey(event) {
+        if (!open || (event.key !== 'Escape' && event.key !== 'ArrowLeft')) return;
+        if (creationOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelLeave();
+            setCreationOpen(false);
+            disclosure.current?.focus();
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+            trigger.current?.focus();
+        }
+    }
+
+    return (
+        <div ref={root} className="nav-tools" data-inline={placement.inline} data-editing={canEdit && editing}
+            style={placement.offset === null ? undefined : { '--nav-tools-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
+            onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
+            <NavButton buttonRef={trigger} onClick={toggleMenu} icon={Settings} expanded={open} controls={menuId}
+                className="nav-btn--accent-icon nav-tools__trigger" ariaLabel="系统工具" title="系统工具"
+                trailing={<ChevronDown className="nav-tools__caret" aria-hidden="true" />}>
+                系统工具
+            </NavButton>
+            <div id={menuId} role="group" aria-label="系统工具菜单" className="nav-tools__menu nav-tools__surface" data-open={open} inert={!open}>
+                <button type="button" className="nav-tools__row" onClick={() => finish(onSettings)}>
+                    <span className="nav-tools__icon" aria-hidden="true"><SlidersHorizontal /></span>
+                    系统设置
+                </button>
+                {canEdit && (
+                    <div className="nav-tools__edit"
+                        onPointerEnter={event => {
+                            if (event.pointerType !== 'mouse' || !open) return;
+                            cancelLeave();
+                            setCreationOpen(true);
+                        }}
+                        onPointerLeave={event => {
+                            if (event.pointerType !== 'mouse' || event.currentTarget.contains(document.activeElement)) return;
+                            leaveTimer.current = setTimeout(() => setCreationOpen(false), 150);
+                        }}
+                        onKeyDown={event => {
+                            if (event.key !== 'ArrowRight' || event.target.closest('.nav-tools__flyout')) return;
+                            event.preventDefault();
+                            cancelLeave();
+                            setCreationOpen(true);
+                            requestAnimationFrame(() => firstCreation.current?.focus());
+                        }}>
+                        <div className="nav-tools__split" data-open={creationOpen}>
+                            <button type="button" className="nav-tools__row" aria-pressed={editing} onClick={() => finish(onEdit, true)}>
+                                <span className="nav-tools__icon" aria-hidden="true">{editing ? <Check /> : <Pencil />}</span>
+                                {editing ? '完成编辑' : '编辑'}
+                            </button>
+                            <button ref={disclosure} type="button" className="nav-tools__disclosure" aria-label="展开创建选项"
+                                aria-expanded={creationOpen} aria-controls={creationId} onClick={() => setCreationOpen(value => !value)}>
+                                <ChevronRight aria-hidden="true" />
+                            </button>
+                        </div>
+                        <div id={creationId} role="group" aria-label="创建选项" className="nav-tools__flyout nav-tools__surface"
+                            data-open={open && creationOpen} inert={!open || !creationOpen}>
+                            <button ref={firstCreation} type="button" className="nav-tools__row" onClick={() => finish(onAddContest, true)}>
+                                <span className="nav-tools__icon" aria-hidden="true"><SquarePlus /></span>
+                                创建竞赛卡片
+                            </button>
+                            <button type="button" className="nav-tools__row" onClick={() => finish(onAddAgent, true)}>
+                                <span className="nav-tools__icon nav-tools__icon--agent" aria-hidden="true"><Bot /></span>
+                                创建智能体
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }
 
@@ -253,22 +389,9 @@ const Navbar = ({
                         )}
 
                         {canManageUsers && activePage === 'dashboard' && (
-                            <NavButton onClick={() => setActivePage('settings')} icon={Settings} className="nav-btn--accent-icon" title="系统工具">系统工具</NavButton>
-                        )}
-                        {canManageUsers && activePage === 'dashboard' && isAdmin && (
-                            <NavButton
-                                onClick={() => setIsCardEditMode(!isCardEditMode)}
-                                pressed={isCardEditMode}
-                                icon={isCardEditMode ? Check : Pencil}
-                                iconKey={isCardEditMode ? 'done' : 'edit'}
-                                title={isCardEditMode ? '完成编辑' : '编辑卡片'}
-                            >{isCardEditMode ? '完成' : '编辑'}</NavButton>
-                        )}
-                        {canManageUsers && activePage === 'dashboard' && isAdmin && isCardEditMode && (
-                            <>
-                                <NavButton onClick={onAdd} variant="primary" icon={Plus} title="新增竞赛平台" className="nav-btn--enter">新增竞赛平台</NavButton>
-                                <NavButton onClick={onAddTaskApp} variant="primary" icon={Bot} title="新增智能体任务" className="nav-btn--enter nav-btn--violet" style={{ animationDelay: '60ms' }}>新增智能体任务</NavButton>
-                            </>
+                            <SystemToolsMenu onSettings={() => setActivePage('settings')} canEdit={isAdmin}
+                                editing={isCardEditMode} onEdit={() => setIsCardEditMode(value => !value)}
+                                onAddContest={onAdd} onAddAgent={onAddTaskApp} />
                         )}
 
                         {canManageUsers && activePage === 'settings' && (

@@ -2,6 +2,7 @@ import pool from '../config/db.js';
 import { requestAi, resolveAiEndpoint } from '../utils/aiHttpClient.js';
 import { isSupportAcknowledgment, isUnresolvedSupportFollowup, supportHandoffIntent } from '../utils/supportChatLanguage.js';
 import { readAiSettings } from './aiSettings.js';
+import { readSupportKnowledge, recognizeKnowledge } from './supportChatKnowledge.js';
 
 const DEFAULT_TEMPLATES = [
     {
@@ -23,6 +24,7 @@ const DEFAULT_TEMPLATES = [
         keywords: ['怎么提交工单', '如何提交工单', '在哪提交工单']
     }
 ];
+const DEFAULT_BY_ID = new Map(DEFAULT_TEMPLATES.map(template => [template.id, template]));
 
 const LATEST_USER_MESSAGE = `c.human_requested = 0 AND (
     SELECT id FROM support_chat_messages WHERE conversation_id = c.id ORDER BY id DESC LIMIT 1
@@ -68,14 +70,20 @@ function selectTemplate(templates, message) {
         || templates.find(template => template.keywords.some(keyword => normalized.includes(normalizeSupportQuestion(keyword))));
 }
 
-async function storeReply(conversationId, messageId, source, body) {
+function isCustomizedTemplate(template) {
+    const original = DEFAULT_BY_ID.get(template.id);
+    return !original || template.question !== original.question || template.answer !== original.answer
+        || JSON.stringify(template.keywords) !== JSON.stringify(original.keywords);
+}
+
+async function storeReply(conversationId, messageId, source, body, knowledge = null) {
     const enabled = source === 'ai' ? 'AND EXISTS (SELECT 1 FROM support_chat_options WHERE id = 1 AND ai_enabled = 1)' : '';
     await pool.batch([
         [
-            `INSERT INTO support_chat_messages (conversation_id, author_role, body, reply_source)
-             SELECT c.id, 'staff', ?, ? FROM support_chat_conversations c
+            `INSERT INTO support_chat_messages (conversation_id, author_role, body, reply_source, knowledge_json)
+             SELECT c.id, 'staff', ?, ?, ? FROM support_chat_conversations c
              WHERE c.id = ? AND ${LATEST_USER_MESSAGE} ${enabled}`,
-            [body, source, conversationId, messageId]
+            [body, source, knowledge ? JSON.stringify(knowledge) : null, conversationId, messageId]
         ],
         [
             `UPDATE support_chat_conversations SET user_unread = user_unread + 1,
@@ -107,7 +115,8 @@ async function storeHandoff(conversationId, messageId, explicit = false) {
 
 async function latestStaffReply(conversationId, messageId) {
     const [[reply]] = await pool.query(
-        `SELECT m.body, m.reply_source,
+        `SELECT m.body, m.reply_source, m.knowledge_json,
+                m.created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 minutes') AS recent_context,
                 EXISTS (SELECT 1 FROM support_chat_messages f
                         WHERE f.conversation_id = m.conversation_id AND f.id > m.id AND f.id < ? AND f.author_role = 'user') AS has_followup,
                 (SELECT u.body FROM support_chat_messages u
@@ -124,9 +133,52 @@ async function latestStaffReply(conversationId, messageId) {
 function automationFailed(reply, currentQuestion) {
     if (!reply?.reply_source) return false;
     if (isUnresolvedSupportFollowup(currentQuestion)) return true;
+    if (reply.knowledge?.choices?.length) {
+        return /^(?:(?:这(?:些|几个|两项|三项))?都(?:不是|不对)|没有我问的|都不符合)(?:啊|呀|呢)?$/u.test(normalizeSupportQuestion(currentQuestion));
+    }
     if (reply.has_followup) return false;
     const previous = normalizeSupportQuestion(reply.question || '');
     return Boolean(previous && previous === normalizeSupportQuestion(currentQuestion));
+}
+
+function chooseClarification(text, choices, snapshot) {
+    if (!choices?.length) return null;
+    const selection = normalizeSupportQuestion(text);
+    const number = selection.match(/^(?:我?选(?:择)?)?(?:第)?([一二三123])(?:个|项|条|种|个问题)?$/u)?.[1];
+    if (number) {
+        const ordinal = { 一: 1, 二: 2, 三: 3 }[number] ?? Number(number);
+        const choice = snapshot.byId.get(choices[ordinal - 1]?.id);
+        return choice?.enabled ? choice : null;
+    }
+    if (selection.length < 2 || selection.length > 120) return null;
+    const matching = choices.filter(choice => {
+        const question = normalizeSupportQuestion(choice.question);
+        return question === selection || (selection.length <= 12 && question.includes(selection));
+    });
+    const choice = matching.length === 1 ? snapshot.byId.get(matching[0].id) : null;
+    return choice?.enabled ? choice : null;
+}
+
+async function handleKnowledgeReply(conversationId, message, previousReply) {
+    const snapshot = await readSupportKnowledge();
+    const context = previousReply?.recent_context && !previousReply.has_followup ? previousReply.knowledge : null;
+    const selected = chooseClarification(message.body, context?.choices, snapshot);
+    const result = selected
+        ? { kind: 'match', entry: selected }
+        : recognizeKnowledge(message.body, snapshot, context?.followedUp ? null : context?.intentId);
+    if (result.kind === 'match') {
+        const { entry } = result;
+        const followedUp = result.mode === 'followup';
+        await storeReply(conversationId, message.id, 'template', followedUp ? entry.followUp : entry.answer, { intentId: entry.id, followedUp });
+        return true;
+    }
+    if (result.kind === 'clarify') {
+        const choices = result.entries.map(({ id, question }) => ({ id, question }));
+        const body = `你想咨询的是哪一项？可以回复序号或具体问题。\n${choices.map((choice, index) => `${index + 1}. ${choice.question}`).join('\n')}`;
+        await storeReply(conversationId, message.id, 'template', body, { choices });
+        return true;
+    }
+    return false;
 }
 
 async function reserveAiReply(conversationId, messageId) {
@@ -171,6 +223,7 @@ export async function maybeReplyToSupportMessage({ conversation, message }, { al
 
     const acknowledged = isSupportAcknowledgment(message.body);
     const previousReply = acknowledged ? null : await latestStaffReply(conversation.id, message.id);
+    if (previousReply?.knowledge_json) previousReply.knowledge = JSON.parse(previousReply.knowledge_json);
     const failed = automationFailed(previousReply, message.body);
     const canTransfer = intent !== 'decline';
     if (failed && previousReply.reply_source === 'ai' && canTransfer) {
@@ -178,9 +231,10 @@ export async function maybeReplyToSupportMessage({ conversation, message }, { al
     }
 
     const { templates, aiEnabled } = await readSupportOptions();
-    const template = failed ? null : selectTemplate(templates, message.body);
+    const template = failed ? null : selectTemplate(templates.filter(isCustomizedTemplate), message.body);
     if (template) return storeReply(conversation.id, message.id, 'template', template.answer);
     if (acknowledged) return;
+    if (!failed && await handleKnowledgeReply(conversation.id, message, previousReply)) return;
 
     const settings = aiEnabled && allowAi && !message.attachments?.length ? await readSupportAi() : null;
     if (!settings || !await reserveAiReply(conversation.id, message.id)) {

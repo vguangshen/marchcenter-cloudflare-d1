@@ -31,9 +31,11 @@ function mergeLatest(timeline, result) {
 
 const AUTOMATION_LABELS = { template: '客服自动回复', ai: 'AI 客服' };
 
-function ChatMessage({ conversationId, message, own, onPreview }) {
+function ChatMessage({ conversationId, message, own, onPreview, onChoose }) {
     const mine = own ? message.authorRole === 'user' : message.authorRole === 'staff';
-    const automation = AUTOMATION_LABELS[message.replySource];
+    const choices = message.knowledge?.choices;
+    const interactiveChoices = onChoose && choices?.length > 0;
+    const automation = message.knowledge?.intentId ? '语料库回复' : AUTOMATION_LABELS[message.replySource];
     const author = automation || (own
         ? (mine ? '我' : '客服')
         : message.authorRole === 'staff' ? ['客服', message.authorUsername].filter(Boolean).join(' · ') : (message.authorUsername || '用户'));
@@ -45,7 +47,17 @@ function ChatMessage({ conversationId, message, own, onPreview }) {
                 <time dateTime={message.createdAt}>{timeFormat.format(new Date(message.createdAt))}</time>
             </div>
             <div className={`max-w-full space-y-2 rounded-2xl px-3 py-2 text-sm leading-relaxed ${mine ? 'rounded-br-md bg-[rgb(var(--system-accent-rgb)/.14)] text-slate-900 dark:text-slate-100' : 'rounded-bl-md bg-slate-500/10 text-slate-800 dark:text-slate-100'}`}>
-                {message.body && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message.body}</p>}
+                {message.body && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{interactiveChoices ? message.body.split('\n', 1)[0] : message.body}</p>}
+                {interactiveChoices && (
+                    <div className="flex flex-col gap-1.5" role="group" aria-label="请选择咨询的问题">
+                        {choices.map(choice => (
+                            <button key={choice.id} type="button" onClick={() => onChoose(choice.question)}
+                                className="rounded-lg border border-slate-300/60 bg-white/60 px-2.5 py-1.5 text-left text-xs font-medium leading-relaxed [overflow-wrap:anywhere] hover:bg-white focus-visible:outline-2 focus-visible:outline-[var(--system-accent)] dark:border-slate-600/70 dark:bg-slate-800/60 dark:hover:bg-slate-700">
+                                {choice.question}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 {conversationId && attachments.length > 0 && <ChatMessageAttachments conversationId={conversationId} attachments={attachments} onPreview={onPreview} />}
             </div>
         </li>
@@ -86,7 +98,13 @@ export default function SupportChatThread({
     const busy = pendingAction !== null;
     const waitingForOptions = own && optionsPending && !humanRequested;
     const canAskAi = own && aiActive && !optionsPending && !humanRequested;
-    const showQuestions = own && !humanRequested && (!body.trim() || quickQuestions.some(item => item.question === body));
+    const clarificationId = own && !humanRequested && messages.at(-1)?.knowledge?.choices?.length ? messages.at(-1).id : null;
+    const showQuestions = own && !humanRequested && !clarificationId && (!body.trim() || quickQuestions.some(item => item.question === body));
+    const fillQuestion = question => {
+        setBody(question.slice(0, MAX_BODY_LENGTH));
+        setSendError('');
+        inputRef.current?.focus();
+    };
 
     useEffect(() => () => {
         actionRequestRef.current?.abort();
@@ -284,7 +302,8 @@ export default function SupportChatThread({
                     )}
                     {messages.length ? (
                         <ol aria-label="客服消息" className="flex flex-col gap-3">
-                            {messages.map(message => <ChatMessage key={message.id} conversationId={conversation?.id} message={message} own={own} onPreview={setPreview} />)}
+                            {messages.map(message => <ChatMessage key={message.id} conversationId={conversation?.id} message={message} own={own} onPreview={setPreview}
+                                onChoose={!busy && message.id === clarificationId ? fillQuestion : undefined} />)}
                         </ol>
                     ) : loaded ? (
                         <div className="px-2 py-9 text-center text-sm text-slate-500 dark:text-slate-400"><MessageCircle className="mx-auto mb-3 h-8 w-8" />{own ? '你好，有什么可以帮你？' : '暂无消息'}</div>
@@ -308,7 +327,7 @@ export default function SupportChatThread({
                         <div role="group" aria-label="常见问题" className="custom-scrollbar mb-2 flex gap-1.5 overflow-x-auto pb-1">
                             {quickQuestions.map(({ id, question }) => (
                                 <button key={id} type="button" title={question} disabled={busy}
-                                    onClick={() => { setBody(question.slice(0, MAX_BODY_LENGTH)); setSendError(''); inputRef.current?.focus(); }}
+                                    onClick={() => fillQuestion(question)}
                                     className="max-w-[12rem] shrink-0 truncate rounded-lg bg-slate-500/10 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-500/20 dark:text-slate-200">
                                     {question}
                                 </button>

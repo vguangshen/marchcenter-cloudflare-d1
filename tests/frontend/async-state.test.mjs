@@ -866,6 +866,38 @@ test('offline startup only restores a profile that belongs to the active login',
     }
 });
 
+test('system tools opens creation by keyboard and preserves the separate card editing mode', async () => {
+    const page = await browser.newPage();
+    try {
+        await page.goto(`${origin}/?mode=maintenance`);
+        const trigger = page.getByRole('button', { name: '系统工具', exact: true });
+        const tools = page.locator('.nav-tools__menu');
+        const edit = tools.getByRole('button', { name: '编辑', exact: true });
+        const disclosure = tools.getByRole('button', { name: '展开创建选项' });
+        await trigger.press('Enter');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+        await edit.press('ArrowRight');
+        const contest = tools.getByRole('button', { name: '创建竞赛卡片', exact: true });
+        await page.waitForFunction(() => document.activeElement?.textContent.trim() === '创建竞赛卡片');
+        assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
+        assert.equal(await edit.getAttribute('aria-pressed'), 'false');
+        await contest.press('Escape');
+        assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+        await disclosure.press('Escape');
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+
+        await trigger.click();
+        await edit.click();
+        assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+        await trigger.click();
+        const done = tools.getByRole('button', { name: '完成编辑', exact: true });
+        assert.equal(await done.getAttribute('aria-pressed'), 'true');
+        await done.click();
+        await trigger.click();
+        assert.equal(await edit.getAttribute('aria-pressed'), 'false');
+    } finally { await page.close(); }
+});
+
 test('sending a page of gifts produces one distinct, compact gift per recipient', async () => {
     const page = await browser.newPage();
     try {
@@ -878,6 +910,7 @@ test('sending a page of gifts produces one distinct, compact gift per recipient'
                 : previous(method, url, ...args);
         });
         await page.getByRole('button', { name: '系统工具' }).click();
+        await page.getByRole('button', { name: '系统设置', exact: true }).click();
         await page.getByRole('button', { name: '赠送礼物' }).click();
         await page.getByRole('button', { name: 'student-50', exact: true }).waitFor();
         await page.getByPlaceholder(/礼物名称/).fill('Fixture gift');
@@ -899,6 +932,7 @@ test('site settings keeps a copy draft while appearance is saved and preserves b
             .map(call => call.body));
         await page.goto(`${origin}/?mode=maintenance`);
         await page.getByRole('button', { name: '系统工具', exact: true }).click();
+        await page.getByRole('button', { name: '系统设置', exact: true }).click();
 
         const sidebar = page.locator('.settings-shell > aside');
         await sidebar.getByRole('button', { name: '站点设置', exact: true }).click();
@@ -960,6 +994,7 @@ test('swiping theme cards saves once and queued choices keep newer appearance se
             .theme-carousel-art { width: 100%; height: 100px; pointer-events: none; }
         ` });
         await page.getByRole('button', { name: '系统工具', exact: true }).click();
+        await page.getByRole('button', { name: '系统设置', exact: true }).click();
         await page.getByRole('button', { name: '站点设置', exact: true }).click();
         await page.getByRole('button', { name: '界面外观', exact: true }).click();
         await page.getByRole('button', { name: /手动选择主色调/ }).click();
