@@ -3,7 +3,7 @@ import { executeOfficialJump, planOfficialJump } from './officialCompat/official
 import { selectOfficialBaseUrl } from './officialCompat/officialJumpConfig.js';
 import { preflightOfficialPlatform } from './officialCompat/officialJumpPreflight.js';
 import { deleteOfficialStudent } from './officialCompat/officialStudentLifecycle.js';
-import { deleteOfficialClass } from './officialCompat/officialClassLifecycle.js';
+import { deleteOfficialClass, prepareOfficialCompetition } from './officialCompat/officialClassLifecycle.js';
 import { initializeOfficialModule } from './officialCompat/officialModuleLifecycle.js';
 import { validateOfficialTransportAddress } from './officialCompat/cardAddress.js';
 
@@ -35,6 +35,24 @@ export async function executePlatformJump(config, context = {}, dependencies = {
     });
     const executor = dependencies.officialExecutor || executeOfficialJump;
     return executor(config, context, resolvedDependencies);
+}
+
+export async function preparePlatformCompetition(config, context, dependencies = {}) {
+    const resolvedDependencies = officialDependencies(config, context, dependencies);
+    await preflightOfficialPlatform(config, context, {
+        urlValidator: dependencies.urlValidator || defaultUrlValidator,
+        credentialsProvider: resolvedDependencies.credentialsProvider
+    });
+    await prepareOfficialCompetition(config, context, resolvedDependencies);
+}
+
+export function executePlatformCompetitionEntry(config, context, dependencies = {}) {
+    return executePlatformJump(config, context, {
+        ...dependencies,
+        officialExecutor: (verifiedConfig, verifiedContext, official) => executeOfficialJump(
+            verifiedConfig, verifiedContext, official, { strictAccountSync: true }
+        )
+    });
 }
 
 /** Read-only official preflight. */

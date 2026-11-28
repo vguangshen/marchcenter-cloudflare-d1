@@ -174,7 +174,7 @@ test('Java Admin and .NET Root both use their platform-native automatic login en
     assert.match(competitionActions, /await loginResponseLoaded/);
     assert.match(competitionActions, /launchWindow\.location = preparation\.redirectUrl/);
     assert.doesNotMatch(competitionActions, /form\.method = 'POST'/);
-    assert.match(competitionActions, /if \(link\.ssoMethod \|\| link\.ssoConfigId\)[\s\S]*navigateLaunchWindow\(launchWindow, data\.redirectUrl\);[\s\S]*void markAsExecuted\(link\.id\);/);
+    assert.match(competitionActions, /if \(competitionEventId \|\| link\.ssoMethod \|\| link\.ssoConfigId\)[\s\S]*navigateLaunchWindow\(launchWindow, data\.redirectUrl\);[\s\S]*void markAsExecuted\(link\.id\);/);
     assert.match(competitionActions, /loginRole === 'expert'[\s\S]*navigateLaunchWindow\(launchWindow, data\.redirectUrl\);[\s\S]*void markAsExecuted\(link\.id\);/);
     assert.match(editModal, /管理员接口账户服务[\s\S]*Admin[\s\S]*Root/);
     assert.match(editModal, /showAdminEntryPassword \? 'text' : 'password'/);

@@ -27,11 +27,8 @@ import {
 import { issueManualCredential, restoreOriginalPassword, deletePlatformClass as deleteManagedPlatformClass } from '../utils/accountManagementApi.js';
 import { readAccountManagementConfig } from '../utils/accountManagementStore.js';
 import { ACCOUNT_CAPABLE_METHODS, readJavaClassDeleteBinding } from '../utils/competitionMaintenance.js';
-import { defaultSsoAllowsHttp, parseSsoConfig, readDefaultSsoConfigs } from '../utils/ssoConfigurations.js';
-import {
-    mapCardAddressToOfficialConfig,
-    validateOfficialTransportAddress
-} from '../utils/officialCompat/cardAddress.js';
+import { ALLOWED_METHODS, officialDependencyOverrides, resolvePlatformConfig } from '../utils/ssoPlatformConfig.js';
+import { validateOfficialTransportAddress } from '../utils/officialCompat/cardAddress.js';
 import { normalizeExpertName } from '../utils/officialCompat/java/expertJump.js';
 import { normalizeNetExpertName } from '../utils/officialCompat/net/expertJump.js';
 import { buildNetAdminLoginPreparation } from '../utils/officialCompat/net/adminLogin.js';
@@ -46,12 +43,9 @@ import {
     resolveNetExpertTicket
 } from '../utils/officialCompat/expertStudentBinding.js';
 import { attachSsoModuleInitRoutes } from './ssoModuleInit.js';
+import { hasCompetitionPlatformIdentity, launchCompetitionEvent } from '../services/competitionEvents.js';
 
 const router = express.Router();
-const ALLOWED_METHODS = new Set([
-    'java', 'net', 'marketing', 'commerce',
-    'managementAccounting', 'crossBorderCommerce', 'enterpriseManagement', 'direct', 'paasV2'
-]);
 const CLASS_DELETE_METHODS = ACCOUNT_CAPABLE_METHODS;
 // The platform derives the shared class name from its teacher's username.
 const REMOTE_CLASS_ACCOUNTS = `competition_id = ? AND user_id IN (
@@ -62,18 +56,6 @@ const REMOTE_CLASS_ACCOUNTS = `competition_id = ? AND user_id IN (
     JOIN users student ON student.class_id = c.id
     WHERE teacher.username = ?
 )`;
-
-// The Worker composition root may provide isolate-scoped token stores for
-// all requests.  Route/unit tests that do not run inside the Worker runtime
-// intentionally receive no override and therefore keep request-local state.
-function officialDependencyOverrides() {
-    try {
-        const { officialTokenStore, paasV2TokenStore } = getRuntime();
-        return { officialTokenStore, paasV2TokenStore };
-    } catch {
-        return {};
-    }
-}
 
 async function withNamedLock(name, action, signal) {
     return withD1Lock(name, action, { waitMs: 10000, leaseMs: 6 * 60 * 1000, signal });
@@ -152,69 +134,12 @@ function buildAgentTaskReturnUrl(req, cardId, configuredReturnUrl) {
     return dashboard.href;
 }
 
-async function resolvePlatformConfig({ configId, method, classType }, context = {}) {
-    let record = null;
-    let config = null;
-
-    if (method && (method !== 'paasV2' || !configId)) {
-        if (!ALLOWED_METHODS.has(method)) {
-            const error = new Error('不支持的免密登录方式');
-            error.status = 400;
-            throw error;
-        }
-        const resolved = (await readDefaultSsoConfigs()).get(method);
-        record = resolved?.record || null;
-        config = {
-            className: '默认班级',
-            teacherUserName: 'teacher',
-            roleName: 'student',
-            loginRole: 'student',
-            flag: '1',
-            trainOrExam: 'train',
-            classPrefix: 'mc',
-            teacherPrefix: 'mc',
-            studentPrefix: 'mcs',
-            studentSuffix: '1',
-            expertPrefix: 'mcpw',
-            ...resolved?.config,
-            method,
-            ...(classType ? { classType: Number(classType) } : {}),
-            allowHttp: defaultSsoAllowsHttp(resolved?.config)
-        };
-    } else if (configId) {
-        const [rows] = await pool.query('SELECT * FROM sso_configs WHERE id = ?', [configId]);
-        if (!rows.length) {
-            const error = new Error('免密登录配置不存在');
-            error.status = 404;
-            throw error;
-        }
-        record = rows[0];
-        config = { ...parseSsoConfig(record), ...(classType ? { classType: Number(classType) } : {}) };
-        if (method === 'paasV2' && config.method !== 'paasV2') {
-            throw Object.assign(new Error('该智能体任务绑定了无效的免密配置'), { status: 409 });
-        }
-        if (config.canaryOnly === true) {
-            const error = new Error('专用 canary 配置不能通过普通 SSO 路由执行');
-            error.status = 403;
-            throw error;
-        }
-    } else {
-        const error = new Error('请选择一种免密登录方式');
-        error.status = 400;
-        throw error;
-    }
-
-    delete config.adapterMode;
-    delete config.instanceVariant;
-    const storedEffectiveConfig = { ...config, baseUrl: config.baseUrl || record?.base_url || '' };
-    const effectiveConfig = context && Object.prototype.hasOwnProperty.call(context, 'cardUrl')
-        ? mapCardAddressToOfficialConfig(storedEffectiveConfig, context.cardUrl)
-        : storedEffectiveConfig;
-    return { record, config, effectiveConfig };
-}
-
 async function executeSsoRequest(req, body = {}, { onStage, signal, forceAccountSync = false } = {}) {
-    const { configId, method, competitionId, context = {}, dryRun = false } = body || {};
+    const { configId, method, competitionId, competitionEventId, context = {}, dryRun = false } = body || {};
+    if (competitionEventId !== undefined) {
+        if (dryRun) throw Object.assign(new Error('竞赛入口参数无效'), { status: 400 });
+        return launchCompetitionEvent(req.user, competitionEventId, competitionId, { onStage, signal });
+    }
     const emittedStages = new Set();
     let dedupeStageCallbacks = false;
     const reportStage = async (stage, message = '') => {
@@ -224,14 +149,16 @@ async function executeSsoRequest(req, body = {}, { onStage, signal, forceAccount
         if (typeof onStage === 'function') await onStage(stage, message);
     };
     let trustedConfig = { configId, method };
-    let trustedContext = { ...context, user: req.user, onStage: reportStage };
+    // Super administrators may still specify ordinary accounts for official canary checks.
+    const requestedContext = isSuperAdmin(req.user) ? context : { studentIndex: context?.studentIndex };
+    let trustedContext = { ...requestedContext, user: req.user, onStage: reportStage };
     let accountWasReady = false;
     let restoreCard = null;
     let manualCredentialActive = false;
     const accountRole = normalizeRole(req.user.role);
     trustedContext.loginRole = accountRole === ROLES.STUDENT
         ? 'student'
-        : (context.loginRole === 'teacher' ? 'teacher' : 'student');
+        : (context?.loginRole === 'teacher' ? 'teacher' : 'student');
 
     await reportStage('check_connection', '正在检查平台连接与配置…');
 
@@ -329,6 +256,12 @@ async function executeSsoRequest(req, body = {}, { onStage, signal, forceAccount
         const error = new Error('该配置未绑定新版免密登录接口');
         error.status = 400;
         throw error;
+    }
+    if (ACCOUNT_CAPABLE_METHODS.has(config.method)) {
+        const identity = mapMarchCenterToOfficialParameters(effectiveConfig, trustedContext, selectOfficialBaseUrl(effectiveConfig, trustedContext));
+        if (hasCompetitionPlatformIdentity(identity)) {
+            throw Object.assign(new Error('独立竞赛账号须通过对应的竞赛入口登录'), { status: 403 });
+        }
     }
     if (dryRun) {
         const preflight = await preflightPlatformJump(effectiveConfig, trustedContext);

@@ -155,20 +155,28 @@ export function createBaseSoapAdapter(options) {
         parameters
     });
 
-    async function ensureGroup(values) {
+    async function ensureGroup(values, strict = false) {
         const classType = normalizeClassType(values.classType);
         const groupResponse = await call('IsGroupExisted', {
             groupName: values.className,
             groupID: ''
         });
         const group = parseGroupExistence(groupResponse);
+        if (strict && (group.status === 'failure' || group.result.succ !== true)) {
+            return { status: 'failure', result: group.result };
+        }
         if (group.exists) return { status: 'success', groupID: group.groupID };
 
         const operationName = profileName === 'crossBorderCommerce'
             ? (classType === 3 ? 'AddMegagameGroup' : 'AddGroup')
             : (CLASS_OPERATION[classType] || 'AddTrainGroup');
         const creationResponse = await call(operationName, { groupName: values.className });
-        return parseGroupMutation(operationName, creationResponse);
+        const creation = parseGroupMutation(operationName, creationResponse);
+        if (strict && creation.status === 'success' && !creation.groupID) {
+            return { status: 'failure', result: { ...creation.result, succ: false } };
+        }
+        if (strict && creation.result.succ !== true) return { ...creation, status: 'failure' };
+        return creation;
     }
 
     async function commonCheckTrain(values) {
@@ -204,40 +212,43 @@ export function createBaseSoapAdapter(options) {
         return successResult();
     }
 
-    async function commonCheckTrainWithTeacher(values) {
+    async function commonCheckTrainWithTeacher(values, strict = false) {
         normalizeClassType(values.classType);
         if (MAX_RUN_YEAR_PROFILES.has(profileName)
             && values.maxRunYear !== undefined && values.maxRunYear !== null) {
             normalizeInt(values.maxRunYear, 'maxRunYear');
         }
         const requestedStudents = normalizeStudents(values.studentList);
-        const group = await ensureGroup(values);
+        const group = await ensureGroup(values, strict);
         if (group.status === 'failure') return group.result;
 
         const teacherResponse = await call('IsTeacherExisted', { accountList: [values.loginName] });
         const teacher = parseAccountExistence('IsTeacherExisted', teacherResponse);
-        if (teacher.status === 'failure') return teacher.result;
+        if (teacher.status === 'failure' || (strict && teacher.result.succ !== true)) return teacher.result;
         if (!teacher.accounts.includes(values.loginName)) {
             const addTeacherResponse = await call('AddTeacher', {
                 groupID: group.groupID,
                 teacherNameList: [values.loginName]
             });
             const addTeacher = parseAccountMutation('AddTeacher', addTeacherResponse);
+            if (strict && (addTeacher.status === 'failure' || addTeacher.result.succ !== true)) return addTeacher.result;
             if (addTeacher.status === 'success'
-                && !addTeacher.accounts.includes(values.loginName)) return addTeacher.result;
+                && !addTeacher.accounts.includes(values.loginName)) {
+                return strict ? { ...addTeacher.result, succ: false } : addTeacher.result;
+            }
         }
 
         if (requestedStudents.length === 0) return successResult();
         const studentResponse = await call('IsStuExisted', { accountList: requestedStudents.slice() });
         const students = parseAccountExistence('IsStuExisted', studentResponse);
-        if (students.status === 'failure') return students.result;
+        if (students.status === 'failure' || (strict && students.result.succ !== true)) return students.result;
         const existing = new Set(students.accounts);
         const missingStudents = requestedStudents.filter(loginName => !existing.has(loginName));
         if (missingStudents.length === 0) return successResult();
 
         const studentBeans = missingStudents.map(loginName => ({
             studentID: loginName,
-            password: 'train_123',
+            password: strict ? `Q7${crypto.randomUUID().replaceAll('-', '').slice(0, 14)}` : 'train_123',
             nickName: loginName
         }));
         const addStudentResponse = await call('AddStudent', addStudentParameters(
@@ -247,9 +258,9 @@ export function createBaseSoapAdapter(options) {
             group.groupID
         ));
         const addStudent = parseAccountMutation('AddStudent', addStudentResponse);
-        if (addStudent.status === 'failure') return addStudent.result;
+        if (addStudent.status === 'failure' || (strict && addStudent.result.succ !== true)) return addStudent.result;
         if (missingStudents.some(loginName => !addStudent.accounts.includes(loginName))) {
-            return addStudent.result;
+            return strict ? { ...addStudent.result, succ: false } : addStudent.result;
         }
         return successResult();
     }
@@ -299,6 +310,7 @@ export function createBaseSoapAdapter(options) {
         commonGetLoginName: values => `${values.loginName}_${values.epuId}`,
         commonCheckTrain,
         commonCheckTrainWithTeacher,
+        prepareCompetitionClass: values => commonCheckTrainWithTeacher(values, true),
         commonReturnStudentBaseInfo: values => ticketAfterCheck(commonCheckTrain, values),
         commonReturnTeacherBaseInfo: values => ticketAfterCheck(commonCheckTrainWithTeacher, values),
         deleteStudentAccount: values => call('MarkStuDeleted', {

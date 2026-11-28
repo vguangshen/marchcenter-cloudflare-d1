@@ -5,6 +5,7 @@ import { mark } from "./utils/startupPerf.js";
 import "./index.css";
 import "./styles/settings-dark.css";
 import "./styles/support-chat.css";
+import "./components/competition-events/competitionEvents.css";
 
 // 陈旧 hash chunk 自愈：部署后旧入口引用的懒加载 chunk 可能已从当前
 // 资源清单移除。捕获脚本错误和动态 import 的 rejected promise，带一次

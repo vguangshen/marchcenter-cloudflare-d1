@@ -46,6 +46,8 @@ const DatabaseManager = lazy(() => import('./components/views/settings/DatabaseM
 const AccountManagementApiManager = lazy(() => import('./components/views/settings/AccountManagementApiManager'));
 const EmailServiceManager = lazy(() => import('./components/views/settings/EmailServiceManager'));
 const SupportChatManager = lazy(() => import('./components/views/settings/SupportChatManager'));
+const CompetitionEventsManager = lazy(() => import('./components/competition-events/CompetitionEventsManager'));
+const TeacherCompetitionNotice = lazy(() => import('./components/competition-events/TeacherCompetitionNotice'));
 
 const AddUserModal = lazy(() => import('./components/modals/AddUserModal'));
 const EditModal = lazy(() => import('./components/modals/EditModal'));
@@ -198,6 +200,7 @@ export default function Dashboard({ auth, site, appearance }) {
 
     // Modals
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCompetitionEventsOpen, setIsCompetitionEventsOpen] = useState(false);
     const [isTaskAppModalOpen, setIsTaskAppModalOpen] = useState(false);
     const [taskAppSoftwareUnique, setTaskAppSoftwareUnique] = useState('');
     const [platformToEdit, setPlatformToEdit] = useState('');
@@ -208,6 +211,7 @@ export default function Dashboard({ auth, site, appearance }) {
     const { count: ticketUnread, refresh: refreshTicketUnread } = useTicketUnread(authStatus === 'authenticated' ? token : null);
     const isTicketStaff = currentUserRole === 'super_admin' || currentUserRole === 'admin';
     const canManageSupport = isAdmin || currentUserRole === 'admin';
+    const canManageCompetitionEvents = isAdmin || currentUserRole === 'admin';
     const platformRequestRef = useRef(0);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
@@ -918,6 +922,7 @@ export default function Dashboard({ auth, site, appearance }) {
                     activeThemeColor={activeThemeColor}
                     ticketUnread={ticketUnread}
                     onOpenTickets={() => setIsTicketCenterOpen(true)}
+                    onStartCompetition={canManageCompetitionEvents ? () => setIsCompetitionEventsOpen(true) : undefined}
                 />
 
                 <div ref={pageStage} className="dashboard-view-stage flex-grow">
@@ -1199,8 +1204,21 @@ export default function Dashboard({ auth, site, appearance }) {
             {authStatus === 'authenticated' && token && (
                 <SupportChatWidget key={`${currentUserId}:${currentUserRole}`} token={token} isStaff={canManageSupport} />
             )}
+            {authStatus === 'authenticated' && token && currentUserRole === 'teacher' && (
+                <Suspense fallback={null}>
+                    <TeacherCompetitionNotice key={currentUserId} token={token} onEnter={event => handleOpenCompetition(
+                        { id: event.competitionId, title: event.title }, 'student', null, { competitionEventId: event.id }
+                    )} />
+                </Suspense>
+            )}
 
             <Suspense fallback={<ModalLoadingNotice />}>
+                {canManageCompetitionEvents && isCompetitionEventsOpen && (
+                    <CompetitionEventsManager key={currentUserId} onClose={() => setIsCompetitionEventsOpen(false)}
+                        onEnterTeacher={event => handleOpenCompetition(
+                            { id: event.competitionId, title: event.title }, 'teacher', null, { competitionEventId: event.id }
+                        )} />
+                )}
                 {isModalOpen && <EditModal isOpen onClose={() => setIsModalOpen(false)} onSave={handleSave} initialData={editingLink} existingCategories={competitionFieldHistory.categories} existingTitles={competitionFieldHistory.titles} ssoConfigs={ssoConfigs} authToken={token} />}
                 {isTaskAppModalOpen && <TaskAppModal isOpen onClose={() => { setIsTaskAppModalOpen(false); setPlatformToEdit(''); }} onSave={async () => { setEditingLink(null); await fetchLinks(); }} onCatalogRefreshed={fetchLinks} onPlatformsChange={async () => { const platforms = await loadAgentPlatforms(); await fetchLinks({ animate: false }); return platforms; }} platforms={agentPlatforms} initialData={editingLink} initialSoftwareUnique={taskAppSoftwareUnique} initialPlatformSoftwareUnique={platformToEdit} ssoConfigs={ssoConfigs} existingLinks={links} />}
                 {isAiModalOpen && <AiGuideModal isOpen onClose={() => setIsAiModalOpen(false)} link={currentAiLink} aiConfig={aiConfig} />}

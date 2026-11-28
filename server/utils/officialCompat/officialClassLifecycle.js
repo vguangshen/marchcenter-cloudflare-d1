@@ -1,6 +1,7 @@
 import { createOfficialAdapter } from './adapterRegistry.js';
 import { OfficialJumpExecutionError } from './errors.js';
 import {
+    mapMarchCenterToOfficialParameters,
     resolveOfficialPlatform,
     selectOfficialBaseUrl,
     validateConfirmedOfficialBaseUrl
@@ -9,6 +10,56 @@ import {
 const SUCCESS = 10000;
 const TOKEN_INVALID = 10011;
 const MAX_TOKEN_ATTEMPTS = 3;
+const PLATFORM_ACCOUNT = /^[A-Za-z0-9]{1,64}$/;
+
+async function classAdapter(config, method, serviceName, baseUrl, dependencies) {
+    const credentials = await dependencies.credentialsProvider.getCredentials({ method, config });
+    return createOfficialAdapter(serviceName, {
+        baseUrl,
+        fetchImplementation: dependencies.fetchImplementation,
+        tokenStore: dependencies.tokenStore,
+        credentials,
+        timeoutMs: dependencies.timeoutMs,
+        maxResponseBytes: dependencies.maxResponseBytes
+    });
+}
+
+/** Prepare a contest's exclusively assigned class and accounts without handing out a login ticket. */
+export async function prepareOfficialCompetition(config, context, dependencies) {
+    const { method, serviceName } = resolveOfficialPlatform(config.method);
+    if (method === 'direct' || method === 'paasV2') {
+        throw new OfficialJumpExecutionError('当前平台不支持独立竞赛班级', {
+            code: 'OFFICIAL_COMPETITION_CLASS_UNSUPPORTED'
+        });
+    }
+
+    const baseUrl = validateConfirmedOfficialBaseUrl(selectOfficialBaseUrl(config, context));
+    const parameters = mapMarchCenterToOfficialParameters(config, context, baseUrl);
+    const { className, loginName, teacherUserName, studentList } = parameters;
+    const participants = Array.isArray(studentList) ? studentList : [];
+    if (context.loginRole !== 'teacher' || loginName !== teacherUserName || participants.length === 0
+        || [className, loginName, ...participants].some(name => typeof name !== 'string' || !PLATFORM_ACCOUNT.test(name))
+        || new Set([loginName, ...participants]).size !== participants.length + 1) {
+        throw new OfficialJumpExecutionError('独立竞赛班级或账号配置无效', {
+            code: 'OFFICIAL_COMPETITION_CLASS_INVALID'
+        });
+    }
+
+    const adapter = await classAdapter(config, method, serviceName, baseUrl, dependencies);
+    let result;
+    for (let attempt = 0; attempt < MAX_TOKEN_ATTEMPTS; attempt += 1) {
+        result = await adapter.prepareCompetitionClass(parameters);
+        if (result?.code === SUCCESS && result.succ === true) return;
+        if (method !== 'java' || result?.code !== TOKEN_INVALID) break;
+        dependencies.tokenStore.delete(`${baseUrl}/open`);
+    }
+    const error = new OfficialJumpExecutionError('竞赛平台未确认班级和账号已创建', {
+        code: 'OFFICIAL_COMPETITION_CLASS_PREPARATION_FAILED',
+        details: { method, serviceName, resultCode: result?.code ?? null }
+    });
+    error.status = 502;
+    throw error;
+}
 
 /**
  * Remote class deletion. SOAP platforms resolve the group ID via
@@ -25,18 +76,10 @@ export async function deleteOfficialClass(config, context, target, dependencies)
         });
     }
     const baseUrl = validateConfirmedOfficialBaseUrl(selectOfficialBaseUrl(config, context));
-    const credentials = await dependencies.credentialsProvider.getCredentials({ method, config });
     const className = typeof target === 'string' ? target : target?.className;
     const teacherUserName = typeof target === 'string' ? undefined : target?.teacherUserName;
     const studentAccountList = typeof target === 'string' ? [] : target?.studentAccountList;
-    const adapter = createOfficialAdapter(serviceName, {
-        baseUrl,
-        fetchImplementation: dependencies.fetchImplementation,
-        tokenStore: dependencies.tokenStore,
-        credentials,
-        timeoutMs: dependencies.timeoutMs,
-        maxResponseBytes: dependencies.maxResponseBytes
-    });
+    const adapter = await classAdapter(config, method, serviceName, baseUrl, dependencies);
     if (typeof adapter.deleteClassAccount !== 'function') {
         throw new OfficialJumpExecutionError('当前 official 适配器未实现班级删除', {
             code: 'OFFICIAL_CLASS_DELETE_UNSUPPORTED'

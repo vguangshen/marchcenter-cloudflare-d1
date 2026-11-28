@@ -19,7 +19,7 @@ export function createTrainingEntrance(options = {}) {
     if (typeof clearToken !== 'function') throw new TypeError('clearToken 必须是函数');
 
     return Object.freeze({
-        async executeNew({ serviceName, methodName, parameters, url, adapterOptions = {} }) {
+        async executeNew({ serviceName, methodName, parameters, url, adapterOptions = {}, strictAccountSync = false }) {
             const normalizedMethodName = lowerCaseInitial(methodName);
             const status = getOfficialMethodStatus(normalizedMethodName);
             if (status === 'not-implemented') {
@@ -40,6 +40,7 @@ export function createTrainingEntrance(options = {}) {
             // account can skip duplicate synchronization and only refresh its
             // per-entry ticket.
             if (parameters?.accountWasReady === true) mapped.accountWasReady = true;
+            if (strictAccountSync) mapped.strictAccountSync = true;
             return executeWithOfficialRetry(async attempt => {
                 const adapter = adapterFactory(serviceName, {
                     ...adapterOptions,

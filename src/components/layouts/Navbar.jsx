@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
     LogOut, Search, LayoutDashboard, Settings,
-    Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy, ChevronDown, ChevronRight, SquarePlus
+    Pencil, Check, Megaphone, LayoutGrid, Rows3, Bot, LifeBuoy, ChevronDown, ChevronRight, SquarePlus, Trophy
 } from 'lucide-react';
 import { DEFAULT_SITE_CONFIG, GLASS_INPUT } from '../../constants/config';
 import { THEMES } from '../../constants/themes';
@@ -52,7 +52,7 @@ function NavButton({
     );
 }
 
-function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, editing, onEdit, onAddContest, onAddAgent }) {
+function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, editing, onEdit, onAddContest, onAddAgent, onStartCompetition }) {
     const menuId = useId();
     const creationId = useId();
     const root = useRef(null);
@@ -60,6 +60,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     const menuToggle = useRef(null);
     const menu = useRef(null);
     const editButton = useRef(null);
+    const startButton = useRef(null);
     const disclosure = useRef(null);
     const firstCreation = useRef(null);
     const menuLeaveTimer = useRef(null);
@@ -69,7 +70,8 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     const [placement, setPlacement] = useState({ side: 'below', offset: 0 });
     const label = settingsActive ? '退出设置' : '系统工具';
     const editLabel = editing ? '完成编辑' : '编辑';
-    const canOpenMenu = canEdit && !settingsActive;
+    const hasMenu = canEdit || Boolean(onStartCompetition);
+    const canOpenMenu = hasMenu && !settingsActive;
     const open = canOpenMenu && menuMode !== null;
 
     const close = useCallback(() => {
@@ -128,7 +130,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
         if (canOpenMenu && event.key === 'ArrowDown' && (event.target === trigger.current || event.target === menuToggle.current)) {
             event.preventDefault();
             revealMenu('explicit');
-            requestAnimationFrame(() => editButton.current?.focus());
+            requestAnimationFrame(() => (editButton.current || startButton.current)?.focus());
             return;
         }
         if (!open || (event.key !== 'Escape' && event.key !== 'ArrowLeft')) return;
@@ -147,7 +149,7 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
     }
 
     return (
-        <div ref={root} className="nav-tools" data-flyout={placement.side} data-can-edit={canEdit}
+        <div ref={root} className="nav-tools" data-flyout={placement.side} data-has-menu={hasMenu}
             data-open={open} data-editing={canEdit && editing}
             style={{ '--nav-tools-flyout-offset': `${placement.offset}px` }} onKeyDown={onMenuKey}
             onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}
@@ -168,14 +170,14 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
             </NavButton>
             {canOpenMenu && (
                 <>
-                    <button ref={menuToggle} type="button" className="nav-tools__menu-toggle" aria-label="展开编辑选项"
-                        aria-expanded={open} aria-controls={menuId} title="编辑选项"
+                    <button ref={menuToggle} type="button" className="nav-tools__menu-toggle" aria-label="展开系统工具菜单"
+                        aria-expanded={open} aria-controls={menuId} title="系统工具菜单"
                         onClick={() => { if (menuMode === 'explicit') close(); else revealMenu('explicit'); }}>
                         <ChevronDown className="nav-tools__caret" aria-hidden="true" />
                     </button>
                     <div ref={menu} id={menuId} role="group" aria-label="系统工具菜单" className="nav-tools__menu nav-tools__surface"
                         data-open={open} aria-hidden={!open || undefined} inert={!open}>
-                        <div className="nav-tools__edit"
+                        {canEdit && <div className="nav-tools__edit"
                             onPointerEnter={event => {
                                 if (event.pointerType !== 'mouse' || !open) return;
                                 clearTimeout(creationLeaveTimer.current);
@@ -214,7 +216,15 @@ function SystemToolsMenu({ settingsActive, onSettings, onExitSettings, canEdit, 
                                     创建智能体
                                 </button>
                             </div>
-                        </div>
+                        </div>}
+                        {onStartCompetition && (
+                            <button ref={startButton} type="button"
+                                className={`nav-tools__row nav-tools__competition${canEdit ? ' nav-tools__competition--below' : ''}`}
+                                onClick={() => finish(onStartCompetition)}>
+                                <span className="nav-tools__icon" aria-hidden="true"><Trophy /></span>
+                                开启竞赛
+                            </button>
+                        )}
                     </div>
                 </>
             )}
@@ -233,7 +243,7 @@ const Navbar = ({
     onEntryTransitionEnd,
     activeThemeColor = 'blue',
     ticketUnread = 0,
-    onOpenTickets
+    onOpenTickets, onStartCompetition
 }) => {
     const isChristmas = immersiveMode === 'christmas';
     const isLunar = immersiveMode === 'lunar_new_year';
@@ -428,7 +438,7 @@ const Navbar = ({
                             <SystemToolsMenu settingsActive={activePage === 'settings'} onSettings={() => setActivePage('settings')}
                                 onExitSettings={() => setActivePage('dashboard')} canEdit={isAdmin}
                                 editing={isCardEditMode} onEdit={() => setIsCardEditMode(value => !value)}
-                                onAddContest={onAdd} onAddAgent={onAddTaskApp} />
+                                onAddContest={onAdd} onAddAgent={onAddTaskApp} onStartCompetition={onStartCompetition} />
                         )}
 
                         {onOpenTickets && (

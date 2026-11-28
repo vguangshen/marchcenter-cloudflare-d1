@@ -47,7 +47,7 @@ export function isTimeRuleActive(rule, now = new Date()) {
     return true;
 }
 
-export async function assertCompetitionAccess(user, competitionId) {
+export async function assertCompetitionAccess(user, competitionId, { assignedStudentEntry = false } = {}) {
     const [[competition]] = await pool.query(
         'SELECT id, unlock_time AS unlockTime, lock_time AS lockTime FROM competitions WHERE id = ? LIMIT 1',
         [competitionId]
@@ -65,13 +65,14 @@ export async function assertCompetitionAccess(user, competitionId) {
     }
     if ([ROLES.SUPER_ADMIN, ROLES.ADMIN].includes(role)) return;
     const access = await getUserAccess(user.id);
-    if (!access.configured) {
+    const hasAssignment = role === ROLES.TEACHER && assignedStudentEntry;
+    if (!hasAssignment && !access.configured) {
         const error = new Error('账号尚未配置竞赛访问权限');
         error.status = 403;
         throw error;
     }
     const numericId = Number(competitionId);
-    if (!access.permissions.includes(numericId)) {
+    if (!hasAssignment && !access.permissions.includes(numericId)) {
         const error = new Error('您没有访问该竞赛的权限');
         error.status = 403;
         throw error;

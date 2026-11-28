@@ -227,8 +227,9 @@ export function useCompetitionActions({
         }));
     };
 
-    const handleOpenCompetition = async (link, loginRole = 'student', studentTarget = null, { scoreDetails = false } = {}) => {
+    const handleOpenCompetition = async (link, loginRole = 'student', studentTarget = null, { scoreDetails = false, competitionEventId = null } = {}) => {
         if (!token) {
+            if (competitionEventId) return false;
             setCreatePanel({
                 visible: true, step: 0, title: link.title, message: '',
                 error: '请先登录后再进入系统', linkId: link.id
@@ -238,21 +239,22 @@ export function useCompetitionActions({
         const studentIndex = loginRole === 'expert'
             ? Number(studentTarget?.studentIndex ?? studentTarget?.rosterIndex ?? studentTarget ?? 1)
             : studentTarget;
-        const requestKey = `${link.id}:${loginRole}:${studentIndex || ''}`;
+        const requestKey = competitionEventId || `${link.id}:${loginRole}:${studentIndex || ''}`;
         if (openingCompetitionRef.current.has(requestKey)) return;
         openingCompetitionRef.current.add(requestKey);
         setOpeningCompetitionKeys(previous => new Set(previous).add(requestKey));
         let launchWindow = null;
         let launchController;
         let windowMonitor;
+        const eventEntryLabel = loginRole === 'teacher' ? '教师端' : '学生端';
         const openLaunchWindow = () => {
             const opened = window.open('about:blank', '_blank');
             if (!opened) throw new Error('浏览器阻止了新窗口，请允许本站打开弹窗后重试');
             try { opened.opener = null; } catch { /* best effort */ }
             try {
                 renderLaunchWindow(opened, {
-                    title: scoreDetails ? '正在打开得分详情' : loginRole === 'expert' ? '正在进入评委端' : '正在进入竞赛平台',
-                    message: scoreDetails ? '正在确认大渔工坊的任务状态…' : loginRole === 'expert'
+                    title: competitionEventId ? `正在打开${eventEntryLabel}` : scoreDetails ? '正在打开得分详情' : loginRole === 'expert' ? '正在进入评委端' : '正在进入竞赛平台',
+                    message: competitionEventId ? '正在校验本次竞赛的班级和账号…' : scoreDetails ? '正在确认大渔工坊的任务状态…' : loginRole === 'expert'
                         ? '正在绑定所选学生并获取评委票据…'
                         : '正在同步账号并准备免密登录…',
                     tone: loginRole === 'expert' ? 'violet' : 'indigo'
@@ -311,7 +313,7 @@ export function useCompetitionActions({
                 void markAsExecuted(link.id);
                 return;
             }
-            if (link.ssoMethod || link.ssoConfigId) {
+            if (competitionEventId || link.ssoMethod || link.ssoConfigId) {
                 const isAdditionalStudent = Number.isInteger(Number(studentIndex)) && Number(studentIndex) > 1;
                 const accountAlreadyReady = isAdditionalStudent
                     ? (studentAccountsByCard[String(link.id)] || []).some(account => (
@@ -335,7 +337,7 @@ export function useCompetitionActions({
                     }
                     if (launchWindow.closed) throw new Error('详情窗口已被关闭，请重试');
                 }
-                if (!accountAlreadyReady || needsPasswordRestore) {
+                if (!competitionEventId && (!accountAlreadyReady || needsPasswordRestore)) {
                     setCreatePanel({
                         visible: true, step: 1, title: link.title,
                         message: '正在检查平台连接…', error: null, linkId: link.id
@@ -347,7 +349,7 @@ export function useCompetitionActions({
                 }, 500);
                 const data = await api.stream('/sso/execute/stream', {
                     method: 'POST',
-                    body: JSON.stringify({
+                    body: JSON.stringify(competitionEventId ? { competitionId: link.id, competitionEventId } : {
                         competitionId: link.id,
                         method: link.ssoMethod || null,
                         configId: link.ssoConfigId || null,
@@ -358,7 +360,7 @@ export function useCompetitionActions({
                     fallback: 'SSO 执行失败',
                     retry: 0
                 }, ({ event, data: eventData }) => {
-                    if (event !== 'stage' || !eventData?.stage) return;
+                    if (competitionEventId || event !== 'stage' || !eventData?.stage) return;
                     const step = { check_connection: 1, check_class: 2, create_account: 3, prepare_entry: 4 }[eventData.stage];
                     if (!step) return;
                     setCreatePanel(previous => ({
@@ -368,10 +370,15 @@ export function useCompetitionActions({
                 window.clearInterval(windowMonitor);
                 if (localStorage.getItem('authToken') !== token) {
                     launchWindow.close();
-                    clearCreatePanel();
+                    if (!competitionEventId) clearCreatePanel();
                     return;
                 }
                 if (!data?.success || (!data.redirectUrl && !data.postForm)) throw new Error('平台接口未返回有效的登录地址');
+                if (competitionEventId) {
+                    if (data.postForm) submitPostForm(launchWindow, data.postForm);
+                    else navigateLaunchWindow(launchWindow, data.redirectUrl);
+                    return true;
+                }
                 if (!isAdditionalStudent) {
                     const readyField = loginRole === 'teacher' ? 'teacherReady' : 'studentReady';
                     setLinks(previous => previous.map(item => item.id === link.id
@@ -409,8 +416,12 @@ export function useCompetitionActions({
                 try { launchWindow.close(); } catch { /* already closed */ }
             }
             if (launchController?.signal.aborted) {
-                clearCreatePanel();
+                if (!competitionEventId) clearCreatePanel();
                 return;
+            }
+            if (competitionEventId) {
+                if (localStorage.getItem('authToken') === token) notify(error.message || `进入${eventEntryLabel}失败，请重试`, 'error');
+                return false;
             }
             setCreatePanel(previous => ({
                 ...previous,

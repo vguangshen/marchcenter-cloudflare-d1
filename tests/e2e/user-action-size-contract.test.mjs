@@ -26,7 +26,7 @@ async function openUserDirectory(t, actor) {
     const token = actor ? await harness.issueToken(actor) : harness.token;
     await page.addInitScript(value => localStorage.setItem('authToken', value), token);
     await page.goto((await harness.miniflare.ready).href);
-    await page.getByRole('button', { name: '系统工具' }).click();
+    await page.getByRole('button', { name: '系统工具', exact: true }).click();
     await page.getByRole('button', { name: '用户管理' }).click();
     return { harness, page };
 }

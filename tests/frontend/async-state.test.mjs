@@ -500,7 +500,7 @@ test('saving the card binding updates maintenance on the normal catalog refresh'
         await page.goto(`${origin}/?mode=maintenance`);
         const title = page.getByRole('heading', { name: '已绑定实训', exact: true });
         const card = page.locator('.contest-card').filter({ has: title });
-        const toolsTrigger = page.getByRole('button', { name: '展开编辑选项', exact: true });
+        const toolsTrigger = page.getByRole('button', { name: '展开系统工具菜单', exact: true });
         const toolsMenu = page.getByRole('group', { name: '系统工具菜单', exact: true });
         await title.waitFor();
         await toolsTrigger.click();
@@ -875,7 +875,7 @@ test('system tools opens creation by keyboard and preserves the separate card ed
     try {
         await page.goto(`${origin}/?mode=maintenance`);
         const trigger = page.getByRole('button', { name: '系统工具', exact: true });
-        const menuToggle = page.getByRole('button', { name: '展开编辑选项', exact: true });
+        const menuToggle = page.getByRole('button', { name: '展开系统工具菜单', exact: true });
         const tools = page.locator('.nav-tools__menu');
         const edit = tools.getByRole('button', { name: '编辑', exact: true });
         const disclosure = tools.getByRole('button', { name: '展开创建选项' });
@@ -934,14 +934,15 @@ test('sending a page of gifts produces one distinct, compact gift per recipient'
     const page = await browser.newPage();
     try {
         await page.goto(`${origin}/?mode=maintenance`);
-        await page.getByRole('button', { name: '系统工具' }).waitFor();
+        const toolsButton = page.getByRole('button', { name: '系统工具', exact: true });
+        await toolsButton.waitFor();
         await page.evaluate(() => {
             const previous = window.__testApi;
             window.__testApi = (method, url, ...args) => url.startsWith('/users?')
                 ? Array.from({ length: 50 }, (_, index) => ({ id: index + 1, username: `student-${index + 1}`, role: 'student' }))
                 : previous(method, url, ...args);
         });
-        await page.getByRole('button', { name: '系统工具' }).click();
+        await toolsButton.click();
         await page.getByRole('button', { name: '赠送礼物' }).click();
         await page.getByRole('button', { name: 'student-50', exact: true }).waitFor();
         await page.getByPlaceholder(/礼物名称/).fill('Fixture gift');

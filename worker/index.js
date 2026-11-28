@@ -7,6 +7,7 @@ import { BRAND_NAME } from '../src/constants/brand.js';
 
 import authRoutes from '../server/routes/auth.js';
 import competitionRoutes from '../server/routes/competitions.js';
+import competitionEventsRoutes from '../server/routes/competitionEvents.js';
 import userRoutes from '../server/routes/users.js';
 import ssoRoutes from '../server/routes/sso.js';
 import ssoConfigRoutes from '../server/routes/ssoConfig.js';
@@ -36,6 +37,7 @@ const workerPaasV2TokenStore = createOfficialTokenStore({
 });
 app.use('/api/auth', authRoutes);
 app.use('/api/competitions', competitionRoutes);
+app.use('/api/competition-events', competitionEventsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/sso', ssoRoutes);
 app.use('/api/sso-config', ssoConfigRoutes);
@@ -63,7 +65,8 @@ app.get('/api/ready', async (_req, res) => {
             EXISTS (SELECT 1 FROM support_ticket_messages), EXISTS (SELECT 1 FROM support_ticket_attachments),
             EXISTS (SELECT 1 FROM support_chat_conversations), EXISTS (SELECT 1 FROM support_chat_messages),
             EXISTS (SELECT 1 FROM support_chat_attachments), EXISTS (SELECT 1 FROM support_chat_options),
-            EXISTS (SELECT 1 FROM support_chat_knowledge), EXISTS (SELECT revision FROM support_chat_knowledge_revision WHERE id = 1)`);
+            EXISTS (SELECT 1 FROM support_chat_knowledge), EXISTS (SELECT revision FROM support_chat_knowledge_revision WHERE id = 1),
+            EXISTS (SELECT opened_at, class_name FROM competition_events), EXISTS (SELECT 1 FROM competition_event_teachers)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });

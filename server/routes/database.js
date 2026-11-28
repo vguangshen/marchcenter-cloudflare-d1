@@ -75,7 +75,8 @@ const BACKUP_TABLES = [
     'announcements', 'user_gifts', 'ai_settings',
     'support_tickets', 'support_ticket_messages', 'support_ticket_attachments',
     'support_chat_conversations', 'support_chat_messages', 'support_chat_attachments', 'support_chat_options',
-    'support_chat_knowledge', 'support_chat_knowledge_revision'
+    'support_chat_knowledge', 'support_chat_knowledge_revision',
+    'competition_events', 'competition_event_teachers'
 ];
 
 router.post('/backup', authMiddleware, adminOnly, async (_req, res) => {

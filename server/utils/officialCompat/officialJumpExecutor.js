@@ -113,7 +113,7 @@ function assertSuccessfulResult(result, metadata) {
     return result.data;
 }
 
-export async function executeOfficialJump(config, context = {}, dependencies) {
+export async function executeOfficialJump(config, context = {}, dependencies, { strictAccountSync = false } = {}) {
     if (!dependencies) throw new TypeError('official dependencies 必须显式注入');
     const { method, serviceName } = resolveOfficialPlatform(config.method);
     const instance = resolveOfficialInstance(config);
@@ -177,6 +177,7 @@ export async function executeOfficialJump(config, context = {}, dependencies) {
             methodName: commonMethod,
             parameters,
             url: baseUrl,
+            ...(strictAccountSync && method === 'java' ? { strictAccountSync } : {}),
             adapterOptions: {
                 fetchImplementation: dependencies.fetchImplementation,
                 tokenStore: dependencies.tokenStore,

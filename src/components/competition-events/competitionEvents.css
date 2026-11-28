@@ -1,0 +1,213 @@
+.competition-event-mark {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    place-items: center;
+    border: 1px solid rgb(var(--system-accent-rgb, 59 130 246) / .16);
+    border-radius: .9rem;
+    background: rgb(var(--system-accent-rgb, 59 130 246) / .12);
+    color: var(--mc-color-accent);
+}
+
+.competition-event-tabs {
+    display: flex;
+    gap: .25rem;
+    flex: none;
+    padding: .72rem 1.25rem .58rem;
+    border-bottom: 1px solid var(--mc-color-border);
+}
+
+.competition-event-tabs > button {
+    min-height: 2.25rem;
+    padding: .35rem .8rem;
+    border: 1px solid transparent;
+    border-radius: .72rem;
+    color: var(--mc-color-muted);
+    font-size: .8125rem;
+    font-weight: 750;
+}
+
+.competition-event-tabs > button[aria-pressed="true"] {
+    border-color: rgb(var(--system-accent-rgb, 59 130 246) / .16);
+    background: rgb(var(--system-accent-rgb, 59 130 246) / .1);
+    color: var(--mc-color-accent);
+}
+
+.competition-event-tabs > button:focus-visible,
+.competition-event-tag:focus-visible {
+    outline: 2px solid var(--mc-color-accent);
+    outline-offset: 2px;
+}
+
+.competition-event-picker {
+    display: grid;
+    min-width: 0;
+    gap: .65rem;
+    padding: .72rem;
+    border: 1px solid var(--mc-color-border);
+    border-radius: 1rem;
+    background: var(--mc-color-surface-muted);
+}
+
+.competition-event-picker__heading {
+    display: flex;
+    align-items: center;
+    gap: .42rem;
+    padding-inline: .22rem;
+    font-size: .8125rem;
+}
+
+.competition-event-picker__list {
+    display: grid;
+    max-height: 12rem;
+    min-height: 5.25rem;
+    align-content: start;
+    gap: .3rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: .1rem;
+}
+
+.competition-event-option {
+    display: flex;
+    min-height: 2.35rem;
+    align-items: center;
+    gap: .55rem;
+    padding: .35rem .5rem;
+    border: 1px solid transparent;
+    border-radius: .7rem;
+    font-size: .8125rem;
+    cursor: pointer;
+}
+
+.competition-event-option:is(:hover, :focus-within, [data-selected="true"]) {
+    border-color: rgb(var(--system-accent-rgb, 59 130 246) / .19);
+    background: rgb(var(--system-accent-rgb, 59 130 246) / .08);
+}
+
+.competition-event-empty {
+    margin: 0;
+    padding: .6rem .5rem;
+    color: var(--mc-color-muted);
+    font-size: .8125rem;
+}
+
+.competition-event-tag {
+    display: inline-flex;
+    max-width: 100%;
+    min-height: 1.65rem;
+    align-items: center;
+    gap: .25rem;
+    padding: .1rem .45rem;
+    border-radius: .55rem;
+    background: rgb(var(--system-accent-rgb, 59 130 246) / .1);
+    color: var(--mc-color-accent);
+    font-size: .75rem;
+    font-weight: 700;
+}
+
+.competition-event-record {
+    min-width: 0;
+    padding: .75rem;
+    border: 1px solid var(--mc-color-border);
+    border-radius: .9rem;
+    background: var(--mc-color-surface-muted);
+}
+
+.competition-event-status,
+.competition-notice-count {
+    flex: none;
+    padding: .22rem .48rem;
+    border-radius: 99px;
+    background: rgb(100 116 139 / .13);
+    color: var(--mc-color-muted);
+    white-space: nowrap;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.competition-event-status[data-active="true"],
+.competition-notice-count {
+    background: rgb(var(--system-accent-rgb, 59 130 246) / .12);
+    color: var(--mc-color-accent);
+}
+
+.competition-notice-dock {
+    --competition-gap: var(--support-chat-gap, .75rem);
+    --competition-right: max(var(--competition-gap), env(safe-area-inset-right));
+    --competition-bottom: calc(max(var(--competition-gap), env(safe-area-inset-bottom)) + var(--support-chat-launcher-size, 3.5rem) + .7rem + var(--competition-account-offset, 0px));
+    position: fixed;
+    z-index: 85;
+    right: var(--competition-right);
+    bottom: var(--competition-bottom);
+    color: var(--mc-color-text);
+}
+
+.competition-notice {
+    display: flex;
+    width: min(22rem, calc(100vw - var(--competition-right) - max(var(--competition-gap), env(safe-area-inset-left))));
+    max-height: min(27rem, calc(100dvh - var(--competition-bottom) - .75rem));
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--mc-color-border);
+    border-radius: 1.25rem;
+    background: radial-gradient(105% 65% at 0% 0%, rgb(var(--system-accent-rgb, 59 130 246) / .12), transparent 65%), var(--mc-color-surface);
+    box-shadow: var(--mc-shadow-panel);
+    backdrop-filter: blur(18px);
+    animation: competition-notice-in .2s ease-out both;
+}
+
+.competition-notice > :is(header, footer) { flex: none; }
+
+.competition-notice__list {
+    display: grid;
+    min-height: 0;
+    gap: .45rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: .52rem .67rem;
+    list-style: none;
+}
+
+.competition-notice__list > li {
+    min-width: 0;
+    padding: .55rem .62rem;
+    border: 1px solid var(--mc-color-border);
+    border-radius: .75rem;
+    background: var(--mc-color-surface-muted);
+}
+
+.competition-notice-launcher { border-radius: 999px; }
+
+@keyframes competition-notice-in {
+    from { opacity: 0; transform: translateY(.4rem); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (width >= 53rem) {
+    body:has(.support-chat-dock > #support-chat-panel:not([hidden])) .competition-notice-dock {
+        right: calc(var(--competition-right) + 24.75rem);
+    }
+}
+
+@media (width < 53rem) {
+    body:has(.support-chat-dock > #support-chat-panel:not([hidden])) .competition-notice-dock { visibility: hidden; }
+    body:has(.competition-notice-dock) .account-reminder-dock > section { max-height: min(10rem, 27dvh); }
+    body:has(.account-reminder-dock > button) .competition-notice-dock { --competition-account-offset: 2.75rem; }
+    body:has(.account-reminder-dock > section) .competition-notice-dock {
+        --competition-account-offset: calc(min(10rem, 27dvh) + .65rem);
+    }
+}
+
+@media (width <= 767px) {
+    .competition-event-tabs { padding-inline: 1rem; }
+    .competition-event-picker__list { max-height: 8rem; }
+    .competition-event-modal .mc-modal__footer .mc-button { flex: 0 1 auto; }
+    .competition-event-modal .mc-modal__footer button[form] { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .competition-notice { animation: none; }
+}

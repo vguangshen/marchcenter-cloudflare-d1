@@ -61,9 +61,26 @@ export function createNewTrainingAdapter(options = {}) {
         commonGetLoginName({ loginName, epuId }) {
             return `${loginName}_${epuId}`;
         },
+        async prepareCompetitionClass(parameters) {
+            const teacher = await invoke('getLoginTeacherName', { u: parameters.loginName });
+            if (teacher.code !== OFFICIAL_SUCCESS || teacher.succ !== true) return teacher;
+            const ticket = requireJavaResultData(teacher, 'getLoginTeacherName');
+            if (typeof ticket !== 'string' || !ticket) {
+                throw new OfficialJavaResponseError('竞赛教师账号未返回有效登录信息', {
+                    operationName: 'getLoginTeacherName', code: 'OFFICIAL_JAVA_TICKET_DATA_TYPE'
+                });
+            }
+            // Java creates the class by attaching a real student to the teacher.
+            // Only seed the first participant here. The others sync on entry.
+            return invoke('getUserName', getUserValues({
+                ...parameters, loginName: parameters.studentList[0]
+            }, true));
+        },
         async commonReturnStudentBaseInfo(parameters) {
             if (parameters.accountWasReady !== true) {
                 const userResult = await invoke('getUserName', getUserValues(parameters, true));
+                if (parameters.strictAccountSync === true
+                    && (userResult.code !== OFFICIAL_SUCCESS || userResult.succ !== true)) return userResult;
                 if (userResult.code === OFFICIAL_FAILURE) {
                     throw new OfficialJavaResponseError(javaUrlDecode(userResult.message), {
                         operationName: 'getUserName', raw: userResult.raw, code: 'OFFICIAL_JAVA_USER_SYNC_FAILURE'
