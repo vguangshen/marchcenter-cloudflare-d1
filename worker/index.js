@@ -66,7 +66,8 @@ app.get('/api/ready', async (_req, res) => {
             EXISTS (SELECT 1 FROM support_chat_conversations), EXISTS (SELECT 1 FROM support_chat_messages),
             EXISTS (SELECT 1 FROM support_chat_attachments), EXISTS (SELECT 1 FROM support_chat_options),
             EXISTS (SELECT 1 FROM support_chat_knowledge), EXISTS (SELECT revision FROM support_chat_knowledge_revision WHERE id = 1),
-            EXISTS (SELECT opened_at, class_name FROM competition_events), EXISTS (SELECT 1 FROM competition_event_teachers)`);
+            EXISTS (SELECT opened_at, class_name, platform_sso_method, platform_sso_config_id FROM competition_events),
+            EXISTS (SELECT 1 FROM competition_event_teachers)`);
         return res.json({ ready: true });
     } catch {
         return res.status(503).json({ ready: false });

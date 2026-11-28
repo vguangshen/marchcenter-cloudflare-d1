@@ -133,6 +133,10 @@ function addStudentParameters(profileName, values, studentList, groupID) {
     };
 }
 
+function failedContestOperation(operationName, result) {
+    return { ...result, succ: false, operationName };
+}
+
 export function createBaseSoapAdapter(options) {
     const { profileName, serviceName, baseUrl } = options;
     const soapClient = options.soapClient || createAxisSoapClient({
@@ -148,12 +152,14 @@ export function createBaseSoapAdapter(options) {
     const ticketType = options.ticketType ?? 'itmc';
     if (typeof ticketBuilder !== 'function') throw new TypeError('ticketBuilder 必须是函数');
 
-    const call = (operationName, parameters) => soapClient.call({
-        profileName,
-        operationName,
-        baseUrl,
-        parameters
-    });
+    const call = async (operationName, parameters) => {
+        try {
+            return await soapClient.call({ profileName, operationName, baseUrl, parameters });
+        } catch (error) {
+            if (error instanceof Error) error.operationName ??= operationName;
+            throw error;
+        }
+    };
 
     async function ensureGroup(values, strict = false) {
         const classType = normalizeClassType(values.classType);
@@ -163,7 +169,7 @@ export function createBaseSoapAdapter(options) {
         });
         const group = parseGroupExistence(groupResponse);
         if (strict && (group.status === 'failure' || group.result.succ !== true)) {
-            return { status: 'failure', result: group.result };
+            return { status: 'failure', result: failedContestOperation('IsGroupExisted', group.result) };
         }
         if (group.exists) return { status: 'success', groupID: group.groupID };
 
@@ -172,10 +178,9 @@ export function createBaseSoapAdapter(options) {
             : (CLASS_OPERATION[classType] || 'AddTrainGroup');
         const creationResponse = await call(operationName, { groupName: values.className });
         const creation = parseGroupMutation(operationName, creationResponse);
-        if (strict && creation.status === 'success' && !creation.groupID) {
-            return { status: 'failure', result: { ...creation.result, succ: false } };
+        if (strict && (!creation.groupID || creation.result.succ !== true)) {
+            return { status: 'failure', result: failedContestOperation(operationName, creation.result) };
         }
-        if (strict && creation.result.succ !== true) return { ...creation, status: 'failure' };
         return creation;
     }
 
@@ -224,24 +229,30 @@ export function createBaseSoapAdapter(options) {
 
         const teacherResponse = await call('IsTeacherExisted', { accountList: [values.loginName] });
         const teacher = parseAccountExistence('IsTeacherExisted', teacherResponse);
-        if (teacher.status === 'failure' || (strict && teacher.result.succ !== true)) return teacher.result;
+        if (teacher.status === 'failure' || (strict && teacher.result.succ !== true)) {
+            return strict ? failedContestOperation('IsTeacherExisted', teacher.result) : teacher.result;
+        }
         if (!teacher.accounts.includes(values.loginName)) {
             const addTeacherResponse = await call('AddTeacher', {
                 groupID: group.groupID,
                 teacherNameList: [values.loginName]
             });
             const addTeacher = parseAccountMutation('AddTeacher', addTeacherResponse);
-            if (strict && (addTeacher.status === 'failure' || addTeacher.result.succ !== true)) return addTeacher.result;
+            if (strict && (addTeacher.status === 'failure' || addTeacher.result.succ !== true)) {
+                return failedContestOperation('AddTeacher', addTeacher.result);
+            }
             if (addTeacher.status === 'success'
                 && !addTeacher.accounts.includes(values.loginName)) {
-                return strict ? { ...addTeacher.result, succ: false } : addTeacher.result;
+                return strict ? failedContestOperation('AddTeacher', addTeacher.result) : addTeacher.result;
             }
         }
 
         if (requestedStudents.length === 0) return successResult();
         const studentResponse = await call('IsStuExisted', { accountList: requestedStudents.slice() });
         const students = parseAccountExistence('IsStuExisted', studentResponse);
-        if (students.status === 'failure' || (strict && students.result.succ !== true)) return students.result;
+        if (students.status === 'failure' || (strict && students.result.succ !== true)) {
+            return strict ? failedContestOperation('IsStuExisted', students.result) : students.result;
+        }
         const existing = new Set(students.accounts);
         const missingStudents = requestedStudents.filter(loginName => !existing.has(loginName));
         if (missingStudents.length === 0) return successResult();
@@ -258,9 +269,11 @@ export function createBaseSoapAdapter(options) {
             group.groupID
         ));
         const addStudent = parseAccountMutation('AddStudent', addStudentResponse);
-        if (addStudent.status === 'failure' || (strict && addStudent.result.succ !== true)) return addStudent.result;
+        if (addStudent.status === 'failure' || (strict && addStudent.result.succ !== true)) {
+            return strict ? failedContestOperation('AddStudent', addStudent.result) : addStudent.result;
+        }
         if (missingStudents.some(loginName => !addStudent.accounts.includes(loginName))) {
-            return strict ? { ...addStudent.result, succ: false } : addStudent.result;
+            return strict ? failedContestOperation('AddStudent', addStudent.result) : addStudent.result;
         }
         return successResult();
     }

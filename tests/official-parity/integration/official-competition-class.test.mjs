@@ -105,7 +105,8 @@ test('SOAP prepares all confirmed attendees in the same new group without starti
 test('SOAP stops before student creation when the contest teacher was not confirmed', async () => {
     const fixture = soapFixture({ rejectTeacher: true });
     await assert.rejects(preparePlatformCompetition(fixture.config, teacherContext, fixture.dependencies), {
-        code: 'OFFICIAL_COMPETITION_CLASS_PREPARATION_FAILED', status: 502
+        code: 'OFFICIAL_COMPETITION_CLASS_PREPARATION_FAILED', status: 502,
+        details: { method: 'net', serviceName: 'NetGeneralStandardInterfaceUtilService', operationName: 'AddTeacher', resultCode: 10010 }
     });
     assert.equal(fixture.requests.at(-1).operation, 'AddTeacher');
 });

@@ -7,23 +7,44 @@ import { validateOfficialDirectUrl } from '../utils/officialCompat/officialJumpC
 import { executePlatformCompetitionEntry, preparePlatformCompetition } from '../utils/platformJumpDispatcher.js';
 import { createRequestDeadline } from '../utils/requestDeadline.js';
 import { ROLES } from '../utils/roleAccess.js';
-import { officialDependencyOverrides, resolvePlatformConfig } from '../utils/ssoPlatformConfig.js';
+import { resolvePlatformConfig } from '../utils/ssoPlatformConfig.js';
+import { competitionSsoSelector, readCompetitionSsoProfiles } from './competitionSsoSelection.js';
 
-const LEGACY_METHOD = "CASE WHEN json_valid(config.config_data) THEN json_extract(config.config_data, '$.method') END";
-const LEGACY_CANARY = "CASE WHEN json_valid(config.config_data) THEN json_extract(config.config_data, '$.canaryOnly') END";
+const BOUND_METHOD = "CASE WHEN json_valid(config.config_data) THEN json_extract(config.config_data, '$.method') END";
+const BOUND_CANARY = "CASE WHEN json_valid(config.config_data) THEN json_extract(config.config_data, '$.canaryOnly') END";
+const LEGACY_METHOD = `CASE WHEN NULLIF(card.sso_method, '') IS NULL THEN (${BOUND_METHOD}) END`;
+const LEGACY_CANARY = `CASE WHEN NULLIF(card.sso_method, '') IS NULL THEN (${BOUND_CANARY}) END`;
 const CARD_FIELDS = `card.url, card.sso_method, card.sso_config_id, card.class_type,
+    ${BOUND_METHOD} AS bound_sso_method, ${BOUND_CANARY} AS bound_canary_only, config.name AS bound_sso_name,
     ${LEGACY_METHOD} AS fallback_sso_method, ${LEGACY_CANARY} AS fallback_canary_only`;
-const CONFIG_JOIN = "LEFT JOIN sso_configs config ON config.id = card.sso_config_id AND NULLIF(card.sso_method, '') IS NULL";
+const CONFIG_JOIN = 'LEFT JOIN sso_configs config ON config.id = card.sso_config_id';
 const EVENT_FIELDS = `event.id, event.competition_id, event.card_binding, event.title, event.class_name, event.duration_hours,
     event.created_by, event.created_at, event.opened_at, event.expires_at, event.closed_at, event.preparation_failed_at,
+    event.platform_sso_config_id, event.platform_sso_method, event_config.name AS platform_sso_name,
+    CASE WHEN json_valid(event_config.config_data) THEN json_extract(event_config.config_data, '$.method') END AS saved_platform_sso_method,
+    CASE WHEN json_valid(event_config.config_data) THEN json_extract(event_config.config_data, '$.canaryOnly') END AS platform_sso_canary_only,
     card.title AS card_title, ${CARD_FIELDS}`;
-const EVENT_JOINS = `FROM competition_events event JOIN competitions card ON card.id = event.competition_id ${CONFIG_JOIN}`;
+const EVENT_JOINS = `FROM competition_events event JOIN competitions card ON card.id = event.competition_id
+    ${CONFIG_JOIN} LEFT JOIN sso_configs event_config ON event_config.id = event.platform_sso_config_id`;
 const ACTIVE_EVENT = 'event.closed_at IS NULL AND event.opened_at <= ? AND event.expires_at > ?';
 const MANAGER_ROLES = "('admin', 'super_admin')";
 const TEACHER_PAGE_SIZE = 30;
 const PREPARE_TIMEOUT_MS = 90_000;
 const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PLATFORM_IDENTITY = /^ev[cts][0-9a-f]{22}$/i;
+const PREPARATION_STEPS = new Map([
+    ['IsGroupExisted', '检查班级'],
+    ['AddTrainGroup', '创建班级'],
+    ['AddAppraisalGroup', '创建班级'],
+    ['AddMegagameGroup', '创建竞赛班级'],
+    ['AddGroup', '创建班级'],
+    ['IsTeacherExisted', '检查教师账号'],
+    ['AddTeacher', '创建教师账号'],
+    ['getLoginTeacherName', '创建教师账号'],
+    ['IsStuExisted', '检查学生账号'],
+    ['AddStudent', '创建学生账号'],
+    ['getUserName', '准备班级和学生账号']
+]);
 
 export function isCompetitionEventId(value) {
     return typeof value === 'string' && EVENT_ID.test(value);
@@ -38,9 +59,23 @@ function competitionError(status, message) {
     return Object.assign(new Error(message), { status });
 }
 
+function describePreparationFailure(row, error, startedAt) {
+    const operation = error?.operationName || error?.details?.operationName;
+    const step = PREPARATION_STEPS.get(operation);
+    const resultCode = Number.isSafeInteger(error?.details?.resultCode) ? error.details.resultCode : null;
+    const code = /^OFFICIAL_[A-Z0-9_]{1,72}$/.test(error?.code || '') ? error.code : null;
+    console.warn('[competition-events] preparation failed', {
+        eventId: row.id, competitionId: row.competition_id, method: isolatedMethod(row),
+        operation: step ? operation : null, resultCode, code, elapsedMs: Date.now() - startedAt
+    });
+    if (!step) return '平台未能完成竞赛班级或账号准备，可从竞赛记录重试';
+    const resultHint = resultCode === null ? '' : `（平台返回码 ${resultCode}）`;
+    return `竞赛平台未确认「${step}」成功${resultHint}，可从竞赛记录重试`;
+}
+
 function isolatedMethod(card) {
-    const method = card.sso_method || card.fallback_sso_method;
-    if (!ACCOUNT_CAPABLE_METHODS.has(method) || card.fallback_canary_only === 1) return null;
+    const method = card.platform_sso_method || card.sso_method || card.fallback_sso_method;
+    if (!ACCOUNT_CAPABLE_METHODS.has(method) || card.bound_canary_only === 1) return null;
     try { validateOfficialDirectUrl(card.url); }
     catch { return null; }
     return method;
@@ -55,7 +90,9 @@ function storedCardBinding(card) {
 }
 
 function currentBinding(row) {
-    return Boolean(isolatedMethod(row) && row.card_binding === storedCardBinding(row));
+    if (!isolatedMethod(row) || row.card_binding !== storedCardBinding(row)) return false;
+    return !row.platform_sso_method || (row.platform_sso_method === row.saved_platform_sso_method
+        && row.platform_sso_canary_only !== 1);
 }
 
 function isolatedIdentity(eventId, teacherId) {
@@ -102,13 +139,24 @@ export function canManageCompetitionEvents(user) {
     return user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN;
 }
 
-export async function readCompetitionEventCards() {
-    const [rows] = await pool.query(`
-        SELECT card.id, card.title, card.category, ${CARD_FIELDS}
-        FROM competitions card ${CONFIG_JOIN}
-        ORDER BY card.title COLLATE NOCASE, card.id`);
-    return rows.flatMap(row => isolatedMethod(row)
-        ? [{ id: row.id, title: row.title, category: row.category, loginMode: 'student_sso' }] : []);
+async function readCompetitionCardCatalog() {
+    const [[rows], profiles] = await Promise.all([
+        pool.query(`SELECT card.id, card.title, card.category, ${CARD_FIELDS}
+            FROM competitions card ${CONFIG_JOIN} ORDER BY card.title COLLATE NOCASE, card.id`),
+        readCompetitionSsoProfiles()
+    ]);
+    return { rows, profiles };
+}
+
+export async function readCompetitionEventCards(user) {
+    const { rows, profiles } = await readCompetitionCardCatalog();
+    const select = competitionSsoSelector(user, profiles, rows);
+    return rows.flatMap(row => {
+        const ssoSelection = select(row);
+        return ssoSelection
+            ? [{ id: row.id, title: row.title, category: row.category, loginMode: 'student_sso', ssoSelection }]
+            : [];
+    });
 }
 
 export async function searchCompetitionEventTeachers(query, requestedPage) {
@@ -146,6 +194,11 @@ export async function readManagedCompetitionEvents(user, { eventId, now = Date.n
             teacherNames,
             platformClassName: identity?.className ?? null,
             teacherAccountName: identity?.teacherUserName ?? null,
+            ssoConfiguration: row.platform_sso_name ? {
+                id: row.platform_sso_config_id, name: row.platform_sso_name, method: row.platform_sso_method
+            } : !row.platform_sso_config_id && row.bound_sso_name && row.bound_sso_method === isolatedMethod(row) ? {
+                id: row.sso_config_id, name: row.bound_sso_name, method: row.bound_sso_method
+            } : null,
             canEnterTeacher: event.status === 'open' && row.created_by === user.id,
             canRetry: event.status === 'failed' || event.status === 'preparing'
         };
@@ -197,10 +250,12 @@ export async function markTeacherCompetitionEventSeen(user, eventId) {
 }
 
 async function resolveEventConfig(row, context) {
+    const method = isolatedMethod(row);
+    const configId = row.platform_sso_config_id ?? row.sso_config_id;
     const { effectiveConfig } = await resolvePlatformConfig({
-        configId: row.sso_config_id, method: row.sso_method, classType: row.class_type
-    }, context);
-    if (effectiveConfig.method !== isolatedMethod(row)) {
+        configId, method, classType: row.class_type
+    }, context, { preferBoundConfig: true });
+    if (effectiveConfig.method !== method) {
         throw competitionError(409, '竞赛卡片配置已更新，请重新开启竞赛');
     }
     return effectiveConfig;
@@ -238,9 +293,7 @@ export async function launchCompetitionEvent(user, eventId, competitionId, { onS
             accountWasReady: row.entry_role === 'teacher' || isolatedMethod(row) !== 'java'
         };
         const effectiveConfig = await resolveEventConfig(row, context);
-        const redirectUrl = await executePlatformCompetitionEntry(effectiveConfig, context, {
-            ...officialDependencyOverrides(), official: { signal }
-        });
+        const redirectUrl = await executePlatformCompetitionEntry(effectiveConfig, context, { official: { signal } });
         signal?.throwIfAborted();
         if (row.entry_role === 'student' && !await markStudentEntry(user, eventId, Date.now(), true)) {
             throw competitionError(409, '竞赛入口已关闭或过期');
@@ -292,9 +345,7 @@ export async function prepareCompetitionEvent(user, eventId, requestSignal) {
                 if (!recipients.length) throw competitionError(409, '目前没有可用的受邀教师账号');
                 const effectiveConfig = await resolveEventConfig(row, context);
                 deadline.signal.throwIfAborted();
-                await preparePlatformCompetition(effectiveConfig, context, {
-                    ...officialDependencyOverrides(), official: { signal: deadline.signal }
-                });
+                await preparePlatformCompetition(effectiveConfig, context, { official: { signal: deadline.signal } });
                 deadline.signal.throwIfAborted();
                 const latest = await readManagedEventRow(user, eventId);
                 if (!latest || latest.closed_at != null || !currentBinding(latest)) {
@@ -310,11 +361,12 @@ export async function prepareCompetitionEvent(user, eventId, requestSignal) {
                       )`, [now, expiresAt, eventId, row.card_binding]);
                 if (!updated.affectedRows) throw competitionError(409, '竞赛名单或状态已更新，请重新查看竞赛记录');
             } catch (error) {
+                const failure = describePreparationFailure(row, error, now);
                 await pool.query(`UPDATE competition_events SET preparation_failed_at = ?
                     WHERE id = ? AND opened_at IS NULL AND closed_at IS NULL`, [Date.now(), eventId]);
                 if (deadline.signal.aborted && deadline.signal.reason?.status === 504) throw deadline.signal.reason;
                 if ([400, 403, 409, 504].includes(error?.status)) throw error;
-                throw competitionError(502, '平台未能完成竞赛班级或账号准备，可从竞赛记录重试');
+                throw competitionError(502, failure);
             }
             return (await readManagedCompetitionEvents(user, { eventId }))[0];
         }, { waitMs: 5_000, leaseMs: 120_000, signal: deadline.signal });
@@ -334,38 +386,54 @@ async function readMatchingRequest(user, requestId, expectedFingerprint) {
 
 export async function createCompetitionEvent(user, input, requestSignal) {
     const teacherIds = JSON.stringify([...input.teacherIds].sort((a, b) => a - b));
-    const requestFingerprint = fingerprint([input.competitionId, input.title, input.className, input.durationHours, teacherIds]);
+    const requestFields = [input.competitionId, input.title, input.className, input.durationHours, teacherIds];
+    if (input.ssoConfigId != null) requestFields.push(input.ssoConfigId);
+    const requestFingerprint = fingerprint(requestFields);
     const previous = await readMatchingRequest(user, input.requestId, requestFingerprint);
     if (previous) return prepareCompetitionEvent(user, previous, requestSignal);
 
-    const [[[card]], [[{ eligible }]]] = await Promise.all([
-        pool.query(`SELECT ${CARD_FIELDS} FROM competitions card ${CONFIG_JOIN} WHERE card.id = ?`, [input.competitionId]),
+    const [{ rows, profiles }, [[{ eligible }]]] = await Promise.all([
+        readCompetitionCardCatalog(),
         pool.query(`SELECT COUNT(*) AS eligible FROM json_each(?) requested JOIN users teacher ON teacher.id = requested.value
                     WHERE teacher.role = 'teacher' AND teacher.is_disabled = 0`, [teacherIds])
     ]);
+    const card = rows.find(row => row.id === input.competitionId);
     if (!card) throw competitionError(404, '竞赛卡片不存在');
-    if (!isolatedMethod(card)) throw competitionError(400, '该竞赛卡片不支持创建独立班级');
     if (eligible !== input.teacherIds.length) throw competitionError(400, '只能选择未被禁用的教师账号');
+    const selection = competitionSsoSelector(user, profiles, rows)(card);
+    if (!selection) throw competitionError(400, '该卡片没有可用于建班的免密配置，请在系统设置中检查卡片绑定');
+    const selectedProfile = selection.mode === 'auto'
+        ? (input.ssoConfigId == null || selection.profile.id === input.ssoConfigId ? selection.profile : null)
+        : selection.profiles.find(profile => profile.id === input.ssoConfigId);
+    if (!selectedProfile) throw competitionError(400, '请选择该卡片可用的系统免密配置');
 
     const eventId = crypto.randomUUID();
     const now = Date.now();
     const [event] = await pool.batch([
         [
             `INSERT INTO competition_events (id, competition_id, card_binding, title, class_name, duration_hours,
+                 platform_sso_config_id, platform_sso_method,
                  created_by, request_id, request_fingerprint, created_at, expires_at)
              SELECT ?, card.id, ?, COALESCE(NULLIF(?, ''), NULLIF(substr(trim(card.title), 1, 120), ''), '竞赛'),
-                 ?, ?, actor.id, ?, ?, ?, ?
+                 ?, ?, ?, ?, actor.id, ?, ?, ?, ?
              FROM competitions card ${CONFIG_JOIN} JOIN users actor ON actor.id = ?
              WHERE card.id = ? AND card.url = ? AND card.sso_method IS ? AND card.sso_config_id IS ? AND card.class_type IS ?
                AND (${LEGACY_METHOD}) IS ? AND (${LEGACY_CANARY}) IS ?
                AND actor.role = ? AND actor.role IN ${MANAGER_ROLES} AND actor.is_disabled = 0
+               AND EXISTS (
+                   SELECT 1 FROM sso_configs selected
+                   WHERE selected.id = ? AND CASE WHEN json_valid(selected.config_data)
+                       THEN json_extract(selected.config_data, '$.method') = ?
+                           AND json_extract(selected.config_data, '$.canaryOnly') IS NOT 1 ELSE 0 END
+               )
                AND (SELECT COUNT(*) FROM json_each(?) requested JOIN users teacher ON teacher.id = requested.value
                     WHERE teacher.role = 'teacher' AND teacher.is_disabled = 0) = ?
              ON CONFLICT(created_by, request_id) DO NOTHING`,
-            [eventId, storedCardBinding(card), input.title, input.className, input.durationHours, input.requestId,
+            [eventId, storedCardBinding(card), input.title, input.className, input.durationHours,
+                selectedProfile.id, selectedProfile.method, input.requestId,
                 requestFingerprint, now, now + input.durationHours * 3_600_000, user.id, input.competitionId,
                 card.url, card.sso_method, card.sso_config_id, card.class_type, card.fallback_sso_method, card.fallback_canary_only,
-                user.role, teacherIds, input.teacherIds.length]
+                user.role, selectedProfile.id, selectedProfile.method, teacherIds, input.teacherIds.length]
         ],
         [
             `INSERT INTO competition_event_teachers (event_id, teacher_id)

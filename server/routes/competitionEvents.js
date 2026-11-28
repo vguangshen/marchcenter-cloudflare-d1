@@ -17,7 +17,7 @@ import { ROLES } from '../utils/roleAccess.js';
 const router = express.Router();
 const MAX_TEACHERS = 100;
 const MAX_DURATION_HOURS = 168;
-const INPUT_FIELDS = new Set(['competitionId', 'title', 'className', 'teacherIds', 'durationHours', 'requestId']);
+const INPUT_FIELDS = new Set(['competitionId', 'title', 'className', 'teacherIds', 'durationHours', 'requestId', 'ssoConfigId']);
 
 function requestError(status, message) {
     return Object.assign(new Error(message), { status });
@@ -50,7 +50,7 @@ function parseEvent(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !INPUT_FIELDS.has(key))) {
         throw requestError(400, '竞赛配置格式不正确');
     }
-    const { competitionId, teacherIds, className, durationHours = 24, title = '', requestId = null } = input;
+    const { competitionId, teacherIds, className, durationHours = 24, title = '', requestId = null, ssoConfigId = null } = input;
     if (!positiveId(competitionId)) throw requestError(400, '请选择有效的竞赛卡片');
     if (!Array.isArray(teacherIds) || !teacherIds.length || teacherIds.length > MAX_TEACHERS
         || !teacherIds.every(positiveId) || new Set(teacherIds).size !== teacherIds.length) {
@@ -66,7 +66,8 @@ function parseEvent(input) {
         throw requestError(400, '请填写 1 至 60 个字符的班级名称');
     }
     if (requestId !== null && !isCompetitionEventId(requestId)) throw requestError(400, '提交编号格式不正确');
-    return { competitionId, teacherIds, durationHours, title: title.trim(), className: className.trim(), requestId };
+    if (ssoConfigId !== null && !positiveId(ssoConfigId)) throw requestError(400, '请选择有效的系统免密配置');
+    return { competitionId, teacherIds, durationHours, title: title.trim(), className: className.trim(), requestId, ssoConfigId };
 }
 
 function managerOnly(req, res, next) {
@@ -86,7 +87,7 @@ router.use((req, res, next) => {
 router.use(authMiddleware);
 
 router.get('/cards', managerOnly, endpoint('读取竞赛卡片失败', async (req, res) => {
-    res.json({ cards: await readCompetitionEventCards() });
+    res.json({ cards: await readCompetitionEventCards(req.user) });
 }));
 
 router.get('/teachers', managerOnly, endpoint('读取教师账号失败', async (req, res) => {

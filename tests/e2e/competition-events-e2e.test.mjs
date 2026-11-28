@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test, { after, before, beforeEach } from 'node:test';
 import { createProductionHarness, officialConfig } from './helpers/productionHarness.mjs';
 
@@ -57,6 +57,17 @@ async function events(actor, pathname) {
 
 function launch(actor, competitionId, competitionEventId, extras = {}) {
     return call(actor, SSO, { competitionId, competitionEventId, ...extras });
+}
+
+async function cardSelections(actor) {
+    const response = await call(actor, `${API}/cards`);
+    assert.equal(response.status, 200, response.text);
+    return new Map(response.data.cards.map(card => [card.id, card.ssoSelection]));
+}
+
+async function netProfile(name, soapUsername, options = {}) {
+    const id = await harness.seedConfig(officialConfig('net', { soapUsername, ...options }), { name });
+    return { id, name, method: 'net' };
 }
 
 test('competition events are limited to management roles and inactive or non-teacher recipients are rejected atomically', async () => {
@@ -159,6 +170,148 @@ test('only selected teachers see, acknowledge and enter an event, using its conf
     assert.ok(Date.parse(afterEntry.enteredAt) >= Date.parse(afterEntry.createdAt));
     assert.equal((await events('otherTeacher', '/mine'))[0].enteredAt, null);
     assert.deepEqual(await harness.rows('SELECT * FROM user_platform_account_status'), []);
+});
+
+test('an explicit card binding uses the exact system profile instead of a newer profile for the same method', async () => {
+    const bound = await netProfile('卡片原有配置', 'bound-contest-credential');
+    const newer = await netProfile('较新的同类配置', 'different-contest-credential');
+    const card = await harness.seedCompetition({ configId: bound.id, method: 'net', url: PLATFORM_URL, classType: 3 });
+
+    const selection = (await cardSelections('admin')).get(card);
+    assert.deepEqual(selection, { mode: 'auto', profile: bound });
+    assert.doesNotMatch(JSON.stringify(selection), /bound-contest-credential|SOAP_PASSWORD_E2E|localhost/);
+    const forged = await call('admin', API, { ...eventInput(card), ssoConfigId: newer.id });
+    assert.ok([400, 409].includes(forged.status), forged.text);
+    assert.deepEqual(harness.platform.state.requests, []);
+
+    const event = await openEvent('admin', card);
+    assert.deepEqual(event.ssoConfiguration, bound);
+    assert.ok(harness.platform.state.requests.length > 0);
+    assert.ok(harness.platform.state.requests.every(request => /<Uname>bound-contest-credential<\/Uname>/.test(request.body)));
+    const [stored] = await harness.rows('SELECT platform_sso_config_id, platform_sso_method FROM competition_events WHERE id = ?', event.id);
+    assert.deepEqual(stored, { platform_sso_config_id: bound.id, platform_sso_method: 'net' });
+    assert.equal((await launch('admin', card, event.id)).status, 200);
+    assert.equal((await launch('teacher', card, event.id)).status, 200);
+
+    const requestCount = harness.platform.state.requests.length;
+    await harness.run('UPDATE sso_configs SET config_data = ? WHERE id = ?', JSON.stringify(officialConfig('java')), bound.id);
+    assert.deepEqual(await events('teacher', '/mine'), []);
+    assert.equal((await launch('teacher', card, event.id)).status, 404);
+    assert.equal((await events('admin', '/manage'))[0].status, 'inactive');
+    assert.equal(harness.platform.state.requests.length, requestCount);
+});
+
+test('an ambiguous same-method card requires an approved selection and keeps it through preparation retry', async () => {
+    const initial = await netProfile('原免密配置', 'original-contest-credential');
+    const card = await harness.seedCompetition({ configId: null, method: 'net', url: PLATFORM_URL, classType: 3 });
+    assert.deepEqual((await cardSelections('admin')).get(card), { mode: 'auto', profile: initial });
+
+    const selected = await netProfile('备用免密配置', 'selected-contest-credential');
+    const canary = await netProfile('仅诊断配置', 'canary-contest-credential', { canaryOnly: true });
+    const selection = (await cardSelections('admin')).get(card);
+    assert.equal(selection.mode, 'manual');
+    assert.deepEqual(selection.profiles.toSorted((a, b) => a.id - b.id), [initial, selected]);
+    for (const input of [eventInput(card), { ...eventInput(card), ssoConfigId: canary.id }]) {
+        const rejected = await call('admin', API, input);
+        assert.ok([400, 409].includes(rejected.status), rejected.text);
+    }
+    assert.deepEqual(harness.platform.state.requests, []);
+
+    harness.platform.queueSoap('AddTeacher', { code: 10010, succ: false, message: 'test preparation failure', data: [] });
+    const submission = { ...eventInput(card), ssoConfigId: selected.id };
+    const initialFailure = await call('admin', API, submission);
+    assert.equal(initialFailure.status, 502, initialFailure.text);
+    const [failed] = await events('admin', '/manage');
+    assert.equal(failed.status, 'failed');
+    assert.deepEqual(failed.ssoConfiguration, selected);
+    const requestCount = harness.platform.state.requests.length;
+    assert.equal((await call('admin', API, { ...submission, ssoConfigId: initial.id })).status, 409);
+    assert.equal(harness.platform.state.requests.length, requestCount);
+
+    await netProfile('后来加入的同类配置', 'latest-contest-credential');
+    const retry = await call('admin', `${API}/${failed.id}/prepare`, {});
+    assert.equal(retry.status, 200, retry.text);
+    assert.equal(retry.data.event.status, 'open');
+    assert.equal(retry.data.event.platformClassName, failed.platformClassName);
+    assert.deepEqual(retry.data.event.ssoConfiguration, selected);
+    assert.ok(harness.platform.state.requests.every(request => /<Uname>selected-contest-credential<\/Uname>/.test(request.body)));
+    assert.equal((await launch('teacher', card, failed.id)).status, 200);
+
+    await harness.run('DELETE FROM sso_configs WHERE id = ?', selected.id);
+    const before = harness.platform.state.requests.length;
+    assert.equal((await launch('teacher', card, failed.id)).status, 404);
+    assert.equal((await events('admin', '/manage'))[0].status, 'inactive');
+    assert.equal(harness.platform.state.requests.length, before);
+});
+
+test('a failed competition created before profile pinning can retry with its original card binding', async () => {
+    const bound = await netProfile('原卡片免密配置', 'legacy-contest-credential');
+    await netProfile('后来添加的同类配置', 'different-contest-credential');
+    const card = await harness.seedCompetition({ configId: bound.id, method: 'net', url: PLATFORM_URL, classType: 3 });
+    const eventId = randomUUID();
+    const now = Date.now();
+    // The original schema fingerprint recorded the card and only filled fallback fields for cards without a method.
+    const legacyBinding = createHash('sha256')
+        .update(JSON.stringify([PLATFORM_URL, 'net', bound.id, 3, null, null])).digest('hex');
+    await harness.run(`INSERT INTO competition_events (id, competition_id, card_binding, title, class_name,
+        duration_hours, created_by, created_at, expires_at, preparation_failed_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+        eventId, card, legacyBinding, '先前创建失败的竞赛', CLASS_NAME, accounts.admin.id, now, now + 3_600_000, now);
+    await harness.run('INSERT INTO competition_event_teachers (event_id, teacher_id) VALUES (?, ?)', eventId, accounts.teacher.id);
+    assert.equal((await events('admin', '/manage'))[0].canRetry, true);
+    assert.deepEqual(await events('teacher', '/mine'), []);
+
+    const retry = await call('admin', `${API}/${eventId}/prepare`, {});
+    assert.equal(retry.status, 200, retry.text);
+    assert.equal(retry.data.event.status, 'open');
+    assert.equal(retry.data.event.id, eventId);
+    assert.ok(harness.platform.state.requests.length > 0);
+    assert.ok(harness.platform.state.requests.every(request => /<Uname>legacy-contest-credential<\/Uname>/.test(request.body)));
+    assert.equal((await launch('teacher', card, eventId)).status, 200);
+});
+
+test('unbound cards use exact project associations and cannot send platform credentials to an unapproved sibling URL', async () => {
+    const net = await netProfile('已关联的 .NET 配置', 'approved-contest-credential');
+    await harness.seedCompetition({ configId: net.id, method: 'net', url: PLATFORM_URL });
+    const sameProject = await harness.seedCompetition({ configId: null, method: null, url: PLATFORM_URL });
+    const siblingUrl = `${PLATFORM_URL}/not-approved`;
+    const sibling = await harness.seedCompetition({ configId: null, method: null, url: siblingUrl });
+
+    let selections = await cardSelections('admin');
+    assert.deepEqual(selections.get(sameProject), { mode: 'auto', profile: net });
+    assert.equal(selections.has(sibling), false);
+    const rejected = await call('admin', API, { ...eventInput(sibling), ssoConfigId: net.id });
+    assert.ok([400, 403, 409].includes(rejected.status), rejected.text);
+    assert.deepEqual(harness.platform.state.requests, []);
+    assert.deepEqual(await events('admin', '/manage'), []);
+
+    const java = {
+        id: await harness.seedConfig(officialConfig('java'), { name: '已关联的 Java 配置' }),
+        name: '已关联的 Java 配置',
+        method: 'java'
+    };
+    await harness.seedCompetition({ configId: java.id, method: 'java', url: PLATFORM_URL });
+    selections = await cardSelections('admin');
+    assert.equal(selections.get(sameProject).mode, 'manual');
+    assert.deepEqual(new Set(selections.get(sameProject).profiles.map(profile => profile.id)), new Set([net.id, java.id]));
+    const recognized = await call('admin', API, { ...eventInput(sameProject), ssoConfigId: java.id });
+    assert.equal(recognized.status, 201, recognized.text);
+    assert.deepEqual(recognized.data.event.ssoConfiguration, java);
+    const launchResponse = await launch('teacher', sameProject, recognized.data.event.id);
+    assert.equal(launchResponse.status, 200, launchResponse.text);
+    assert.equal(new URL(launchResponse.data.redirectUrl).pathname, '/DS50108/open/enterIndex');
+    assert.ok(harness.platform.state.requests.every(request => request.path.startsWith('/DS50108/open/')));
+
+    const superSelection = (await cardSelections('superAdmin')).get(sibling);
+    assert.equal(superSelection.mode, 'manual');
+    assert.ok(superSelection.profiles.some(profile => profile.id === net.id));
+    const firstSiblingRequest = harness.platform.state.requests.length;
+    const reviewed = await call('superAdmin', API, { ...eventInput(sibling), ssoConfigId: net.id });
+    assert.equal(reviewed.status, 201, reviewed.text);
+    assert.deepEqual(reviewed.data.event.ssoConfiguration, net);
+    const siblingRequests = harness.platform.state.requests.slice(firstSiblingRequest);
+    assert.ok(siblingRequests.length > 0);
+    assert.ok(siblingRequests.every(request => request.path.startsWith('/DS50108/not-approved/')));
 });
 
 test('closing, expiring or removing teacher eligibility revokes event entry', async () => {
@@ -305,6 +458,8 @@ test('an unconfirmed provider account blocks invitations and retry reuses the sa
     harness.platform.queueSoap('AddTeacher', { code: 10000, succ: true, message: 'no account confirmed', data: [] });
     const rejected = await call('admin', API, input);
     assert.equal(rejected.status, 502, rejected.text);
+    assert.match(rejected.data.error, /创建教师账号.*平台返回码 10000/);
+    assert.doesNotMatch(rejected.data.error, /no account confirmed|AddTeacher/);
 
     const [failed] = await events('admin', '/manage');
     assert.ok(failed, 'failed provisioning must be recorded for recovery');

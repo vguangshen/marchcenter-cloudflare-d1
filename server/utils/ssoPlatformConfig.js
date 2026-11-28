@@ -20,11 +20,32 @@ export function officialDependencyOverrides() {
     }
 }
 
-export async function resolvePlatformConfig({ configId, method, classType }, context = {}) {
+function withMethodDefaults(method, stored, classType) {
+    return {
+        className: '默认班级',
+        teacherUserName: 'teacher',
+        roleName: 'student',
+        loginRole: 'student',
+        flag: '1',
+        trainOrExam: 'train',
+        classPrefix: 'mc',
+        teacherPrefix: 'mc',
+        studentPrefix: 'mcs',
+        studentSuffix: '1',
+        expertPrefix: 'mcpw',
+        ...stored,
+        method,
+        ...(classType ? { classType: Number(classType) } : {}),
+        allowHttp: defaultSsoAllowsHttp(stored)
+    };
+}
+
+export async function resolvePlatformConfig({ configId, method, classType }, context = {}, { preferBoundConfig = false } = {}) {
     let record = null;
     let config = null;
+    const exactBinding = preferBoundConfig && configId;
 
-    if (method && (method !== 'paasV2' || !configId)) {
+    if (method && !exactBinding && (method !== 'paasV2' || !configId)) {
         if (!ALLOWED_METHODS.has(method)) {
             const error = new Error('不支持的免密登录方式');
             error.status = 400;
@@ -32,23 +53,7 @@ export async function resolvePlatformConfig({ configId, method, classType }, con
         }
         const resolved = (await readDefaultSsoConfigs()).get(method);
         record = resolved?.record || null;
-        config = {
-            className: '默认班级',
-            teacherUserName: 'teacher',
-            roleName: 'student',
-            loginRole: 'student',
-            flag: '1',
-            trainOrExam: 'train',
-            classPrefix: 'mc',
-            teacherPrefix: 'mc',
-            studentPrefix: 'mcs',
-            studentSuffix: '1',
-            expertPrefix: 'mcpw',
-            ...resolved?.config,
-            method,
-            ...(classType ? { classType: Number(classType) } : {}),
-            allowHttp: defaultSsoAllowsHttp(resolved?.config)
-        };
+        config = withMethodDefaults(method, resolved?.config, classType);
     } else if (configId) {
         const [rows] = await pool.query('SELECT * FROM sso_configs WHERE id = ?', [configId]);
         if (!rows.length) {
@@ -58,6 +63,9 @@ export async function resolvePlatformConfig({ configId, method, classType }, con
         }
         record = rows[0];
         config = { ...parseSsoConfig(record), ...(classType ? { classType: Number(classType) } : {}) };
+        if (exactBinding && (!ALLOWED_METHODS.has(config.method) || (method && method !== config.method))) {
+            throw Object.assign(new Error('系统免密配置已变更，请重新选择'), { status: 409 });
+        }
         if (method === 'paasV2' && config.method !== 'paasV2') {
             throw Object.assign(new Error('该智能体任务绑定了无效的免密配置'), { status: 409 });
         }
@@ -66,6 +74,7 @@ export async function resolvePlatformConfig({ configId, method, classType }, con
             error.status = 403;
             throw error;
         }
+        if (exactBinding) config = withMethodDefaults(config.method, config, classType);
     } else {
         const error = new Error('请选择一种免密登录方式');
         error.status = 400;

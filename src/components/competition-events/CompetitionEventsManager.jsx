@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Flag, GraduationCap, Lo
 import { useModalAccessibility } from '../../hooks/useModalAccessibility';
 import { api } from '../../utils/api';
 import LoadErrorNotice from '../feedback/LoadErrorNotice';
+import { SSO_METHOD_OPTIONS } from '../modals/competitionEditConfig';
 
 const ROOT = '/competition-events';
 const DURATIONS = [
@@ -16,6 +17,12 @@ const dateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'nu
 function dateLabel(value) {
     const date = new Date(value);
     return value && Number.isFinite(date.getTime()) ? dateFormat.format(date) : '—';
+}
+
+function ssoProfileLabel(profile) {
+    const methodName = SSO_METHOD_OPTIONS.find(method => method.id === profile.method)?.name || profile.method;
+    if (!profile.name) return methodName;
+    return methodName && !profile.name.includes(methodName) ? `${profile.name} · ${methodName}` : profile.name;
 }
 
 function SearchBox({ label, value, onChange, inputRef }) {
@@ -116,6 +123,7 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
     const [eventsRevision, setEventsRevision] = useState(0);
     const [cardQuery, setCardQuery] = useState('');
     const [competitionId, setCompetitionId] = useState(null);
+    const [ssoConfigId, setSsoConfigId] = useState(null);
     const [teachers, setTeachers] = useState(() => new Map());
     const [title, setTitle] = useState('');
     const [className, setClassName] = useState('');
@@ -134,7 +142,11 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
     const events = eventsResult?.items || [];
     const pending = Boolean(writing);
     const chosenCard = cards.find(card => card.id === competitionId);
-    const canPublish = Boolean(chosenCard && teachers.size && className.trim());
+    const ssoSelection = chosenCard?.ssoSelection;
+    const ssoProfile = ssoSelection?.mode === 'auto'
+        ? ssoSelection.profile
+        : ssoSelection?.profiles?.find(profile => profile.id === ssoConfigId);
+    const canPublish = Boolean(chosenCard && ssoProfile && teachers.size && className.trim());
     const filter = cardQuery.trim().toLocaleLowerCase();
     const filteredCards = cards.filter(card => !filter || `${card.title} ${card.category || ''}`.toLocaleLowerCase().includes(filter));
 
@@ -167,6 +179,11 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
 
     useEffect(() => () => writer.current?.abort(), []);
     useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }); }, [tab]);
+
+    function selectCard(cardId) {
+        setCompetitionId(cardId);
+        setSsoConfigId(null);
+    }
 
     function toggleTeacher(teacher) {
         setTeachers(previous => {
@@ -213,7 +230,8 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
         if (!canPublish) return;
         const data = {
             competitionId: chosenCard.id, teacherIds: [...teachers.keys()].sort((left, right) => left - right),
-            title: title.trim() || undefined, className: className.trim(), durationHours
+            title: title.trim() || undefined, className: className.trim(), durationHours,
+            ...(ssoSelection.mode === 'manual' && { ssoConfigId: ssoProfile.id })
         };
         const key = JSON.stringify(data);
         if (createAttempt.current?.key !== key) createAttempt.current = { key, id: crypto.randomUUID() };
@@ -227,7 +245,7 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
             setTitle('');
             setClassName('');
             setTeachers(new Map());
-            setCompetitionId(null);
+            selectCard(null);
             setStatus(`竞赛班级已创建，已通知 ${published.teacherCount} 位参赛教师。`);
             setTab('manage');
             window.requestAnimationFrame(() => recordsTabRef.current?.focus({ preventScroll: true }));
@@ -309,15 +327,15 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
                                         {cardsResult?.error && <LoadErrorNotice compact message={cardsResult.error}
                                             onRetry={() => { setCardsResult(null); setCardsRevision(count => count + 1); }} />}
                                         {cardsResult?.items && filteredCards.length === 0 &&
-                                            <p className="competition-event-empty">{filter ? '没有找到匹配的竞赛卡片。' : '当前没有可选卡片。开启竞赛需要平台支持独立建班和账号登录。'}</p>}
+                                            <p className="competition-event-empty">{filter ? '没有找到匹配的竞赛卡片。' : '当前没有可选卡片。请在「系统管理 → 免密登录配置」中配置支持独立建班的接入方式。'}</p>}
                                         {filteredCards.map(card => (
                                             <label key={card.id} className="competition-event-option" data-selected={competitionId === card.id}>
                                                 <input type="radio" name="competition-event-card" value={card.id} checked={competitionId === card.id}
-                                                    disabled={pending} onChange={() => setCompetitionId(card.id)} className="h-4 w-4 shrink-0 accent-[var(--mc-color-accent)]" />
+                                                    disabled={pending} onChange={() => selectCard(card.id)} className="h-4 w-4 shrink-0 accent-[var(--mc-color-accent)]" />
                                                 <span className="min-w-0 flex-1">
                                                     <span className="block truncate font-semibold" title={card.title}>{card.title}</span>
                                                     <span className="block truncate text-xs text-[var(--mc-color-muted)]">
-                                                        {[card.category, '支持独立建班'].filter(Boolean).join(' · ')}
+                                                        {[card.category, card.ssoSelection?.mode === 'manual' ? '需选择免密配置' : '支持独立建班'].filter(Boolean).join(' · ')}
                                                     </span>
                                                 </span>
                                             </label>
@@ -326,6 +344,25 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
                                 </section>
                                 <TeacherPicker selected={teachers} onToggle={toggleTeacher} disabled={pending} />
                             </div>
+                            {ssoSelection?.mode === 'auto' && ssoProfile && (
+                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm" aria-live="polite">
+                                    <span className="font-bold">免密配置</span>
+                                    <span className="wrap-anywhere">{ssoProfileLabel(ssoProfile)}</span>
+                                    <span className="text-xs text-[var(--mc-color-muted)]">自动识别</span>
+                                </div>
+                            )}
+                            {ssoSelection?.mode === 'manual' && (
+                                <label className="grid min-w-0 gap-1.5 text-sm font-bold">
+                                    免密配置
+                                    <select className="mc-input mc-input--compact min-w-0" value={ssoProfile?.id ?? ''}
+                                        disabled={pending} required onChange={event => setSsoConfigId(Number(event.target.value) || null)}>
+                                        <option value="">请选择建班和跳转方式</option>
+                                        {ssoSelection.profiles.map(profile => (
+                                            <option key={profile.id} value={profile.id}>{ssoProfileLabel(profile)}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
                             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_8rem]">
                                 <label className="grid min-w-0 gap-1.5 text-sm font-bold">
                                     班级名称
@@ -392,6 +429,12 @@ export default function CompetitionEventsManager({ onClose, onEnterTeacher }) {
                                                             <div className="flex min-w-0 gap-1.5">
                                                                 <dt className="shrink-0 text-[var(--mc-color-muted)]">教师账号</dt>
                                                                 <dd className="wrap-anywhere font-mono">{event.teacherAccountName}</dd>
+                                                            </div>
+                                                        )}
+                                                        {event.ssoConfiguration && (
+                                                            <div className="flex min-w-0 gap-1.5">
+                                                                <dt className="shrink-0 text-[var(--mc-color-muted)]">免密配置</dt>
+                                                                <dd className="wrap-anywhere">{ssoProfileLabel(event.ssoConfiguration)}</dd>
                                                             </div>
                                                         )}
                                                     </dl>

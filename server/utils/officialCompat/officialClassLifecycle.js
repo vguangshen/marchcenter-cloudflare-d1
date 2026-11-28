@@ -55,7 +55,7 @@ export async function prepareOfficialCompetition(config, context, dependencies) 
     }
     const error = new OfficialJumpExecutionError('竞赛平台未确认班级和账号已创建', {
         code: 'OFFICIAL_COMPETITION_CLASS_PREPARATION_FAILED',
-        details: { method, serviceName, resultCode: result?.code ?? null }
+        details: { method, serviceName, operationName: result?.operationName, resultCode: result?.code ?? null }
     });
     error.status = 502;
     throw error;
